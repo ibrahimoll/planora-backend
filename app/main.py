@@ -1,0 +1,31 @@
+# uvicorn app.main:app --reload #
+from fastapi import FastAPI
+
+from app.db.session import test_database_connection
+from app.routers.auth import router as auth_router
+from app.routers.project_routes import router as project_router
+
+app = FastAPI(
+    title = "Planora API",
+    description = "Backend API for the Planora AI project planning and colab system",
+    version = "1.0.0" 
+
+)
+app.include_router(auth_router)
+app.include_router(project_router)
+
+
+@app.get("/")
+def root():
+    return{
+        "message": "Planora backend is running"
+    }
+
+@app.get("/health/db")
+def database_health_check():
+    result = test_database_connection()
+
+    return{
+        "message": "Database connection successful",
+        "result": result
+    }
