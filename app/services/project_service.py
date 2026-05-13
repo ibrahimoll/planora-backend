@@ -151,7 +151,7 @@ def get_team_projects(
 ) -> list[Project]:
     stmt = select(Project).where(
         Project.team_id == team_id,
-        Project.project_type == " team",
+        Project.project_type == "team",
     )
 
     if status is not None:
@@ -175,9 +175,9 @@ def get_team_project_by_id(
     return db.execute(stmt).scalars().first()
 
 def update_team_project(
-        db: Session,
-        project: Project,
-        project_data: ProjectUpdate,
+    db: Session,
+    project: Project,
+    project_data: ProjectUpdate,
 ) -> Project:
     update_data = project_data.model_dump(exclude_unset=True)
 
@@ -189,6 +189,8 @@ def update_team_project(
 
     db.commit()
     db.refresh(project)
+
+    return project
 
 def delete_team_project(
         db: Session,

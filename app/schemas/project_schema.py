@@ -19,8 +19,8 @@ class ProjectType(str, Enum):
     team = "team"
 
 class ProjectMemberRole(str, Enum):
-    owner = "owner",
-    manager = "manager",
+    owner = "owner"
+    manager = "manager"
     member = "member"
 
 

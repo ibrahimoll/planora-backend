@@ -38,6 +38,14 @@ class TaskUpdate(BaseModel):
     due_date: datetime | None = None
 
 
+class TeamTaskCreate(TaskCreate):
+    assigned_to: int | None = None
+
+
+class TeamTaskUpdate(TaskUpdate):
+    assigned_to: int | None = None
+
+
 class TaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
