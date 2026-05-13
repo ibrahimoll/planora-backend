@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from app.models.password_reset_code import PasswordResetCode
     from app.models.oauth_account import OAuthAccount
     from app.models.project import Project
+    from app.models.task import Task
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -81,4 +82,14 @@ class User(Base):
     password_reset_codes: Mapped[list["PasswordResetCode"]] = relationship(
     back_populates="user",
     cascade=CASCADE_ALL_DELETE_ORPHAN,
+    )
+
+    assigned_tasks: Mapped[list["Task"]] = relationship(
+        foreign_keys="Task.assigned_to",
+        back_populates="assignee",
+    )
+    
+    created_tasks: Mapped[list["Task"]] = relationship(
+        foreign_keys="Task.created_by",
+        back_populates="creator",
     )
