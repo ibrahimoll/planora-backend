@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from app.models.team import Team
     from app.models.team_member import TeamMember
     from app.models.project_member import ProjectMember
+    from app.models.comment import Comment
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -109,4 +110,9 @@ class User(Base):
     project_memberships: Mapped[list["ProjectMember"]] = relationship(
         back_populates="user",
         cascade=CASCADE_ALL_DELETE_ORPHAN,
+    )
+
+    comments: Mapped[list["Comment"]] = relationship(
+        back_populates="user",
+        cascade=CASCADE_ALL_DELETE_ORPHAN, 
     )

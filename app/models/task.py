@@ -21,6 +21,7 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.project import Project
     from app.models.user import User
+    from app.models.comment import Comment
 
 
 class Task(Base):
@@ -134,6 +135,11 @@ class Task(Base):
     assignee: Mapped["User | None"] = relationship(
         foreign_keys=[assigned_to],
         back_populates="assigned_tasks",
+    )
+
+    comments: Mapped[list["Comment"]] = relationship(
+    back_populates="task",
+    cascade="all, delete-orphan",
     )
 
     creator: Mapped["User"] = relationship(

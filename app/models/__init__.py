@@ -7,3 +7,4 @@ from app.models.task import Task
 from app.models.team import Team
 from app.models.team_member import TeamMember
 from app.models.project_member import ProjectMember
+from app.models.comment import Comment
