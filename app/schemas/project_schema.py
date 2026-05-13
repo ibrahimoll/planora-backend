@@ -18,8 +18,18 @@ class ProjectType(str, Enum):
     personal = "personal"
     team = "team"
 
+class ProjectMemberRole(str, Enum):
+    owner = "owner",
+    manager = "manager",
+    member = "member"
+
 
 class ProjectCreate(BaseModel):
+    title: str = Field(..., min_length=2, max_length=200)
+    description: str | None = Field(default=None, max_length=5000)
+    deadline: datetime
+
+class TeamProjectCreate(BaseModel):
     title: str = Field(..., min_length=2, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
     deadline: datetime
@@ -46,6 +56,14 @@ class ProjectResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+class ProjectMemberResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    member_id: int
+    project_id: int
+    user_id: int
+    role: ProjectMemberRole
+    joined_at: datetime
 
 class ProjectDeleteResponse(BaseModel):
     message: str

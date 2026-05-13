@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from app.models.task import Task
     from app.models.team import Team
     from app.models.team_member import TeamMember
+    from app.models.project_member import ProjectMember
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -101,6 +102,11 @@ class User(Base):
     )
 
     team_memberships: Mapped[list["TeamMember"]] = relationship(
+        back_populates="user",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
+    )
+
+    project_memberships: Mapped[list["ProjectMember"]] = relationship(
         back_populates="user",
         cascade=CASCADE_ALL_DELETE_ORPHAN,
     )

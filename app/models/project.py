@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from app.models.user import User
     from app.models.task import Task
     from app.models.team import Team
+    from app.models.project_member import ProjectMember
 
 
 class Project(Base):
@@ -109,6 +110,11 @@ class Project(Base):
 
     team: Mapped["Team | None"] = relationship(
         back_populates="projects",
+    )
+
+    members: Mapped[list["ProjectMember"]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan",
     )
 
     creator: Mapped["User"] = relationship(
