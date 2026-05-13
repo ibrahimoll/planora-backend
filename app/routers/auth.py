@@ -181,4 +181,3 @@ def read_current_user(
     current_user: CurrentUser
 ) -> UserResponse:
     return UserResponse.model_validate(current_user)
-

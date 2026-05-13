@@ -5,6 +5,7 @@ from app.db.session import test_database_connection
 from app.routers.auth import router as auth_router
 from app.routers.project_routes import router as project_router
 from app.routers.task_routes import router as task_router
+from app.routers.team_routes import router as team_router
 
 app = FastAPI(
     title = "Planora API",
@@ -15,7 +16,7 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(project_router)
 app.include_router(task_router)
-
+app.include_router(team_router)
 
 @app.get("/")
 def root():

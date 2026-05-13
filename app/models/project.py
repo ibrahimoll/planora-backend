@@ -20,6 +20,7 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.user import User
     from app.models.task import Task
+    from app.models.team import Team
 
 
 class Project(Base):
@@ -64,7 +65,7 @@ class Project(Base):
 
     team_id: Mapped[int | None] = mapped_column(
         BigInteger,
-        # ForeignKey("teams.team_id", ondelete="SET NULL"),
+        ForeignKey("teams.team_id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -104,6 +105,10 @@ class Project(Base):
     tasks: Mapped[list["Task"]] = relationship(
         back_populates="project",
         cascade="all, delete-orphan",
+    )
+
+    team: Mapped["Team | None"] = relationship(
+        back_populates="projects",
     )
 
     creator: Mapped["User"] = relationship(

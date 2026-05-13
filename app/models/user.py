@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from app.models.oauth_account import OAuthAccount
     from app.models.project import Project
     from app.models.task import Task
+    from app.models.team import Team
+    from app.models.team_member import TeamMember
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -92,4 +94,13 @@ class User(Base):
     created_tasks: Mapped[list["Task"]] = relationship(
         foreign_keys="Task.created_by",
         back_populates="creator",
+    )
+
+    created_teams: Mapped[list["Team"]] = relationship(
+        back_populates="creator",
+    )
+
+    team_memberships: Mapped[list["TeamMember"]] = relationship(
+        back_populates="user",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
