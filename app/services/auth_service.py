@@ -66,12 +66,17 @@ def register_user(db: Session, data: RegisterRequest) -> User:
 
     plain_code = create_email_verification_code(db, user.user_id)
 
-    db.refresh(user)
+    try:
+        send_verification_email(
+            recipient_email=user.email,
+            code=plain_code,
+        )
+    except Exception:
+        db.rollback()
+        raise
 
-    send_verification_email(
-        recipient_email=user.email,
-        code=plain_code,
-    )
+    db.commit()
+    db.refresh(user)
 
     return user
 
@@ -126,10 +131,16 @@ def resend_verification_code(
 
     plain_code = create_email_verification_code(db, user.user_id)
 
-    send_verification_email(
-        recipient_email=user.email,
-        code=plain_code,
-    )
+    try:
+        send_verification_email(
+            recipient_email=user.email,
+            code=plain_code,
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+    db.commit()
 
 
 def request_password_reset(
@@ -155,12 +166,16 @@ def request_password_reset(
         user.user_id,
     )
 
-    db.commit()
+    try:
+        send_password_reset_email(
+            recipient_email=user.email,
+            code=plain_code,
+        )
+    except Exception:
+        db.rollback()
+        raise
 
-    send_password_reset_email(
-        recipient_email=user.email,
-        code=plain_code,
-    )
+    db.commit()
 
 
 def reset_password(

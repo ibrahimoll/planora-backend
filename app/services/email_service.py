@@ -1,9 +1,27 @@
 import smtplib
 import ssl
 from email.message import EmailMessage
+
 from app.core.config import settings
 
-def send_verification_email(recipient_email:str, code: str) -> None:
+
+def _send_email(message: EmailMessage) -> None:
+    ssl_context = ssl.create_default_context()
+    ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+
+    with smtplib.SMTP(
+        settings.smtp_host,
+        settings.smtp_port,
+    ) as smtp:
+        smtp.starttls(context=ssl_context)
+        smtp.login(
+            settings.smtp_username,
+            settings.smtp_password,
+        )
+        smtp.send_message(message)
+
+
+def send_verification_email(recipient_email: str, code: str) -> None:
     message = EmailMessage()
     message["Subject"] = "Planora email verification code"
     message["From"] = settings.email_from
@@ -21,21 +39,10 @@ def send_verification_email(recipient_email:str, code: str) -> None:
         """
     )
 
-    ssl_context = ssl.create_default_context()
-    ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+    _send_email(message)
 
-    with smtplib.SMTP_SSL(
-        settings.smtp_host,
-        settings.smtp_port,
-        context = ssl_context
-    ) as smtp:
-        smtp.login(
-            settings.smtp_username,
-            settings.smtp_password,
-        )
-        smtp.send_message(message)
 
-def send_password_reset_email(recipient_email : str, code: str) -> None:
+def send_password_reset_email(recipient_email: str, code: str) -> None:
     message = EmailMessage()
     message["Subject"] = "Planora password reset code"
     message["From"] = settings.email_from
@@ -53,16 +60,4 @@ def send_password_reset_email(recipient_email : str, code: str) -> None:
         """
     )
 
-    ssl_context = ssl.create_default_context()
-    ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
-
-    with smtplib.SMTP_SSL(
-        settings.smtp_host,
-        settings.smtp_port,
-        context=ssl_context,
-    ) as smtp:
-        smtp.login(
-            settings.smtp_username,
-            settings.smtp_password,
-        )
-        smtp.send_message(message)
+    _send_email(message)

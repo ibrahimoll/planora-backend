@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.models.project import Project
+from app.models.project_member import ProjectMember
 from app.models.team import Team
 from app.models.team_member import TeamMember
 from app.models.user import User
@@ -180,5 +182,16 @@ def remove_team_member(
     db: Session,
     member: TeamMember,
 ) -> None:
+    team_project_ids = select(Project.project_id).where(
+        Project.team_id == member.team_id,
+        Project.project_type == "team",
+    )
+
+    db.execute(
+        delete(ProjectMember).where(
+            ProjectMember.user_id == member.user_id,
+            ProjectMember.project_id.in_(team_project_ids),
+        )
+    )
     db.delete(member)
     db.commit()

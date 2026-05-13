@@ -20,7 +20,7 @@ def create_email_verification_code(db: Session, user_id: int) -> str:
     )
 
     db.add(verification_code)
-    db.commit()
+    db.flush()
 
     return plain_code
 
