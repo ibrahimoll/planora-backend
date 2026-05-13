@@ -28,7 +28,7 @@ def verify_google_id_token(token: str) -> GoogleUserInfo:
     email = id_info.get("email")
     email_verified = id_info.get("email_verified", False)
     full_name = id_info.get("name")
-    profile_pic = id_info.get("picure")
+    profile_pic = id_info.get("picture")
 
     if not provider_user_id:
         raise ValueError("Google token is missing user ID.")

@@ -8,7 +8,7 @@ from app.models.project_member import ProjectMember
 from app.models.team import Team
 from app.models.team_member import TeamMember
 from app.models.user import User
-from app.schemas.team_schema import TeamCreate, TeamRole, TeamUpdate
+from app.schemas.team_schema import TeamAssignableRole, TeamCreate, TeamRole, TeamUpdate
 
 
 def create_team(
@@ -150,7 +150,7 @@ def add_team_member(
     db: Session,
     team: Team,
     user: User,
-    role: TeamRole,
+    role: TeamRole | TeamAssignableRole,
 ) -> TeamMember:
     member = TeamMember(
         team_id=team.team_id,

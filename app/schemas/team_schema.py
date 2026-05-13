@@ -10,6 +10,10 @@ class TeamRole(str, Enum):
     admin = "admin"
     member = "member"
 
+class TeamAssignableRole(str, Enum):
+    admin = "admin"
+    member = "member"
+
 class TeamCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
 
@@ -29,7 +33,7 @@ class TeamDeleteResponse(BaseModel):
 
 class TeamMemberAdd(BaseModel):
     email: EmailStr
-    role: TeamRole = TeamRole.member
+    role: TeamAssignableRole = TeamAssignableRole.member
 
 class TeamMemberUpdate(BaseModel):
     role: TeamRole
