@@ -10,30 +10,30 @@ from app.schemas.auth import SocialLoginRequest
 from app.services.google_auth_service import GoogleUserInfo, verify_google_id_token
 from app.services.profile_picture_service import build_default_profile_pic
 
-def generate_unique_username(db: Session, email: str) -> str:
-    email_name = email.split("@")[0].lower()
+# def generate_unique_username(db: Session, email: str) -> str:
+#     email_name = email.split("@")[0].lower()
 
-    base_username = re.sub(r"[^a-z0-9_]", "_", email_name)
-    base_username = base_username.strip("_")
+#     base_username = re.sub(r"[^a-z0-9_]", "_", email_name)
+#     base_username = base_username.strip("_")
 
-    if not base_username:
-        base_username = "user"
+#     if not base_username:
+#         base_username = "user"
 
-    base_username = base_username[:40]
+#     base_username = base_username[:40]
 
-    if db.scalar(select(User).where(User.username == base_username)) is None:
-        return base_username
+#     if db.scalar(select(User).where(User.username == base_username)) is None:
+#         return base_username
 
-    while True:
-        suffix = secrets.token_hex(4)
-        username = f"{base_username}_{suffix}"[:50]
+#     while True:
+#         suffix = secrets.token_hex(4)
+#         username = f"{base_username}_{suffix}"[:50]
 
-        existing_user = db.scalar(
-            select(User).where(User.username == username)
-        )
+#         existing_user = db.scalar(
+#             select(User).where(User.username == username)
+#         )
 
-        if existing_user is None:
-            return username
+#         if existing_user is None:
+#             return username
         
 def create_unusable_password_hash() ->str:
     random_secret = secrets.token_urlsafe(64)
@@ -95,8 +95,18 @@ def login_with_google(db: Session, data: SocialLoginRequest) ->str:
         or google_user.email.split("@")[0]
     )
 
+    if data.username is None:
+        raise ValueError("User is required for a new Google accounts.")
+    
+    existing_user = db.scalar(
+        select(User).where(User.username == data.username)
+    )
+
+    if existing_user is not None:
+        raise ValueError("User is already taken.")
+    
     user = User(
-        username = generate_unique_username(db, google_user.email),
+        username = data.username,
         email = google_user.email,
         password_hash = create_unusable_password_hash(),
         full_name = full_name,

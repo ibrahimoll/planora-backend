@@ -185,11 +185,23 @@ def login(
     except ValueError as e:
         error_message = str(e)
 
-        if error_message == "Invalid username/email or password.":
+        if error_message == "Invalid Google token.":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=error_message,
                 headers={"WWW-Authenticate": "Bearer"},
+    )
+
+        if error_message == "Username is required for new Google accounts.":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_message,
+        )
+
+        if error_message == "Username is already taken.":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=error_message,
             )
 
         raise HTTPException(

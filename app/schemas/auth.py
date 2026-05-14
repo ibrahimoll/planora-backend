@@ -44,6 +44,7 @@ class SocialLoginRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace= True)
 
     id_token: str = Field(min_length= 10)
+    username: str | None = Field(default=None, min_length=3, max_length=50)
     full_name: str | None = Field(default = None, max_length= 150)
 
 class TokenResponse(BaseModel):
