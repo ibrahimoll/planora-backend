@@ -9,6 +9,7 @@ from app.core.security import (
     verify_password,
     verify_verification_code,
 )
+from app.services.profile_picture_service import build_default_profile_pic
 from app.models.user import User
 from app.schemas.auth import (
     ForgotPasswordRequest,
@@ -59,6 +60,7 @@ def register_user(db: Session, data: RegisterRequest) -> User:
         role="user",
         is_active=True,
         is_email_verified=False,
+        profile_pic = build_default_profile_pic(data.full_name),
     )
 
     db.add(user)

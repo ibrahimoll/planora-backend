@@ -8,6 +8,7 @@ from app.models.oauth_account import OAuthAccount
 from app.models.user import User
 from app.schemas.auth import SocialLoginRequest
 from app.services.google_auth_service import GoogleUserInfo, verify_google_id_token
+from app.services.profile_picture_service import build_default_profile_pic
 
 def generate_unique_username(db: Session, email: str) -> str:
     email_name = email.split("@")[0].lower()
@@ -71,8 +72,11 @@ def login_with_google(db: Session, data: SocialLoginRequest) ->str:
         
         existing_user.is_email_verified = True
 
-        if existing_user.profile_pic is None and google_user.profile_pic:
-            existing_user.profile_pic = google_user.profile_pic
+        if existing_user.profile_pic is None:
+            existing_user.profile_pic = (
+                google_user.profile_pic
+                or build_default_profile_pic(existing_user.full_name)
+    )
 
         oauth_account = OAuthAccount(
             user_id=existing_user.user_id,
@@ -101,7 +105,7 @@ def login_with_google(db: Session, data: SocialLoginRequest) ->str:
         role = "user",
         is_active = True,
         is_email_verified = True,
-        profile_pic = google_user.profile_pic
+        profile_pic=google_user.profile_pic or build_default_profile_pic(full_name),
     )
 
     db.add(user)
