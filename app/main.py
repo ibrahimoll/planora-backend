@@ -10,6 +10,7 @@ from app.routers.task_routes import router as task_router
 from app.routers.team_routes import router as team_router
 from app.routers.team_project_routes import router as team_project_router
 from app.routers.team_task_routes import router as team_task_router
+from app.routers.comment_routes import router as comment_router
 from app.routers.attachment_routes import router as attachment_router
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -36,6 +37,7 @@ app.include_router(task_router)
 app.include_router(team_router)
 app.include_router(team_project_router)
 app.include_router(team_task_router)
+app.include_router(comment_router)
 app.include_router(attachment_router)
 
 
