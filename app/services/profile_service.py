@@ -4,6 +4,10 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password, verify_password
 from app.models.user import User
 from app.schemas.profile_schema import ChangePasswordRequest, ProfileUpdate
+from app.schemas.profile_schema import DeleteAccountRequest
+
+
+DELETE_ACCOUNT_CONFIRMATION_TEXT = "DELETE MY ACCOUNT"
 
 def update_my_profile(
         db: Session,
@@ -52,5 +56,17 @@ def change_my_password(
         raise ValueError("New password must be different from the old password.")
     
     current_user.password_hash = hash_password(password_data.new_password)
+
+    db.commit()
+
+def delete_my_account(
+        db: Session,
+        current_user: User,
+        delete_data: DeleteAccountRequest,
+) -> None:
+    if delete_data.confirmation_text != DELETE_ACCOUNT_CONFIRMATION_TEXT:
+        raise ValueError("Invalid account deletion confirmation text")
+    
+    current_user.is_active = False
 
     db.commit()

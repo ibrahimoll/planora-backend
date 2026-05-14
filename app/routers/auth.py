@@ -5,9 +5,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.rate_limit import check_rate_limit
+from app.db.session import get_db
 from app.dependencies.auth import get_current_active_verified_user
 from app.models.user import User
-from app.db.session import get_db
 from app.schemas.auth import (
     ForgotPasswordRequest,
     MessageResponse,
@@ -62,7 +62,7 @@ def register(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
-        )
+        ) from e
 
     return MessageResponse(
         message="Registration successful. Please verify your email."
@@ -89,7 +89,7 @@ def verify_user_email(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
     return MessageResponse(
         message="Email verified successfully."
@@ -116,12 +116,13 @@ def resend_code(
         message="If your account needs verification, a verification code has been sent."
     )
 
+
 @router.post("/forgot-password")
 def forgot_password(
     request: Request,
     data: ForgotPasswordRequest,
     db: DBSession,
-) ->MessageResponse:
+) -> MessageResponse:
     check_rate_limit(
         request,
         "auth:forgot-password",
@@ -133,8 +134,9 @@ def forgot_password(
     request_password_reset(db, data)
 
     return MessageResponse(
-        message= "If an account with that email exists, a password reset code has been sent."
+        message="If an account with that email exists, a password reset code has been sent."
     )
+
 
 @router.post("/reset-password")
 def reset_user_password(
@@ -156,11 +158,12 @@ def reset_user_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
     return MessageResponse(
         message="Password reset successfully."
     )
+
 
 @router.post("/login")
 def login(
@@ -185,40 +188,29 @@ def login(
     except ValueError as e:
         error_message = str(e)
 
-        if error_message == "Invalid Google token.":
+        if error_message == "Invalid username/email or password.":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=error_message,
                 headers={"WWW-Authenticate": "Bearer"},
-    )
-
-        if error_message == "Username is required for new Google accounts.":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=error_message,
-        )
-
-        if error_message == "Username is already taken.":
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=error_message,
-            )
+            ) from e
 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=error_message,
-        )
+        ) from e
 
     return TokenResponse(
         access_token=access_token,
     )
+
 
 @router.post("/google")
 def google_login(
     request: Request,
     data: SocialLoginRequest,
     db: DBSession,
-) ->TokenResponse:
+) -> TokenResponse:
     check_rate_limit(
         request,
         "auth:google",
@@ -231,22 +223,37 @@ def google_login(
     except ValueError as e:
         error_message = str(e)
 
-        if error_message =="Invalid Google token.":
+        if error_message == "Invalid Google token.":
             raise HTTPException(
-                status_code= status.HTTP_401_UNAUTHORIZED,
-                detail= error_message,
-                headers= {"WWW-Authenticate" : "Bearer"},
-            )
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=error_message,
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from e
+
+        if error_message == "Username is required for new Google accounts.":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error_message,
+            ) from e
+
+        if error_message == "Username is already taken.":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=error_message,
+            ) from e
+
         raise HTTPException(
-            status_code= status.HTTP_403_FORBIDDEN,
-            detail= error_message
-        )
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_message,
+        ) from e
+
     return TokenResponse(
-        access_token= access_token,
+        access_token=access_token,
     )
+
 
 @router.get("/me")
 def read_current_user(
-    current_user: CurrentUser
+    current_user: CurrentUser,
 ) -> UserResponse:
     return UserResponse.model_validate(current_user)

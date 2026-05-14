@@ -9,6 +9,8 @@ from app.models.user import User
 from app.schemas.profile_schema import (
     ChangePasswordRequest,
     ChangePasswordResponse,
+    DeleteAccountRequest,
+    DeleteAccountResponse,
     ProfileResponse,
     ProfileUpdate,
     ProfileUpdateResponse,
@@ -16,6 +18,7 @@ from app.schemas.profile_schema import (
 from app.services.profile_service import (
     change_my_password,
     update_my_profile,
+    delete_my_account,
 )
 
 router = APIRouter(
@@ -78,4 +81,25 @@ def update_password(
 
     return ChangePasswordResponse(
         message="Password changed successfully.",
+    )
+
+@router.delete("")
+def delete_account(
+    delete_data: DeleteAccountRequest,
+    db: DBSession,
+    current_user: CurrentUser,
+) -> DeleteAccountResponse:
+    try:
+        delete_my_account(
+            db=db,
+            current_user=current_user,
+            delete_data=delete_data
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )from e
+    return DeleteAccountResponse(
+        message="Account deleted successfully."
     )
