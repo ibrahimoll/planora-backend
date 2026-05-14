@@ -1,9 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
+from app.core.rate_limit import check_rate_limit
 from app.dependencies.auth import get_current_active_verified_user
 from app.models.user import User
 from app.db.session import get_db
@@ -43,9 +44,18 @@ CurrentUser = Annotated[User, Depends(get_current_active_verified_user)]
     status_code=status.HTTP_201_CREATED,
 )
 def register(
+    request: Request,
     data: RegisterRequest,
     db: DBSession,
 ) -> MessageResponse:
+    check_rate_limit(
+        request,
+        "auth:register",
+        limit=3,
+        window_seconds=300,
+        identifier=data.email,
+    )
+
     try:
         register_user(db, data)
     except ValueError as e:
@@ -61,9 +71,18 @@ def register(
 
 @router.post("/verify-email")
 def verify_user_email(
+    request: Request,
     data: VerifyEmailRequest,
     db: DBSession,
 ) -> MessageResponse:
+    check_rate_limit(
+        request,
+        "auth:verify-email",
+        limit=5,
+        window_seconds=300,
+        identifier=data.email,
+    )
+
     try:
         verify_email(db, data)
     except ValueError as e:
@@ -79,26 +98,38 @@ def verify_user_email(
 
 @router.post("/resend-verification-code")
 def resend_code(
+    request: Request,
     data: ResendVerificationCodeRequest,
     db: DBSession,
 ) -> MessageResponse:
-    try:
-        resend_verification_code(db, data)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+    check_rate_limit(
+        request,
+        "auth:resend-verification-code",
+        limit=3,
+        window_seconds=300,
+        identifier=data.email,
+    )
+
+    resend_verification_code(db, data)
 
     return MessageResponse(
-        message="Verification code sent successfully."
+        message="If your account needs verification, a verification code has been sent."
     )
 
 @router.post("/forgot-password")
 def forgot_password(
+    request: Request,
     data: ForgotPasswordRequest,
     db: DBSession,
 ) ->MessageResponse:
+    check_rate_limit(
+        request,
+        "auth:forgot-password",
+        limit=3,
+        window_seconds=300,
+        identifier=data.email,
+    )
+
     request_password_reset(db, data)
 
     return MessageResponse(
@@ -107,9 +138,18 @@ def forgot_password(
 
 @router.post("/reset-password")
 def reset_user_password(
+    request: Request,
     data: ResetPasswordRequest,
     db: DBSession,
 ) -> MessageResponse:
+    check_rate_limit(
+        request,
+        "auth:reset-password",
+        limit=5,
+        window_seconds=300,
+        identifier=data.email,
+    )
+
     try:
         reset_password(db, data)
     except ValueError as e:
@@ -124,9 +164,18 @@ def reset_user_password(
 
 @router.post("/login")
 def login(
+    request: Request,
     form_data: LoginForm,
     db: DBSession,
 ) -> TokenResponse:
+    check_rate_limit(
+        request,
+        "auth:login",
+        limit=5,
+        window_seconds=60,
+        identifier=form_data.username,
+    )
+
     try:
         access_token = login_user(
             db,
@@ -154,9 +203,17 @@ def login(
 
 @router.post("/google")
 def google_login(
+    request: Request,
     data: SocialLoginRequest,
     db: DBSession,
 ) ->TokenResponse:
+    check_rate_limit(
+        request,
+        "auth:google",
+        limit=10,
+        window_seconds=60,
+    )
+
     try:
         access_token = login_with_google(db, data)
     except ValueError as e:

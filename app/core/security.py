@@ -26,12 +26,15 @@ def verify_verification_code(code: str, stored_code_hash: str) -> bool:
     return hmac.compare_digest(submitted_code_hash, stored_code_hash)
 
 def create_access_token(user_id: int) -> str:
+    issued_at = datetime.now(timezone.utc)
     expires_at = datetime.now(timezone.utc) + timedelta(
         minutes= settings.access_token_expire_minutes
         )
     payload = {
         "sub": str(user_id),
+        "iat": issued_at,
         "exp": expires_at,
+        "token_type": "access",
     }
     return jwt.encode(
         payload,
@@ -40,8 +43,14 @@ def create_access_token(user_id: int) -> str:
     )
     
 def decode_access_token(token: str) -> dict:
-    return jwt.decode(
+    payload = jwt.decode(
         token,
         settings.jwt_secret_code,
         algorithms= [JWT_ALGORITHM],
+        options={"require": ["sub", "exp", "iat", "token_type"]},
     )
+
+    if payload.get("token_type") != "access":
+        raise jwt.InvalidTokenError("Invalid token type.")
+
+    return payload

@@ -124,10 +124,10 @@ def resend_verification_code(
     )
 
     if user is None:
-        raise ValueError("User not found.")
+        return
 
     if user.is_email_verified:
-        raise ValueError("Email is already verified")
+        return
 
     plain_code = create_email_verification_code(db, user.user_id)
 

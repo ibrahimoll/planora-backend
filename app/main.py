@@ -1,7 +1,4 @@
-from pathlib import Path
-
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 
 from app.db.session import test_database_connection
 from app.routers.auth import router as auth_router
@@ -13,23 +10,20 @@ from app.routers.team_task_routes import router as team_task_router
 from app.routers.comment_routes import router as comment_router
 from app.routers.attachment_routes import router as attachment_router
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-UPLOADS_DIR = BASE_DIR / "uploads"
-ATTACHMENTS_DIR = UPLOADS_DIR / "attachments"
-
-ATTACHMENTS_DIR.mkdir(parents=True, exist_ok=True)
-
 app = FastAPI(
     title="Planora API",
     description="Backend API for the Planora AI project planning and colab system",
     version="1.0.0",
 )
 
-app.mount(
-    "/uploads",
-    StaticFiles(directory=str(UPLOADS_DIR)),
-    name="uploads",
-)
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    return response
 
 app.include_router(auth_router)
 app.include_router(project_router)

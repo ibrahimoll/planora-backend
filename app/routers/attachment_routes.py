@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi import status as http_status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -17,9 +18,12 @@ from app.schemas.attachment_schema import (
     AttachmentResponse,
 )
 from app.services.attachment_service import (
+    STORAGE_URL_PREFIX,
     create_attachment,
     delete_attachment,
+    get_attachment_by_file_url,
     get_attachment_by_id,
+    get_local_file_path,
     get_project_attachments,
     get_task_attachments,
 )
@@ -150,6 +154,71 @@ def can_delete_team_attachment(
     return (
         attachment_uploaded_by == current_user.user_id
         or can_manage_project(membership)
+    )
+
+
+def can_access_attachment_file(
+    db: Session,
+    attachment_project: Project,
+    current_user: User,
+) -> bool:
+    if attachment_project.project_type == "personal":
+        return attachment_project.created_by == current_user.user_id
+
+    if attachment_project.project_type == "team":
+        membership = get_project_membership(
+            db=db,
+            project_id=attachment_project.project_id,
+            user_id=current_user.user_id,
+        )
+
+        return membership is not None
+
+    return False
+
+
+@router.get(
+    f"{STORAGE_URL_PREFIX}{{stored_file_name}}",
+    include_in_schema=False,
+)
+def download_attachment_file(
+    stored_file_name: str,
+    db: DBSession,
+    current_user: CurrentUser,
+):
+    attachment = get_attachment_by_file_url(
+        db=db,
+        file_url=f"{STORAGE_URL_PREFIX}{stored_file_name}",
+    )
+
+    if attachment is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=ATTACHMENT_NOT_FOUND,
+        )
+
+    if not can_access_attachment_file(
+        db=db,
+        attachment_project=attachment.project,
+        current_user=current_user,
+    ):
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=ATTACHMENT_NOT_FOUND,
+        )
+
+    file_path = get_local_file_path(file_url=attachment.file_url)
+
+    if file_path is None or not file_path.exists() or not file_path.is_file():
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=ATTACHMENT_NOT_FOUND,
+        )
+
+    return FileResponse(
+        path=file_path,
+        media_type=attachment.file_type or "application/octet-stream",
+        filename=attachment.file_name,
     )
 
 
