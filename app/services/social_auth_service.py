@@ -73,10 +73,8 @@ def login_with_google(db: Session, data: SocialLoginRequest) ->str:
         existing_user.is_email_verified = True
 
         if existing_user.profile_pic is None:
-            existing_user.profile_pic = (
-                google_user.profile_pic
-                or build_default_profile_pic(existing_user.full_name)
-    )
+            existing_user.profile_pic = build_default_profile_pic(existing_user.full_name)
+    
 
         oauth_account = OAuthAccount(
             user_id=existing_user.user_id,
@@ -105,7 +103,7 @@ def login_with_google(db: Session, data: SocialLoginRequest) ->str:
         role = "user",
         is_active = True,
         is_email_verified = True,
-        profile_pic=google_user.profile_pic or build_default_profile_pic(full_name),
+        profile_pic=build_default_profile_pic(full_name),
     )
 
     db.add(user)
