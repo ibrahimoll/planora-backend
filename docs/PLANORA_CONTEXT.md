@@ -2,7 +2,7 @@
 
 ## Main Idea
 
-Planora is an AI-powered project planning and collaboration system. The backend supports verified users, personal projects, team collaboration, task management, comments, attachments, and role-based access control.
+Planora is an AI-powered project planning and collaboration system. The backend supports verified users, personal projects, team collaboration, task management, comments, attachments, role-based access control, basic auth rate limiting, and protected attachment downloads.
 
 Planned modules will extend the system with user profile management, team/project invitations, notifications, deadline reminders, mentions, progress analytics, activity timeline, AI planning, smart scheduling, risk analysis, AI chat assistant, exportable project reports, admin dashboard APIs, frontend/mobile integration support, tests/security cleanup, and Docker deployment polish.
 
@@ -15,6 +15,21 @@ Planned modules will extend the system with user profile management, team/projec
 - Google social login
 - Local upload storage for development
 
+## Latest Verified Status
+
+As of 2026-05-14, the user ran the quick pytest check locally and all tests passed.
+
+Recent verified additions:
+
+- `app/core/rate_limit.py` added a simple in-memory rate limiter.
+- Auth routes now apply rate limits to register, verify email, resend verification code, forgot password, reset password, login, and Google login.
+- Attachment upload security was improved with allowed extensions, 10 MB file-size limit, empty-file rejection, safer filename handling, UUID stored filenames, and local file cleanup on database errors.
+- Attachment file access is now protected through the attachment router instead of public `StaticFiles` mounting.
+- JWT access tokens now include `iat` and `token_type`, and decoding requires `sub`, `exp`, `iat`, and `token_type`.
+- Basic HTTP security headers were added in `app/main.py`.
+- Duplicate root `PLANORA_CONTEXT.md` was removed; the canonical memory file is now `docs/PLANORA_CONTEXT.md`.
+- Tests added/passing include `tests/test_rate_limit.py` and `tests/test_attachment_security.py`.
+
 ## Completed Backend Steps
 
 ### Step 1 — Backend Foundation
@@ -22,6 +37,7 @@ Planned modules will extend the system with user profile management, team/projec
 - FastAPI application created.
 - PostgreSQL connection configured.
 - Database health route exists.
+- Basic HTTP security headers are added in `app/main.py`.
 
 ### Step 2 — Authentication
 
@@ -32,6 +48,18 @@ Planned modules will extend the system with user profile management, team/projec
 - Apple login is paused/removed because real Apple Sign-In requires a paid Apple Developer setup.
 - Protected routes require active verified users.
 - No guest access past authentication.
+- Basic in-memory rate limiting is implemented for sensitive auth endpoints using `app/core/rate_limit.py`.
+- JWT access tokens include `sub`, `exp`, `iat`, and `token_type = access`; decoding validates required claims and token type.
+
+Rate-limited auth endpoints:
+
+- `POST /auth/register`
+- `POST /auth/verify-email`
+- `POST /auth/resend-verification-code`
+- `POST /auth/forgot-password`
+- `POST /auth/reset-password`
+- `POST /auth/login`
+- `POST /auth/google`
 
 ### Step 3 — Personal Projects
 
@@ -49,6 +77,8 @@ Planned modules will extend the system with user profile management, team/projec
 - Team creator becomes owner.
 - Team roles: owner, admin, member.
 - Team owners/admins manage members.
+- Adding a team member supports only `admin` and `member`; `owner` is not assignable through the add-member request.
+- Removing a team member also removes that user's project memberships for all projects in that team.
 
 ### Step 6 — Team Projects
 
@@ -73,7 +103,7 @@ Files:
 - `app/schemas/comment_schema.py`
 - `app/services/comment_service.py`
 - `app/routers/comment_routes.py`
-- `app/main.py` must include `comment_router`
+- `app/main.py` includes `comment_router`
 
 Database table:
 
@@ -106,15 +136,6 @@ Step 8 authorization rules:
 - Team comment update/delete is allowed for the comment author or a project owner/manager.
 - Users outside the project must not access comments.
 
-Important Step 8 reminder:
-
-If comments do not appear in Swagger, make sure `app/main.py` contains:
-
-```python
-from app.routers.comment_routes import router as comment_router
-app.include_router(comment_router)
-```
-
 ### Step 9 — Attachments
 
 Step 9 is implemented as the attachment/file upload module.
@@ -125,19 +146,41 @@ Files:
 - `app/schemas/attachment_schema.py`
 - `app/services/attachment_service.py`
 - `app/routers/attachment_routes.py`
-- `app/main.py` must include `attachment_router`
+- `app/main.py` includes `attachment_router`
 
-Storage approach:
+Storage and serving approach:
 
 - Store files locally under `uploads/attachments/` during development.
 - Store metadata in the `attachments` table.
-- Serve uploads through `/uploads` using FastAPI `StaticFiles`.
+- File URLs use `/uploads/attachments/{stored_file_name}`.
+- Files are served through a protected route in `attachment_routes.py`, not through public `StaticFiles` mounting.
+- The protected download route checks the current authenticated user before returning a `FileResponse`.
+- Personal project files are accessible only to the personal project owner.
+- Team project files are accessible only to project members.
+
+Attachment upload security:
+
+- Original filenames are cleaned to prevent path traversal.
+- Stored filenames use UUID values.
+- Empty files are rejected.
+- Files larger than 10 MB are rejected.
+- Allowed extensions are `.pdf`, `.png`, `.jpg`, `.jpeg`, `.doc`, `.docx`, `.xls`, `.xlsx`, `.ppt`, `.pptx`, `.txt`, and `.zip`.
+- Local files are deleted if database save fails.
+- Local files are deleted when an attachment record is deleted.
 
 Attachment authorization rules:
 
 - Personal project/task attachments are controlled by personal project ownership.
 - Team project/task attachments are controlled by project membership.
 - Team attachment deletion is allowed for the uploader or project owner/manager.
+
+Attachment endpoints include:
+
+- Personal project attachments.
+- Personal task attachments.
+- Team project attachments.
+- Team task attachments.
+- Protected attachment file download.
 
 ## Planned Backend Roadmap
 
@@ -446,11 +489,20 @@ Recommended features:
 
 Purpose: improve reliability and correctness before final delivery.
 
-Recommended work:
+Already started:
+
+- Basic rate-limit tests added and passing.
+- Basic attachment security tests added and passing.
+- Auth rate limiting added for sensitive auth endpoints.
+- Attachment upload and download security improved.
+- JWT claim validation improved.
+- Basic HTTP security headers added.
+
+Remaining recommended work:
 
 - Add/clean tests for permissions and collaboration modules.
 - Review all ownership/member checks.
-- Review upload validation and file size limits.
+- Review upload validation and file size limits again before production.
 - Review password/token/security settings.
 - Add Alembic migrations.
 - Ensure ORM and live database match.
@@ -520,4 +572,5 @@ Optional/polish tables that may be added later:
 ```powershell
 cd C:\Users\mahdi\OneDrive\Documents\Planora\backend
 .\venv\Scripts\uvicorn.exe app.main:app --reload
+python -m pytest -v
 ```
