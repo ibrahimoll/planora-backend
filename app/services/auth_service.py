@@ -167,7 +167,7 @@ def request_password_reset(
         db,
         user.user_id,
     )
-
+    
     try:
         send_password_reset_email(
             recipient_email=user.email,

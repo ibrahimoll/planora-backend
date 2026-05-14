@@ -29,15 +29,18 @@ def send_verification_email(recipient_email: str, code: str) -> None:
 
     message.set_content(
         f"""Hello,
-        Your Planora verification code is:
+        
+        Welcome to Planora.
+        Your email verification code is:
 
-                        {code}
+        {code}
 
         This code will expire in {settings.verification_code_expire_minutes} minutes.
-        
-        If you did not create a Planora account, you can ignore this email.
+        If you did not create a Planora account, you can safely ignore this email.
+
+        Planora Team
         """
-    )
+)
 
     _send_email(message)
 
@@ -50,13 +53,16 @@ def send_password_reset_email(recipient_email: str, code: str) -> None:
 
     message.set_content(
         f"""Hello,
-        Your planora password reset code is:
+
+        You requested to reset your Planora password.
+        Your password reset code is:
 
         {code}
 
         This code will expire in {settings.password_reset_code_expire_minutes} minutes.
-        If you did not request a password reset, you can ignore this email
-        or you can change your password.
+        If you did not request this, you can safely ignore this email.
+
+        Planora Team
         """
     )
 
