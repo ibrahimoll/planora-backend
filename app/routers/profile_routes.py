@@ -93,13 +93,14 @@ def delete_account(
         delete_my_account(
             db=db,
             current_user=current_user,
-            delete_data=delete_data
+            delete_data=delete_data,
         )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )from e
+        ) from e
+
     return DeleteAccountResponse(
-        message="Account deleted successfully."
+        message="Account deleted successfully.",
     )

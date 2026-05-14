@@ -4,8 +4,13 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password, verify_password
 from app.models.user import User
 from app.schemas.profile_schema import ChangePasswordRequest, ProfileUpdate
+from app.schemas.profile_schema import ChangePasswordRequest, ProfileUpdate
 from app.schemas.profile_schema import DeleteAccountRequest
-
+from app.schemas.profile_schema import (
+    ChangePasswordRequest,
+    DeleteAccountRequest,
+    ProfileUpdate,
+)
 
 DELETE_ACCOUNT_CONFIRMATION_TEXT = "DELETE MY ACCOUNT"
 
@@ -65,7 +70,7 @@ def delete_my_account(
         delete_data: DeleteAccountRequest,
 ) -> None:
     if delete_data.confirmation_text != DELETE_ACCOUNT_CONFIRMATION_TEXT:
-        raise ValueError("Invalid account deletion confirmation text")
+        raise ValueError("Invalid account deletion confirmation text.")
     
     current_user.is_active = False
 

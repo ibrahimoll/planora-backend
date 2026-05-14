@@ -19,7 +19,7 @@ class ChangePasswordRequest(BaseModel):
 
     @field_validator("new_password")
     @classmethod
-    def validate_new_password_strengh(cls, password: str) -> str:
+    def validate_new_password_strength(cls, password: str) -> str:
         return validate_password_strength(password)
     
 
