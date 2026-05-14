@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from app.models.project import Project
     from app.models.user import User
     from app.models.comment import Comment
+    from app.models.attachment import Attachment
 
 
 class Task(Base):
@@ -145,4 +146,8 @@ class Task(Base):
     creator: Mapped["User"] = relationship(
         foreign_keys=[created_by],
         back_populates="created_tasks",
+    )
+
+    attachments: Mapped[list["Attachment"]] = relationship(
+        back_populates="task",
     )

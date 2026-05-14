@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from app.models.team_member import TeamMember
     from app.models.project_member import ProjectMember
     from app.models.comment import Comment
+    from app.models.attachment import Attachment
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -115,4 +116,8 @@ class User(Base):
     comments: Mapped[list["Comment"]] = relationship(
         back_populates="user",
         cascade=CASCADE_ALL_DELETE_ORPHAN, 
+    )
+
+    uploaded_attachments: Mapped[list["Attachment"]] = relationship(
+        back_populates="uploader",
     )

@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from app.models.task import Task
     from app.models.team import Team
     from app.models.project_member import ProjectMember
+    from app.models.attachment import Attachment
 
 
 class Project(Base):
@@ -117,6 +118,11 @@ class Project(Base):
         cascade="all, delete-orphan",
     )
 
+    attachments: Mapped[list["Attachment"]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    
     creator: Mapped["User"] = relationship(
         back_populates="created_projects",
     )
