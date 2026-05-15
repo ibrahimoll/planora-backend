@@ -37,26 +37,29 @@ Completed backend steps:
 11. Notifications foundation.
 12. Invitation system.
 13. Mentions in comments.
+14. Deadline reminders.
 
 Important current notes:
 
 - Google-created accounts cannot use Swagger password authorization unless they set a Planora password through forgot/reset password.
 - Google-created users normally authenticate through `POST /auth/google` and receive a Planora JWT.
 - `notifications.type` must allow: `task`, `project`, `team`, `comment`, `mention`, `invite`, `deadline`, `ai`, `risk`, `system`.
-- If invitation or mention notifications fail when inserting notification type `invite` or `mention`, fix the live PostgreSQL notification check constraint.
+- If invitation, mention, or deadline notifications fail when inserting notification types, fix the live PostgreSQL notification check constraint.
 - Team roles and project roles are separate.
 - Updating `team_members.role` does not update `project_members.role`.
 - A team `admin` is not automatically a project `manager`.
 
 ## Regression Testing Status — 2026-05-15
 
-A pytest regression suite now exists in the `tests/` folder and was verified locally with:
+A pytest regression suite exists in the `tests/` folder and should be used after every backend feature step.
 
-```powershell
-python -m pytest -x -v
-```
+Latest user-confirmed local result after Step 14:
 
-Latest local result:
+- 29 tests collected.
+- 29 tests passed.
+- Command used: `python -m pytest -x -v`.
+
+Previous verified result before Step 14:
 
 - 25 tests collected.
 - 25 tests passed.
@@ -76,6 +79,11 @@ Current test coverage includes:
 - Profile route availability.
 - Attachment route protection and attachment filename/path-traversal security helpers.
 - Rate-limit blocking behavior.
+- Deadline reminder admin-only scan permissions.
+- Deadline reminder due-soon and overdue notification creation.
+- Deadline reminder duplicate-prevention behavior.
+- Deadline reminder history listing through `/deadline-reminders/me`.
+- Deadline scan ignoring completed tasks.
 
 Important test setup notes:
 
@@ -96,10 +104,11 @@ Current pytest-related files:
 - `tests/test_04_comments_mentions_notifications_api.py`
 - `tests/test_05_invitations_api.py`
 - `tests/test_06_profile_attachments_smoke_api.py`
+- `tests/test_07_deadline_reminders_api.py`
 - `tests/test_attachment_security.py`
 - `tests/test_rate_limit.py`
 
-Useful local commands:
+Standard local pytest command pattern:
 
 ```powershell
 $pgPassword = Read-Host "Enter your PostgreSQL postgres password"
@@ -108,12 +117,20 @@ $env:TEST_DATABASE_URL = "postgresql+psycopg://postgres:$encodedPassword@localho
 python -m pytest -x -v
 ```
 
+Useful local commands:
+
 ```powershell
 python -m pytest --collect-only -q
 python -m pytest --cov=app --cov-report=term-missing
 python -m compileall app tests
 python -m pip check
 ```
+
+Future testing rule:
+
+- Every new backend feature step should include pytest tests in the same style before the step is considered fully done.
+- Prefer API-level tests with `TestClient`, isolated PostgreSQL test database, disabled outbound email, and clear assertions for permissions, success cases, and duplicate/edge cases.
+- Keep using `python -m pytest -x -v` as the first full regression check.
 
 ## Step 12 — Invitation System Completed
 
@@ -131,7 +148,7 @@ Current invitation flow:
 - Accepting adds the user to `team_members`.
 - Accepting also adds the user to existing team projects as project `member`, unless already present.
 
-Expected/implemented Step 12 files:
+Step 12 files:
 
 - `app/models/invitation.py`
 - `app/schemas/invitation_schema.py`
@@ -236,7 +253,7 @@ Current mention behavior:
 - When a comment is updated, old mention rows are replaced based on the new comment text.
 - When a comment is deleted, related mention rows are deleted through cascade.
 
-Expected/implemented Step 13 files:
+Step 13 files:
 
 - `app/models/comment_mention.py`
 - Updated `app/models/comment.py`
@@ -316,12 +333,108 @@ CREATE INDEX IF NOT EXISTS idx_comment_mentions_mentioned_by
 ON comment_mentions(mentioned_by);
 ```
 
-Step 13 manual test expectation:
+## Step 14 — Deadline Reminders Completed
 
-- Create or update a team task comment containing `@username`.
-- The mentioned user must be a project member.
-- The mentioned user should see an unread notification from `GET /notifications?unread_only=true`.
-- The notification should have `type = mention`.
+Step 14 adds backend deadline reminder scanning and in-app deadline notifications.
+
+Current deadline reminder behavior:
+
+- Admins can manually run a deadline scan.
+- Normal users cannot run the scan.
+- Incomplete assigned tasks with `due_date` inside the scan window create `due_soon` reminders.
+- Incomplete assigned tasks with `due_date` in the past create `overdue` reminders when `include_overdue = true`.
+- Completed tasks are ignored.
+- Tasks without assignees or without due dates are ignored.
+- Duplicate reminders are prevented by the `deadline_reminders` table unique rule.
+- Reminder creation also creates an in-app notification with `type = deadline`.
+- Users can list their own reminder history.
+
+Step 14 files:
+
+- `app/models/deadline_reminder.py`
+- `app/schemas/deadline_reminder_schema.py`
+- `app/services/deadline_reminder_service.py`
+- `app/routers/deadline_reminder_routes.py`
+- Updated `app/models/task.py`
+- Updated `app/models/project.py`
+- Updated `app/models/user.py`
+- Updated `app/models/__init__.py`
+- Updated `app/main.py` to include `deadline_reminder_router`
+- `tests/test_07_deadline_reminders_api.py`
+
+Step 14 endpoints:
+
+- `POST /deadline-reminders/run`
+- `GET /deadline-reminders/me`
+
+Current `deadline_reminders` table columns:
+
+- `reminder_id`
+- `task_id`
+- `project_id`
+- `user_id`
+- `reminder_type`
+- `due_date_snapshot`
+- `generated_at`
+
+Deadline reminder type values:
+
+- `due_soon`
+- `overdue`
+
+Important constraints/indexes:
+
+- `task_id` references `tasks(task_id)` with `ON DELETE CASCADE`.
+- `project_id` references `projects(project_id)` with `ON DELETE CASCADE`.
+- `user_id` references `users(user_id)` with `ON DELETE CASCADE`.
+- `reminder_type` must be `due_soon` or `overdue`.
+- Unique rule: one reminder per `(task_id, user_id, reminder_type, due_date_snapshot)`.
+- Indexes should exist for `task_id`, `project_id`, `user_id`, `reminder_type`, and `generated_at`.
+
+Recommended SQL for existing databases:
+
+```sql
+CREATE TABLE IF NOT EXISTS deadline_reminders (
+    reminder_id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    task_id BIGINT NOT NULL,
+    project_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    reminder_type VARCHAR(30) NOT NULL,
+    due_date_snapshot TIMESTAMPTZ NOT NULL,
+    generated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_deadline_reminders_task
+        FOREIGN KEY (task_id)
+        REFERENCES tasks(task_id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_deadline_reminders_project
+        FOREIGN KEY (project_id)
+        REFERENCES projects(project_id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_deadline_reminders_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(user_id)
+        ON DELETE CASCADE,
+    CONSTRAINT chk_deadline_reminders_type
+        CHECK (reminder_type IN ('due_soon', 'overdue')),
+    CONSTRAINT uq_deadline_reminders_task_user_type_due_date
+        UNIQUE (task_id, user_id, reminder_type, due_date_snapshot)
+);
+
+CREATE INDEX IF NOT EXISTS idx_deadline_reminders_task
+ON deadline_reminders(task_id);
+
+CREATE INDEX IF NOT EXISTS idx_deadline_reminders_project
+ON deadline_reminders(project_id);
+
+CREATE INDEX IF NOT EXISTS idx_deadline_reminders_user
+ON deadline_reminders(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_deadline_reminders_type
+ON deadline_reminders(reminder_type);
+
+CREATE INDEX IF NOT EXISTS idx_deadline_reminders_generated_at
+ON deadline_reminders(generated_at);
+```
 
 ## Role Management Decision
 
@@ -364,6 +477,7 @@ Important behavior:
 - `comment_mentions`
 - `notifications`
 - `invitations`
+- `deadline_reminders`
 - `ai_plans`
 - `risk_analysis`
 - `user_progress`
@@ -378,7 +492,6 @@ Planned/polish tables:
 - `activity_logs`
 - `device_tokens` for Firebase Cloud Messaging tokens
 - `notification_preferences`
-- Optional reminder-tracking table for deadline reminders
 - Optional report export history table
 
 ## Roadmap From Here
@@ -391,11 +504,10 @@ Immediate cleanup:
 
 Next feature step:
 
-- Step 14 — Deadline reminders.
+- Progress tracking and productivity insights.
 
 Later steps:
 
-- Progress tracking and productivity insights.
 - Activity timeline.
 - AI project planning and smart scheduling.
 - Risk analysis.
@@ -412,3 +524,4 @@ Later steps:
 
 - Do not provide long PowerShell test scripts by default.
 - Prefer Swagger, Thunder Client, or short manual API testing instructions unless PowerShell is explicitly requested.
+- For backend feature steps, always include pytest tests and run/verify them with the same terminal pattern used for Step 14.
