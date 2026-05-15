@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -112,78 +113,132 @@ def get_task_for_personal_project_by_id(
     return db.execute(stmt).scalars().first()
 
 
+def apply_task_field_update(
+    task: Task,
+    field: str,
+    value: Any,
+) -> bool:
+    if value is None:
+        return False
+
+    old_value = getattr(task, field)
+
+    if field == "status":
+        new_status = value.value
+        task.status = new_status
+        task.completed_at = (
+            datetime.now(timezone.utc)
+            if new_status == TaskStatus.completed.value
+            else None
+        )
+        return old_value != new_status
+
+    if field == "priority":
+        new_priority = value.value
+        task.priority = new_priority
+        return old_value != new_priority
+
+    setattr(task, field, value)
+    return old_value != value
+
+
+def apply_task_updates(
+    task: Task,
+    update_data: dict[str, Any],
+) -> list[str]:
+    changed_fields: list[str] = []
+
+    for field, value in update_data.items():
+        if apply_task_field_update(
+            task=task,
+            field=field,
+            value=value,
+        ):
+            changed_fields.append(field)
+
+    return changed_fields
+
+
+def get_task_update_activity_event_type(
+    previous_status: str,
+    new_status: str,
+) -> ActivityLogEventType:
+    if (
+        previous_status != TaskStatus.completed.value
+        and new_status == TaskStatus.completed.value
+    ):
+        return ActivityLogEventType.TASK_COMPLETED
+
+    return ActivityLogEventType.TASK_UPDATED
+
+
+def log_task_update_activity(
+    db: Session,
+    task: Task,
+    current_user: User,
+    previous_status: str,
+    changed_fields: list[str],
+) -> None:
+    if not changed_fields:
+        return
+
+    create_activity_log(
+        db=db,
+        project=task.project,
+        actor=current_user,
+        task=task,
+        event_type=get_task_update_activity_event_type(
+            previous_status=previous_status,
+            new_status=task.status,
+        ),
+        message=f"{current_user.full_name} updated task '{task.title}'.",
+        metadata={
+            "changed_fields": changed_fields,
+            "previous_status": previous_status,
+            "new_status": task.status,
+        },
+        commit=False,
+    )
+
+
+def update_task(
+    db: Session,
+    task: Task,
+    update_data: dict[str, Any],
+    current_user: User,
+) -> Task:
+    previous_status = task.status
+    changed_fields = apply_task_updates(
+        task=task,
+        update_data=update_data,
+    )
+
+    log_task_update_activity(
+        db=db,
+        task=task,
+        current_user=current_user,
+        previous_status=previous_status,
+        changed_fields=changed_fields,
+    )
+
+    db.commit()
+    db.refresh(task)
+
+    return task
+
+
 def update_task_for_personal_project(
     db: Session,
     task: Task,
     task_data: TaskUpdate,
     current_user: User,
 ) -> Task:
-    update_data = task_data.model_dump(exclude_unset=True)
-
-    previous_status = task.status
-    changed_fields: list[str] = []
-
-    for field, value in update_data.items():
-        old_value = getattr(task, field)
-
-        if field == "status":
-            if value is None:
-                continue
-
-            new_status = value.value
-            task.status = new_status
-
-            if new_status == TaskStatus.completed.value:
-                task.completed_at = datetime.now(timezone.utc)
-            else:
-                task.completed_at = None
-
-            if old_value != new_status:
-                changed_fields.append(field)
-
-        elif field == "priority":
-            if value is None:
-                continue
-
-            task.priority = value.value
-
-            if old_value != value.value:
-                changed_fields.append(field)
-
-        else:
-            setattr(task, field, value)
-
-            if old_value != value:
-                changed_fields.append(field)
-
-    if changed_fields:
-        event_type = ActivityLogEventType.TASK_UPDATED
-
-        if (
-            previous_status != TaskStatus.completed.value
-            and task.status == TaskStatus.completed.value
-        ):
-            event_type = ActivityLogEventType.TASK_COMPLETED
-
-        create_activity_log(
-            db=db,
-            project=task.project,
-            actor=current_user,
-            task=task,
-            event_type=event_type,
-            message=f"{current_user.full_name} updated task '{task.title}'.",
-            metadata={
-                "changed_fields": changed_fields,
-                "previous_status": previous_status,
-                "new_status": task.status,
-            },
-            commit=False,
-        )
-
-    db.commit()
-    db.refresh(task)
-
-    return task
+    return update_task(
+        db=db,
+        task=task,
+        update_data=task_data.model_dump(exclude_unset=True),
+        current_user=current_user,
+    )
 
 
 def delete_task_for_personal_project(
@@ -324,72 +379,12 @@ def update_task_for_team_project(
     task_data: TeamTaskUpdate,
     current_user: User,
 ) -> Task:
-    update_data = task_data.model_dump(exclude_unset=True)
-
-    previous_status = task.status
-    changed_fields: list[str] = []
-
-    for field, value in update_data.items():
-        old_value = getattr(task, field)
-
-        if field == "status":
-            if value is None:
-                continue
-
-            new_status = value.value
-            task.status = new_status
-
-            if new_status == TaskStatus.completed.value:
-                task.completed_at = datetime.now(timezone.utc)
-            else:
-                task.completed_at = None
-
-            if old_value != new_status:
-                changed_fields.append(field)
-
-        elif field == "priority":
-            if value is None:
-                continue
-
-            task.priority = value.value
-
-            if old_value != value.value:
-                changed_fields.append(field)
-
-        else:
-            setattr(task, field, value)
-
-            if old_value != value:
-                changed_fields.append(field)
-
-    if changed_fields:
-        event_type = ActivityLogEventType.TASK_UPDATED
-
-        if (
-            previous_status != TaskStatus.completed.value
-            and task.status == TaskStatus.completed.value
-        ):
-            event_type = ActivityLogEventType.TASK_COMPLETED
-
-        create_activity_log(
-            db=db,
-            project=task.project,
-            actor=current_user,
-            task=task,
-            event_type=event_type,
-            message=f"{current_user.full_name} updated task '{task.title}'.",
-            metadata={
-                "changed_fields": changed_fields,
-                "previous_status": previous_status,
-                "new_status": task.status,
-            },
-            commit=False,
-        )
-
-    db.commit()
-    db.refresh(task)
-
-    return task
+    return update_task(
+        db=db,
+        task=task,
+        update_data=task_data.model_dump(exclude_unset=True),
+        current_user=current_user,
+    )
 
 
 def delete_task_for_team_project(
