@@ -21,15 +21,9 @@ from app.services.activity_log_service import (
 
 DBSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_verified_user)]
-<<<<<<< Updated upstream
-ActivityEventTypeQuery = Annotated[ActivityLogEventType | None, Query(default=None)]
-ActivityLimitQuery = Annotated[int, Query(default=50, ge=1, le=100)]
-ActivityOffsetQuery = Annotated[int, Query(default=0, ge=0)]
-=======
 ActivityEventTypeQuery = Annotated[ActivityLogEventType | None, Query()]
 ActivityLimitQuery = Annotated[int, Query(ge=1, le=100)]
 ActivityOffsetQuery = Annotated[int, Query(ge=0)]
->>>>>>> Stashed changes
 
 PROJECT_NOT_FOUND = "Project not found"
 
