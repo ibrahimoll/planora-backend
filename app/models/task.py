@@ -162,3 +162,15 @@ class Task(Base):
     activity_logs: Mapped[list["ActivityLog"]] = relationship(
         back_populates="task",
     )
+<<<<<<< Updated upstream
+=======
+
+    deadline_reminders: Mapped[list["DeadlineReminder"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+    )
+
+    activity_logs: Mapped[list["ActivityLog"]] = relationship(
+        back_populates="task",
+    )
+>>>>>>> Stashed changes
