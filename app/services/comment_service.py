@@ -10,8 +10,10 @@ from app.models.comment_mention import CommentMention
 from app.models.project_member import ProjectMember
 from app.models.task import Task
 from app.models.user import User
+from app.schemas.activity_log_schema import ActivityLogEventType
 from app.schemas.comment_schema import CommentCreate, CommentUpdate
 from app.schemas.notification_schema import NotificationType
+from app.services.activity_log_service import create_activity_log
 from app.services.notification_service import create_notification
 
 MENTION_PATTERN = re.compile(r"(?<![\w@])@([A-Za-z0-9_.-]{1,50})")
@@ -154,6 +156,17 @@ def create_comment_for_task(
         current_user=current_user,
     )
 
+    create_activity_log(
+        db=db,
+        project=task.project,
+        actor=current_user,
+        task=task,
+        event_type=ActivityLogEventType.COMMENT_CREATED,
+        message=f"{current_user.full_name} commented on task '{task.title}'.",
+        metadata={"comment_id": comment.comment_id},
+        commit=False,
+    )
+
     db.commit()
     db.refresh(comment)
 
@@ -222,6 +235,17 @@ def update_comment(
             previous_mentioned_user_ids=previous_mentioned_user_ids,
         )
 
+        create_activity_log(
+            db=db,
+            project=task.project,
+            actor=current_user,
+            task=task,
+            event_type=ActivityLogEventType.COMMENT_UPDATED,
+            message=f"{current_user.full_name} updated a comment on task '{task.title}'.",
+            metadata={"comment_id": comment.comment_id},
+            commit=False,
+        )
+
     db.commit()
     db.refresh(comment)
 
@@ -230,7 +254,20 @@ def update_comment(
 
 def delete_comment(
     db: Session,
+    task: Task,
+    current_user: User,
     comment: Comment,
 ) -> None:
+    create_activity_log(
+        db=db,
+        project=task.project,
+        actor=current_user,
+        task=task,
+        event_type=ActivityLogEventType.COMMENT_DELETED,
+        message=f"{current_user.full_name} deleted a comment on task '{task.title}'.",
+        metadata={"comment_id": comment.comment_id},
+        commit=False,
+    )
+
     db.delete(comment)
     db.commit()
