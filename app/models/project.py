@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from app.models.invitation import Invitation
     from app.models.deadline_reminder import DeadlineReminder
 
+CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
 class Project(Base):
     __tablename__ = "projects"
@@ -108,7 +109,7 @@ class Project(Base):
 
     tasks: Mapped[list["Task"]] = relationship(
         back_populates="project",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
 
     team: Mapped["Team | None"] = relationship(
@@ -117,12 +118,12 @@ class Project(Base):
 
     members: Mapped[list["ProjectMember"]] = relationship(
         back_populates="project",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
 
     attachments: Mapped[list["Attachment"]] = relationship(
         back_populates="project",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
     
     creator: Mapped["User"] = relationship(
@@ -131,10 +132,10 @@ class Project(Base):
 
     invitations: Mapped[list["Invitation"]] = relationship(
         back_populates="project",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
 
     deadline_reminders: Mapped[list["DeadlineReminder"]] = relationship(
         back_populates="project",
-        cascade="all, delete-orphan",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
