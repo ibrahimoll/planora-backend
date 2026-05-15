@@ -8,3 +8,7 @@ from app.models.team import Team
 from app.models.team_member import TeamMember
 from app.models.project_member import ProjectMember
 from app.models.comment import Comment
+from app.models.comment_mention import CommentMention
+from app.models.attachment import Attachment
+from app.models.notification import Notification
+from app.models.invitation import Invitation

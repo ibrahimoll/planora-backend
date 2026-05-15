@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from app.models.attachment import Attachment
     from app.models.notification import Notification
     from app.models.invitation import Invitation
+    from app.models.comment_mention import CommentMention
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -137,4 +138,16 @@ class User(Base):
     received_invitations: Mapped[list["Invitation"]] = relationship(
         foreign_keys="Invitation.invited_user_id",
         back_populates="invited_user",
+    )
+
+    received_comment_mentions: Mapped[list["CommentMention"]] = relationship(
+        foreign_keys="CommentMention.mentioned_user_id",
+        back_populates="mentioned_user",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
+    )
+
+    created_comment_mentions: Mapped[list["CommentMention"]] = relationship(
+        foreign_keys="CommentMention.mentioned_by",
+        back_populates="mentioner",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
     )

@@ -11,6 +11,7 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.task import Task
     from app.models.user import User
+    from app.models.comment_mention import CommentMention
 
 
 class Comment(Base):
@@ -52,4 +53,9 @@ class Comment(Base):
 
     user: Mapped["User"] = relationship(
         back_populates="comments",
+    )
+
+    mentions: Mapped[list["CommentMention"]] = relationship(
+        back_populates="comment",
+        cascade="all, delete-orphan",
     )

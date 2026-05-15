@@ -261,6 +261,8 @@ def update_personal_task_comment(
 
     return update_comment(
         db=db,
+        task=task,
+        current_user=current_user,
         comment=comment,
         comment_data=comment_data,
     )
@@ -420,6 +422,8 @@ def update_team_task_comment(
 
     return update_comment(
         db=db,
+        task=task,
+        current_user=current_user,
         comment=comment,
         comment_data=comment_data,
     )
