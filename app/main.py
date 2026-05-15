@@ -10,6 +10,7 @@ from app.routers.team_task_routes import router as team_task_router
 from app.routers.comment_routes import router as comment_router
 from app.routers.attachment_routes import router as attachment_router
 from app.routers.profile_routes import router as profile_router
+from app.routers.notification_routes import router as notification_router
 
 app = FastAPI(
     title="Planora API",
@@ -35,6 +36,7 @@ app.include_router(team_task_router)
 app.include_router(comment_router)
 app.include_router(attachment_router)
 app.include_router(profile_router)
+app.include_router(notification_router)
 
 
 @app.get("/")

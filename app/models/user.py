@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from app.models.project_member import ProjectMember
     from app.models.comment import Comment
     from app.models.attachment import Attachment
+    from app.models.notification import Notification
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
