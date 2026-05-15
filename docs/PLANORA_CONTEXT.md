@@ -2,9 +2,9 @@
 
 ## Main Idea
 
-Planora is an AI-powered project planning and collaboration system. The backend supports verified users, personal projects, team collaboration, task management, comments, attachments, user profile management, soft account deletion, role-based access control, basic auth rate limiting, and protected attachment downloads.
+Planora is an AI-powered project planning and collaboration system. The backend supports verified users, personal projects, team collaboration, task management, comments, attachments, user profile management, soft account deletion, role-based access control, basic auth rate limiting, protected attachment downloads, and user notifications.
 
-Planned modules will extend the system with notifications, team/project invitations, deadline reminders, mentions, progress analytics, activity timeline, AI planning, smart scheduling, risk analysis, AI chat assistant, exportable project reports, admin dashboard APIs, frontend/mobile integration support, tests/security cleanup, Alembic migrations, and Docker deployment polish.
+Planned modules will extend the system with team/project invitations, deadline reminders, mentions, progress analytics, activity timeline, AI planning, smart scheduling, risk analysis, AI chat assistant, exportable project reports, admin dashboard APIs, frontend/mobile integration support, tests/security cleanup, Alembic migrations, and Docker deployment polish.
 
 ## Stack
 
@@ -18,9 +18,10 @@ Planned modules will extend the system with notifications, team/project invitati
 
 ## Latest Verified Status
 
-As of 2026-05-14:
+As of 2026-05-15:
 
-- The user previously ran the quick pytest check locally and all tests passed.
+- Step 11 notifications foundation has been implemented and confirmed working after fixing the notification/user relationship and FastAPI query annotation issue.
+- The user previously ran the quick pytest check locally and all tests passed before Step 11.
 - Step 10 profile management has been implemented in the backend.
 - Forgot-password/reset-password email flow was re-tested. The reset code row was created successfully, the SMTP flow worked, and the email was found in the receiver Gmail spam folder. This means the backend flow works; future polish should improve email deliverability.
 - Google social-login behavior was updated so new Google accounts must provide a chosen Planora username instead of silently using the email prefix.
@@ -37,6 +38,7 @@ Recent verified additions and security improvements:
 - Basic HTTP security headers were added in `app/main.py`.
 - Duplicate root `PLANORA_CONTEXT.md` was removed; the canonical memory file is `docs/PLANORA_CONTEXT.md`.
 - Tests added/passing include `tests/test_rate_limit.py` and `tests/test_attachment_security.py`.
+- Notifications foundation was added with authenticated user notification listing, unread count, mark-read, mark-all-read, delete, and reusable notification creation service helpers.
 
 ## Completed Backend Steps
 
@@ -196,7 +198,6 @@ Attachment endpoints include:
 - Personal project attachments.
 - Personal task attachments.
 - Team project attachments.
-- Team project attachments.
 - Team task attachments.
 - Protected attachment file download.
 
@@ -252,39 +253,74 @@ Soft account deletion behavior:
 - Login and protected routes reject inactive users.
 - This avoids breaking project, team, task, comment, attachment, and audit/history references.
 
-## Planned Backend Roadmap
-
 ### Step 11 — Notifications Foundation
 
-Purpose: create the notification system used by mentions, deadline reminders, invitations, AI suggestions, risk alerts, comments, tasks, teams, and projects.
+Step 11 is implemented as the notifications module.
 
-Recommended features:
+Purpose:
 
-- List my notifications.
-- Mark one notification as read.
-- Mark all notifications as read.
-- Delete notification if needed.
-- Create service helper for other modules to generate notifications.
+- Provide user-facing notifications for future Planora features such as mentions, invitations, deadline reminders, AI suggestions, risk alerts, comments, tasks, teams, and projects.
+- Provide a reusable service helper so future modules can create notifications without duplicating logic.
 
-Suggested endpoints:
+Files:
 
-- `GET /notifications`
-- `PATCH /notifications/{notification_id}/read`
-- `PATCH /notifications/read-all`
-- `DELETE /notifications/{notification_id}`
+- `app/models/notification.py`
+- `app/schemas/notification_schema.py`
+- `app/services/notification_service.py`
+- `app/routers/notification_routes.py`
+- `app/main.py` imports and includes `notification_router`
+- `app/models/user.py` includes the `notifications` relationship
 
-Notification types should include:
+Database table:
 
-- `task`
-- `project`
-- `team`
-- `comment`
-- `mention`
-- `invite`
-- `deadline`
-- `ai`
-- `risk`
-- `system`
+- `notifications.notification_id` primary key
+- `notifications.user_id` references `users.user_id` with `ON DELETE CASCADE`
+- `notifications.title` stores a short notification title
+- `notifications.message` stores the notification body
+- `notifications.is_read` defaults to `FALSE`
+- `notifications.type` supports `task`, `project`, `team`, `comment`, `mention`, `invite`, `deadline`, `ai`, `risk`, and `system`
+- `notifications.created_at` stores creation time
+
+Indexes/constraints:
+
+- `idx_notifications_user_id` for user notification lookup
+- `idx_notifications_created_at` for sorting/recent notification lookup
+- `idx_notifications_unread_by_user` partial index where `is_read = FALSE`
+- `chk_notifications_type` keeps notification types controlled
+
+Notification endpoints:
+
+- `GET /notifications` lists the current user's notifications
+- `GET /notifications?unread_only=true` lists only unread notifications
+- `GET /notifications/unread-count` returns the current user's unread count
+- `PATCH /notifications/{notification_id}/read` marks one notification as read
+- `PATCH /notifications/read-all` marks all current-user notifications as read
+- `DELETE /notifications/{notification_id}` deletes one current-user notification
+
+Authorization rules:
+
+- All notification endpoints require an active verified authenticated user.
+- Users can only see, mark, or delete their own notifications.
+- A notification ID belonging to another user should not be accessible.
+
+Service helpers:
+
+- `create_notification(...)` creates a notification for a target user.
+- `create_notification_from_schema(...)` creates a notification from a schema object.
+- `get_my_notifications(...)` lists current-user notifications.
+- `get_my_unread_notification_count(...)` counts current-user unread notifications.
+- `mark_notification_as_read(...)` marks one notification as read.
+- `mark_all_my_notifications_as_read(...)` marks all unread notifications for the current user as read.
+- `delete_notification(...)` deletes one notification.
+
+Important implementation fixes from Step 11:
+
+- Initial login crashed with `sqlalchemy.exc.NoForeignKeysError` because SQLAlchemy could not join `notifications` and `users`. The fix was to make `Notification.user_id` use `ForeignKey("users.user_id", ondelete="CASCADE")` and match it with `User.notifications = relationship(back_populates="user")`.
+- The live PostgreSQL table also needs a real foreign key from `notifications.user_id` to `users.user_id`; if missing, add it with `ALTER TABLE notifications ADD CONSTRAINT fk_notifications_user_id FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE;`.
+- SonarLint wanted FastAPI query dependency metadata to use `Annotated`, but FastAPI raised an assertion when the default was placed inside `Query(default=False)`. The correct pattern used is `UnreadOnlyQuery = Annotated[bool, Query()]` and then `unread_only: UnreadOnlyQuery = False` in the route function.
+- Notification delete is optional UI cleanup only. Deleting a notification must not delete the real project/task/comment/team data. Permanent project history should be handled later through `activity_logs`, not notifications.
+
+## Planned Backend Roadmap
 
 ### Step 12 — Invite System
 
@@ -298,7 +334,7 @@ Recommended features:
 - Expire old invitations.
 - Prevent duplicate pending invites.
 - Only team owner/admin or project owner/manager can invite, depending on context.
-- Create notification for invited users.
+- Create notification for invited users using the Step 11 notification service.
 
 Suggested table:
 
@@ -328,7 +364,7 @@ Recommended features:
 - Validate that mentioned users are members of the same personal/team project context.
 - Support multiple mentions in one comment.
 - Prevent mentions of users outside the project.
-- Create notification for each mentioned user.
+- Create notification for each mentioned user using the Step 11 notification service.
 - Link mention notification to the related task/comment.
 
 Suggested table:
@@ -355,12 +391,12 @@ Recommended features:
 - Notify assigned users for task deadlines.
 - Notify project owners/managers for project-level deadline risk.
 - Avoid duplicate reminders for the same task/date.
+- Reuse the Step 11 notification service for reminder notifications.
 
 Suggested implementation notes:
 
 - Start with a manual endpoint/service function for development.
 - Later move to scheduled jobs using APScheduler, Celery, or another background job system.
-- Deadline reminders should reuse the notifications service.
 
 Possible notification examples:
 
@@ -426,8 +462,9 @@ Suggested columns:
 
 Important distinction:
 
+- `notifications` are user-facing alerts and can be deleted by users.
 - `admin_logs` are for admin/system moderation actions.
-- `activity_logs` are for normal project/team user activity.
+- `activity_logs` are for normal project/team user activity and should be treated as permanent project history.
 
 ### Step 17 — AI Project Planning and Smart Scheduling
 
@@ -442,6 +479,7 @@ Recommended features:
 - Suggest task due dates based on project deadline.
 - Allow user to accept/edit generated tasks before saving.
 - Store generated plan in `ai_plans`.
+- Create optional `ai` notifications using the Step 11 notification service.
 
 Existing table:
 
@@ -458,7 +496,7 @@ Recommended features:
 - Explain reason for risk.
 - Suggest recommendation.
 - Store result in `risk_analysis`.
-- Notify users/managers when risk is high.
+- Notify users/managers when risk is high using the Step 11 notification service.
 
 Existing table:
 
@@ -544,8 +582,9 @@ Already started:
 
 Remaining recommended work:
 
-- Add/clean tests for permissions and collaboration modules.
 - Add tests for Step 10 profile management and soft account deletion.
+- Add tests for Step 11 notification ownership and unread-count behavior.
+- Add/clean tests for permissions and collaboration modules.
 - Review all ownership/member checks.
 - Review upload validation and file size limits again before production.
 - Review password/token/security settings.
@@ -578,7 +617,8 @@ Important rule:
 - Alembic should be added later.
 - If old SQL design files disagree with ORM/backend behavior, treat ORM and current services as the source of truth unless the user explicitly decides otherwise.
 - Step 10 did not require a new table; it uses existing `users` columns, especially `username`, `full_name`, `profile_pic`, `password_hash`, and `is_active`.
-- Soft account deletion should remain `is_active = false` for now because hard-deleting users could break project/team/task/comment/attachment history and foreign-key restrictions.
+- Step 11 uses the existing/planned `notifications` table and requires `notifications.user_id` to have a real FK to `users.user_id`.
+- Soft account deletion should remain `is_active = false` for now because hard-deleting users could break project/team/task/comment/attachment/notification history and foreign-key restrictions.
 
 ## Important Current Database Design Reminders
 
@@ -624,4 +664,4 @@ python -m pytest -v
 
 ## Current Next Step
 
-Start Step 11 — Notifications Foundation.
+Start Step 12 — Invite System.
