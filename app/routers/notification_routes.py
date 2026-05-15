@@ -25,6 +25,7 @@ from app.services.notification_service import (
 
 DBSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_verified_user)]
+UnreadOnlyQuery = Annotated[bool, Query()]
 
 router = APIRouter(
     prefix="/notifications",
@@ -41,7 +42,7 @@ NOTIFICATION_NOT_FOUND = "Notification not found"
 def list_my_notifications(
     db: DBSession,
     current_user: CurrentUser,
-    unread_only: bool = Query(default=False),
+    unread_only: UnreadOnlyQuery = False,
 ):
     return get_my_notifications(
         db=db,
