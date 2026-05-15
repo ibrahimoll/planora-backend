@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from app.models.attachment import Attachment
     from app.models.invitation import Invitation
     from app.models.deadline_reminder import DeadlineReminder
+    from app.models.activity_log import ActivityLog
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -136,6 +137,11 @@ class Project(Base):
     )
 
     deadline_reminders: Mapped[list["DeadlineReminder"]] = relationship(
+        back_populates="project",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
+    )
+
+    activity_logs: Mapped[list["ActivityLog"]] = relationship(
         back_populates="project",
         cascade=CASCADE_ALL_DELETE_ORPHAN,
     )

@@ -205,6 +205,7 @@ def update_existing_team_project(
         db=db,
         project=project,
         project_data=project_data,
+        current_user=current_user,
     )
 
 

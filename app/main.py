@@ -14,6 +14,7 @@ from app.routers.notification_routes import router as notification_router
 from app.routers.invitation_routes import router as invitation_router
 from app.routers.deadline_reminder_routes import router as deadline_reminder_router
 from app.routers.report_routes import router as report_router
+from app.routers.activity_log_routes import router as activity_log_router
 
 app = FastAPI(
     title="Planora API",
@@ -43,6 +44,7 @@ app.include_router(notification_router)
 app.include_router(invitation_router)
 app.include_router(deadline_reminder_router)
 app.include_router(report_router)
+app.include_router(activity_log_router)
 
 
 @app.get("/")

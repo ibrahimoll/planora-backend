@@ -9,6 +9,7 @@ from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.task import Task
 from app.models.user import User
+from app.schemas.activity_log_schema import ActivityLogEventType
 from app.schemas.task_schema import (
     TaskCreate,
     TaskPriority,
@@ -17,6 +18,7 @@ from app.schemas.task_schema import (
     TeamTaskCreate,
     TeamTaskUpdate,
 )
+from app.services.activity_log_service import create_activity_log
 
 
 def get_my_personal_project_for_tasks(
@@ -54,6 +56,22 @@ def create_task_for_personal_project(
     )
 
     db.add(task)
+    db.flush()
+
+    create_activity_log(
+        db=db,
+        project=project,
+        actor=current_user,
+        task=task,
+        event_type=ActivityLogEventType.TASK_CREATED,
+        message=f"{current_user.full_name} created task '{task.title}'.",
+        metadata={
+            "priority": task.priority,
+            "assigned_to": task.assigned_to,
+        },
+        commit=False,
+    )
+
     db.commit()
     db.refresh(task)
 
@@ -98,10 +116,16 @@ def update_task_for_personal_project(
     db: Session,
     task: Task,
     task_data: TaskUpdate,
+    current_user: User,
 ) -> Task:
     update_data = task_data.model_dump(exclude_unset=True)
 
+    previous_status = task.status
+    changed_fields: list[str] = []
+
     for field, value in update_data.items():
+        old_value = getattr(task, field)
+
         if field == "status":
             if value is None:
                 continue
@@ -114,14 +138,47 @@ def update_task_for_personal_project(
             else:
                 task.completed_at = None
 
+            if old_value != new_status:
+                changed_fields.append(field)
+
         elif field == "priority":
             if value is None:
                 continue
 
             task.priority = value.value
 
+            if old_value != value.value:
+                changed_fields.append(field)
+
         else:
             setattr(task, field, value)
+
+            if old_value != value:
+                changed_fields.append(field)
+
+    if changed_fields:
+        event_type = ActivityLogEventType.TASK_UPDATED
+
+        if (
+            previous_status != TaskStatus.completed.value
+            and task.status == TaskStatus.completed.value
+        ):
+            event_type = ActivityLogEventType.TASK_COMPLETED
+
+        create_activity_log(
+            db=db,
+            project=task.project,
+            actor=current_user,
+            task=task,
+            event_type=event_type,
+            message=f"{current_user.full_name} updated task '{task.title}'.",
+            metadata={
+                "changed_fields": changed_fields,
+                "previous_status": previous_status,
+                "new_status": task.status,
+            },
+            commit=False,
+        )
 
     db.commit()
     db.refresh(task)
@@ -132,7 +189,22 @@ def update_task_for_personal_project(
 def delete_task_for_personal_project(
     db: Session,
     task: Task,
+    current_user: User,
 ) -> None:
+    create_activity_log(
+        db=db,
+        project=task.project,
+        actor=current_user,
+        task=task,
+        event_type=ActivityLogEventType.TASK_DELETED,
+        message=f"{current_user.full_name} deleted task '{task.title}'.",
+        metadata={
+            "task_id": task.task_id,
+            "task_title": task.title,
+        },
+        commit=False,
+    )
+
     db.delete(task)
     db.commit()
 
@@ -186,6 +258,22 @@ def create_task_for_team_project(
     )
 
     db.add(task)
+    db.flush()
+
+    create_activity_log(
+        db=db,
+        project=project,
+        actor=current_user,
+        task=task,
+        event_type=ActivityLogEventType.TASK_CREATED,
+        message=f"{current_user.full_name} created task '{task.title}'.",
+        metadata={
+            "priority": task.priority,
+            "assigned_to": task.assigned_to,
+        },
+        commit=False,
+    )
+
     db.commit()
     db.refresh(task)
 
@@ -234,10 +322,16 @@ def update_task_for_team_project(
     db: Session,
     task: Task,
     task_data: TeamTaskUpdate,
+    current_user: User,
 ) -> Task:
     update_data = task_data.model_dump(exclude_unset=True)
 
+    previous_status = task.status
+    changed_fields: list[str] = []
+
     for field, value in update_data.items():
+        old_value = getattr(task, field)
+
         if field == "status":
             if value is None:
                 continue
@@ -250,14 +344,47 @@ def update_task_for_team_project(
             else:
                 task.completed_at = None
 
+            if old_value != new_status:
+                changed_fields.append(field)
+
         elif field == "priority":
             if value is None:
                 continue
 
             task.priority = value.value
 
+            if old_value != value.value:
+                changed_fields.append(field)
+
         else:
             setattr(task, field, value)
+
+            if old_value != value:
+                changed_fields.append(field)
+
+    if changed_fields:
+        event_type = ActivityLogEventType.TASK_UPDATED
+
+        if (
+            previous_status != TaskStatus.completed.value
+            and task.status == TaskStatus.completed.value
+        ):
+            event_type = ActivityLogEventType.TASK_COMPLETED
+
+        create_activity_log(
+            db=db,
+            project=task.project,
+            actor=current_user,
+            task=task,
+            event_type=event_type,
+            message=f"{current_user.full_name} updated task '{task.title}'.",
+            metadata={
+                "changed_fields": changed_fields,
+                "previous_status": previous_status,
+                "new_status": task.status,
+            },
+            commit=False,
+        )
 
     db.commit()
     db.refresh(task)
@@ -268,6 +395,21 @@ def update_task_for_team_project(
 def delete_task_for_team_project(
     db: Session,
     task: Task,
+    current_user: User,
 ) -> None:
+    create_activity_log(
+        db=db,
+        project=task.project,
+        actor=current_user,
+        task=task,
+        event_type=ActivityLogEventType.TASK_DELETED,
+        message=f"{current_user.full_name} deleted task '{task.title}'.",
+        metadata={
+            "task_id": task.task_id,
+            "task_title": task.title,
+        },
+        commit=False,
+    )
+
     db.delete(task)
     db.commit()

@@ -176,6 +176,7 @@ def update_task(
         db=db,
         task=task,
         task_data=task_data,
+        current_user=current_user,
     )
 
 
@@ -216,6 +217,7 @@ def delete_task(
     delete_task_for_personal_project(
         db=db,
         task=task,
+        current_user=current_user,
     )
 
     return TaskDeleteResponse(

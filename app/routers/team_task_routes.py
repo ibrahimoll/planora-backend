@@ -256,6 +256,7 @@ def update_team_task(
         db=db,
         task=task,
         task_data=task_data,
+        current_user=current_user,
     )
 
 
@@ -298,6 +299,7 @@ def delete_team_task(
     delete_task_for_team_project(
         db=db,
         task=task,
+        current_user=current_user,
     )
 
     return TaskDeleteResponse(
