@@ -12,3 +12,4 @@ from app.models.comment_mention import CommentMention
 from app.models.attachment import Attachment
 from app.models.notification import Notification
 from app.models.invitation import Invitation
+from app.models.deadline_reminder import DeadlineReminder

@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from app.models.project_member import ProjectMember
     from app.models.attachment import Attachment
     from app.models.invitation import Invitation
+    from app.models.deadline_reminder import DeadlineReminder
 
 
 class Project(Base):
@@ -129,6 +130,11 @@ class Project(Base):
     )
 
     invitations: Mapped[list["Invitation"]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+
+    deadline_reminders: Mapped[list["DeadlineReminder"]] = relationship(
         back_populates="project",
         cascade="all, delete-orphan",
     )

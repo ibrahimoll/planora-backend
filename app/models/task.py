@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from app.models.user import User
     from app.models.comment import Comment
     from app.models.attachment import Attachment
+    from app.models.deadline_reminder import DeadlineReminder
 
 
 class Task(Base):
@@ -150,4 +151,9 @@ class Task(Base):
 
     attachments: Mapped[list["Attachment"]] = relationship(
         back_populates="task",
+    )
+
+    deadline_reminders: Mapped[list["DeadlineReminder"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
     )

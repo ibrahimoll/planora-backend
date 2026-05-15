@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from app.models.notification import Notification
     from app.models.invitation import Invitation
     from app.models.comment_mention import CommentMention
+    from app.models.deadline_reminder import DeadlineReminder
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -149,5 +150,10 @@ class User(Base):
     created_comment_mentions: Mapped[list["CommentMention"]] = relationship(
         foreign_keys="CommentMention.mentioned_by",
         back_populates="mentioner",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
+    )
+
+    deadline_reminders: Mapped[list["DeadlineReminder"]] = relationship(
+        back_populates="user",
         cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
