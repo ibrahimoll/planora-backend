@@ -122,3 +122,8 @@ class User(Base):
     uploaded_attachments: Mapped[list["Attachment"]] = relationship(
         back_populates="uploader",
     )
+
+    notifications: Mapped[list["Notification"]] = relationship(
+    back_populates="user",
+    cascade=CASCADE_ALL_DELETE_ORPHAN,
+    )

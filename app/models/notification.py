@@ -21,6 +21,7 @@ from app.db.base import Base
 if TYPE_CHECKING:
     from app.models.user import User
 
+
 class Notification(Base):
     __tablename__ = "notifications"
 
@@ -51,11 +52,11 @@ class Notification(Base):
 
     user_id: Mapped[int] = mapped_column(
         BigInteger,
-        ForeignKey("user.user_id", ondelete="CASCADE"),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    
+
     title: Mapped[str] = mapped_column(
         String(150),
         nullable=False,
