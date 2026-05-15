@@ -2,9 +2,9 @@
 
 ## Main Idea
 
-Planora is an AI-powered project planning and collaboration system. The backend supports verified users, personal projects, team collaboration, task management, comments, attachments, role-based access control, basic auth rate limiting, and protected attachment downloads.
+Planora is an AI-powered project planning and collaboration system. The backend supports verified users, personal projects, team collaboration, task management, comments, attachments, user profile management, soft account deletion, role-based access control, basic auth rate limiting, and protected attachment downloads.
 
-Planned modules will extend the system with user profile management, team/project invitations, notifications, deadline reminders, mentions, progress analytics, activity timeline, AI planning, smart scheduling, risk analysis, AI chat assistant, exportable project reports, admin dashboard APIs, frontend/mobile integration support, tests/security cleanup, and Docker deployment polish.
+Planned modules will extend the system with notifications, team/project invitations, deadline reminders, mentions, progress analytics, activity timeline, AI planning, smart scheduling, risk analysis, AI chat assistant, exportable project reports, admin dashboard APIs, frontend/mobile integration support, tests/security cleanup, Alembic migrations, and Docker deployment polish.
 
 ## Stack
 
@@ -13,21 +13,29 @@ Planned modules will extend the system with user profile management, team/projec
 - PostgreSQL
 - Pydantic v2
 - Google social login
+- SMTP email for verification and password reset codes
 - Local upload storage for development
 
 ## Latest Verified Status
 
-As of 2026-05-14, the user ran the quick pytest check locally and all tests passed.
+As of 2026-05-14:
 
-Recent verified additions:
+- The user previously ran the quick pytest check locally and all tests passed.
+- Step 10 profile management has been implemented in the backend.
+- Forgot-password/reset-password email flow was re-tested. The reset code row was created successfully, the SMTP flow worked, and the email was found in the receiver Gmail spam folder. This means the backend flow works; future polish should improve email deliverability.
+- Google social-login behavior was updated so new Google accounts must provide a chosen Planora username instead of silently using the email prefix.
+- Default profile pictures now use DiceBear initials URLs generated from the user's full name, unless a stored profile picture already exists.
+- Account deletion is implemented as a soft delete by setting `users.is_active = false`, not by hard-deleting the user row.
+
+Recent verified additions and security improvements:
 
 - `app/core/rate_limit.py` added a simple in-memory rate limiter.
-- Auth routes now apply rate limits to register, verify email, resend verification code, forgot password, reset password, login, and Google login.
+- Auth routes apply rate limits to register, verify email, resend verification code, forgot password, reset password, login, and Google login.
 - Attachment upload security was improved with allowed extensions, 10 MB file-size limit, empty-file rejection, safer filename handling, UUID stored filenames, and local file cleanup on database errors.
-- Attachment file access is now protected through the attachment router instead of public `StaticFiles` mounting.
-- JWT access tokens now include `iat` and `token_type`, and decoding requires `sub`, `exp`, `iat`, and `token_type`.
+- Attachment file access is protected through the attachment router instead of public `StaticFiles` mounting.
+- JWT access tokens include `iat` and `token_type`, and decoding requires `sub`, `exp`, `iat`, and `token_type`.
 - Basic HTTP security headers were added in `app/main.py`.
-- Duplicate root `PLANORA_CONTEXT.md` was removed; the canonical memory file is now `docs/PLANORA_CONTEXT.md`.
+- Duplicate root `PLANORA_CONTEXT.md` was removed; the canonical memory file is `docs/PLANORA_CONTEXT.md`.
 - Tests added/passing include `tests/test_rate_limit.py` and `tests/test_attachment_security.py`.
 
 ## Completed Backend Steps
@@ -50,6 +58,10 @@ Recent verified additions:
 - No guest access past authentication.
 - Basic in-memory rate limiting is implemented for sensitive auth endpoints using `app/core/rate_limit.py`.
 - JWT access tokens include `sub`, `exp`, `iat`, and `token_type = access`; decoding validates required claims and token type.
+- Normal registration automatically creates a default DiceBear initials `profile_pic` from `full_name`.
+- New Google users must provide a Planora `username` in `POST /auth/google`; existing Google-linked users can log in normally without resending a username.
+- New Google-created users use a random unusable password hash and `is_email_verified = true`.
+- Google-created users can still use forgot/reset password later to set a normal password if needed.
 
 Rate-limited auth endpoints:
 
@@ -60,6 +72,11 @@ Rate-limited auth endpoints:
 - `POST /auth/reset-password`
 - `POST /auth/login`
 - `POST /auth/google`
+
+Important email note:
+
+- SMTP sending works, but Gmail may place new Planora emails in Spam. For final polish, improve email body formatting, use a clear sender name such as `Planora <planora.verify@gmail.com>`, and eventually use a custom domain with SPF, DKIM, and DMARC.
+- Do not keep temporary debug prints that expose verification or reset codes.
 
 ### Step 3 — Personal Projects
 
@@ -179,36 +196,63 @@ Attachment endpoints include:
 - Personal project attachments.
 - Personal task attachments.
 - Team project attachments.
+- Team project attachments.
 - Team task attachments.
 - Protected attachment file download.
 
-## Planned Backend Roadmap
-
 ### Step 10 — User Profile Management
 
-Purpose: allow users to view and update their own account/profile details.
+Step 10 is implemented as the profile/account-management module.
 
-Recommended features:
+Files:
+
+- `app/services/profile_picture_service.py`
+- `app/schemas/profile_schema.py`
+- `app/services/profile_service.py`
+- `app/routers/profile_routes.py`
+- `app/main.py` includes `profile_router`
+
+Implemented profile/account features:
 
 - View current user profile.
-- Edit `full_name`.
-- Edit `username` with uniqueness validation.
-- Update `profile_pic`.
+- Update `username` with uniqueness validation.
+- Update `full_name`.
+- Update `profile_pic` as a stored string URL/path.
 - Change password using old password validation.
-- Keep email change separate because changing email should require re-verification.
+- Reject password change when the new password matches the old password.
+- Soft-delete/deactivate own account by setting `is_active = false`.
+- Account deletion requires confirmation text: `DELETE MY ACCOUNT`.
+- Email change is intentionally not implemented yet because it should require a separate re-verification flow.
 
-Suggested endpoints:
+Profile endpoints:
 
 - `GET /profile`
 - `PATCH /profile`
 - `PATCH /profile/password`
-- `PATCH /profile/picture`
+- `DELETE /profile`
 
-Suggested files:
+Default profile picture behavior:
 
-- `app/schemas/profile_schema.py`
-- `app/services/profile_service.py`
-- `app/routers/profile_routes.py`
+- `build_default_profile_pic(full_name)` creates a DiceBear initials URL such as `https://api.dicebear.com/9.x/initials/svg?seed=Ibrahim%20Olleik`.
+- Normal registration sets `profile_pic` automatically from the user's `full_name`.
+- New Google users also use DiceBear initials as the default profile picture.
+- Existing users can update `profile_pic` through `PATCH /profile`.
+
+Google username behavior:
+
+- New Google users must provide `username` in the `POST /auth/google` body.
+- If username is missing, backend returns `400` with `Username is required for new Google accounts.`
+- If username is already taken, backend returns `409` with `Username is already taken.`
+- Existing Google-linked users can log in without providing username again.
+
+Soft account deletion behavior:
+
+- `DELETE /profile` does not hard-delete the `users` row.
+- It sets `users.is_active = false`.
+- Login and protected routes reject inactive users.
+- This avoids breaking project, team, task, comment, attachment, and audit/history references.
+
+## Planned Backend Roadmap
 
 ### Step 11 — Notifications Foundation
 
@@ -501,6 +545,7 @@ Already started:
 Remaining recommended work:
 
 - Add/clean tests for permissions and collaboration modules.
+- Add tests for Step 10 profile management and soft account deletion.
 - Review all ownership/member checks.
 - Review upload validation and file size limits again before production.
 - Review password/token/security settings.
@@ -509,7 +554,7 @@ Remaining recommended work:
 
 Important user preference:
 
-- Do not provide long PowerShell test scripts by default. Prefer Swagger/manual API explanations unless the user explicitly asks for PowerShell.
+- Do not provide long PowerShell test scripts by default. Prefer Swagger, Thunder Client, or manual API explanations unless the user explicitly asks for PowerShell.
 
 ### Step 24 — Docker and Deployment Polish
 
@@ -532,6 +577,8 @@ Important rule:
 - ORM models are the current backend source of truth.
 - Alembic should be added later.
 - If old SQL design files disagree with ORM/backend behavior, treat ORM and current services as the source of truth unless the user explicitly decides otherwise.
+- Step 10 did not require a new table; it uses existing `users` columns, especially `username`, `full_name`, `profile_pic`, `password_hash`, and `is_active`.
+- Soft account deletion should remain `is_active = false` for now because hard-deleting users could break project/team/task/comment/attachment history and foreign-key restrictions.
 
 ## Important Current Database Design Reminders
 
@@ -574,3 +621,7 @@ cd C:\Users\mahdi\OneDrive\Documents\Planora\backend
 .\venv\Scripts\uvicorn.exe app.main:app --reload
 python -m pytest -v
 ```
+
+## Current Next Step
+
+Start Step 11 — Notifications Foundation.
