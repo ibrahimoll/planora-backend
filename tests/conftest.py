@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.db.base import Base
 from app.db.session import get_db
-from app.main import app
+from app.main import app as fastapi_app
 
 # Import all models so SQLAlchemy can create every table during tests.
 import app.models  # noqa: F401
@@ -83,12 +83,12 @@ def client(db: Session) -> Generator[TestClient, None, None]:
     def override_get_db() -> Generator[Session, None, None]:
         yield db
 
-    app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_db] = override_get_db
 
-    with TestClient(app) as test_client:
+    with TestClient(fastapi_app) as test_client:
         yield test_client
 
-    app.dependency_overrides.clear()
+    fastapi_app.dependency_overrides.clear()
 
 
 @pytest.fixture(autouse=True)
