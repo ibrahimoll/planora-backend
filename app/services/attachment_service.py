@@ -12,6 +12,8 @@ from app.models.attachment import Attachment
 from app.models.project import Project
 from app.models.task import Task
 from app.models.user import User
+from app.schemas.activity_log_schema import ActivityLogEventType
+from app.services.activity_log_service import create_activity_log
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 UPLOAD_DIR = BASE_DIR / "uploads" / "attachments"
@@ -161,6 +163,23 @@ def create_attachment(
 
     try:
         db.add(attachment)
+        db.flush()
+
+        create_activity_log(
+            db=db,
+            project=project,
+            actor=current_user,
+            task=task,
+            event_type=ActivityLogEventType.ATTACHMENT_UPLOADED,
+            message=f"{current_user.full_name} uploaded attachment '{attachment.file_name}'.",
+            metadata={
+                "attachment_id": attachment.attachment_id,
+                "file_name": attachment.file_name,
+                "file_type": attachment.file_type,
+            },
+            commit=False,
+        )
+
         db.commit()
         db.refresh(attachment)
     except Exception:
@@ -235,8 +254,26 @@ def get_attachment_by_file_url(
 def delete_attachment(
     db: Session,
     attachment: Attachment,
+    current_user: User,
 ) -> None:
     file_url = attachment.file_url
+    project = attachment.project
+    task = attachment.task
+
+    create_activity_log(
+        db=db,
+        project=project,
+        actor=current_user,
+        task=task,
+        event_type=ActivityLogEventType.ATTACHMENT_DELETED,
+        message=f"{current_user.full_name} deleted attachment '{attachment.file_name}'.",
+        metadata={
+            "attachment_id": attachment.attachment_id,
+            "file_name": attachment.file_name,
+            "file_type": attachment.file_type,
+        },
+        commit=False,
+    )
 
     db.delete(attachment)
     db.commit()
