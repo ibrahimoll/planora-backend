@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from app.models.comment import Comment
     from app.models.attachment import Attachment
     from app.models.notification import Notification
+    from app.models.invitation import Invitation
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -124,6 +125,16 @@ class User(Base):
     )
 
     notifications: Mapped[list["Notification"]] = relationship(
-    back_populates="user",
-    cascade=CASCADE_ALL_DELETE_ORPHAN,
+        back_populates="user",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
+    )
+
+    sent_invitations: Mapped[list["Invitation"]] = relationship(
+        foreign_keys="Invitation.invited_by",
+        back_populates="inviter",
+    )
+
+    received_invitations: Mapped[list["Invitation"]] = relationship(
+        foreign_keys="Invitation.invited_user_id",
+        back_populates="invited_user",
     )

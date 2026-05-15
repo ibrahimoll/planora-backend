@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
@@ -11,9 +12,14 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.project import Project
+    from app.models.team import Team
+    from app.models.user import User
 
 
 class Invitation(Base):
@@ -64,7 +70,6 @@ class Invitation(Base):
     email: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
-        index=True,
     )
 
     team_id: Mapped[int] = mapped_column(
@@ -106,4 +111,22 @@ class Invitation(Base):
     responded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+
+    inviter: Mapped["User"] = relationship(
+        foreign_keys=[invited_by],
+        back_populates="sent_invitations",
+    )
+
+    invited_user: Mapped["User | None"] = relationship(
+        foreign_keys=[invited_user_id],
+        back_populates="received_invitations",
+    )
+
+    team: Mapped["Team"] = relationship(
+        back_populates="invitations",
+    )
+
+    project: Mapped["Project | None"] = relationship(
+        back_populates="invitations",
     )

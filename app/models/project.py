@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from app.models.team import Team
     from app.models.project_member import ProjectMember
     from app.models.attachment import Attachment
+    from app.models.invitation import Invitation
 
 
 class Project(Base):
@@ -125,4 +126,9 @@ class Project(Base):
     
     creator: Mapped["User"] = relationship(
         back_populates="created_projects",
+    )
+
+    invitations: Mapped[list["Invitation"]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan",
     )
