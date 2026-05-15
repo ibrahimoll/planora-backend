@@ -21,6 +21,9 @@ from app.services.activity_log_service import (
 
 DBSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_verified_user)]
+ActivityEventTypeQuery = Annotated[ActivityLogEventType | None, Query(default=None)]
+ActivityLimitQuery = Annotated[int, Query(default=50, ge=1, le=100)]
+ActivityOffsetQuery = Annotated[int, Query(default=0, ge=0)]
 
 PROJECT_NOT_FOUND = "Project not found"
 
@@ -38,9 +41,9 @@ def list_project_activity(
     project_id: int,
     db: DBSession,
     current_user: CurrentUser,
-    event_type: ActivityLogEventType | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    event_type: ActivityEventTypeQuery = None,
+    limit: ActivityLimitQuery = 50,
+    offset: ActivityOffsetQuery = 0,
 ):
     project = get_accessible_project_for_activity(
         db=db,
