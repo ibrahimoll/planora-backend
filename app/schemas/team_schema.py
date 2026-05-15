@@ -36,7 +36,7 @@ class TeamMemberAdd(BaseModel):
     role: TeamAssignableRole = TeamAssignableRole.member
 
 class TeamMemberUpdate(BaseModel):
-    role: TeamRole
+    role: TeamAssignableRole
 
 class TeamMemberResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

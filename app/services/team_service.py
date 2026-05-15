@@ -168,7 +168,7 @@ def add_team_member(
 def update_team_member_role(
     db: Session,
     member: TeamMember,
-    role: TeamRole,
+    role: TeamAssignableRole,
 ) -> TeamMember:
     member.role = role.value
 
