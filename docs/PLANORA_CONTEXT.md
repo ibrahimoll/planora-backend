@@ -48,6 +48,73 @@ Important current notes:
 - Updating `team_members.role` does not update `project_members.role`.
 - A team `admin` is not automatically a project `manager`.
 
+## Regression Testing Status — 2026-05-15
+
+A pytest regression suite now exists in the `tests/` folder and was verified locally with:
+
+```powershell
+python -m pytest -x -v
+```
+
+Latest local result:
+
+- 25 tests collected.
+- 25 tests passed.
+- Runtime around 3.29 seconds on the user's local machine.
+
+Current test coverage includes:
+
+- Authentication registration, weak-password rejection, verified-login behavior, `/auth/me`, duplicate email rejection, and missing-token protection.
+- Personal project CRUD and cross-user access protection.
+- Personal task CRUD and completed-task timestamp behavior.
+- Team creation, owner membership, adding members, and updating team member roles.
+- Team project creation and team task update flow.
+- Personal task comments CRUD.
+- Team comment mentions creating unread `mention` notifications.
+- Notification unread count and mark-as-read behavior.
+- Team invitation accept and reject flows.
+- Profile route availability.
+- Attachment route protection and attachment filename/path-traversal security helpers.
+- Rate-limit blocking behavior.
+
+Important test setup notes:
+
+- Tests use `TEST_DATABASE_URL`, not the normal development `DATABASE_URL`.
+- The current local test database is `planora_test_db`.
+- `tests/conftest.py` overrides FastAPI `get_db()` to use the test database.
+- `tests/conftest.py` disables real outbound verification/password-reset emails during tests.
+- `tests/conftest.py` imports the FastAPI instance as `fastapi_app` to avoid shadowing it with the Python `app` package.
+- The test database schema is dropped and recreated by pytest, so never point `TEST_DATABASE_URL` to `planora_db`.
+
+Current pytest-related files:
+
+- `tests/conftest.py`
+- `tests/__init__.py`
+- `tests/test_01_auth_api.py`
+- `tests/test_02_personal_projects_tasks_api.py`
+- `tests/test_03_teams_team_projects_tasks_api.py`
+- `tests/test_04_comments_mentions_notifications_api.py`
+- `tests/test_05_invitations_api.py`
+- `tests/test_06_profile_attachments_smoke_api.py`
+- `tests/test_attachment_security.py`
+- `tests/test_rate_limit.py`
+
+Useful local commands:
+
+```powershell
+$pgPassword = Read-Host "Enter your PostgreSQL postgres password"
+$encodedPassword = [uri]::EscapeDataString($pgPassword)
+$env:TEST_DATABASE_URL = "postgresql+psycopg://postgres:$encodedPassword@localhost:5432/planora_test_db"
+python -m pytest -x -v
+```
+
+```powershell
+python -m pytest --collect-only -q
+python -m pytest --cov=app --cov-report=term-missing
+python -m compileall app tests
+python -m pip check
+```
+
 ## Step 12 — Invitation System Completed
 
 Step 12 uses the existing `invitations` table. Do not create a separate `team_invitations` table.
@@ -319,8 +386,8 @@ Planned/polish tables:
 Immediate cleanup:
 
 - Add project-member role update endpoint.
-- Fix `TeamMemberUpdate` so normal team role update accepts only `admin` or `member`, not `owner`.
-- Add tests for invitations, mentions, and role-update permissions.
+- Keep expanding pytest coverage for future features and edge cases.
+- Consider adding tests for project-member role update permissions after that endpoint is implemented.
 
 Next feature step:
 
