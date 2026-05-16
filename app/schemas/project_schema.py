@@ -23,6 +23,14 @@ class ProjectMemberRole(str, Enum):
     manager = "manager"
     member = "member"
 
+class ProjectAssignableRole(str, Enum):
+    manager = "manager"
+    member = "member"
+
+
+class ProjectMemberUpdate(BaseModel):
+    role: ProjectAssignableRole
+
 
 class ProjectCreate(BaseModel):
     title: str = Field(..., min_length=2, max_length=200)

@@ -33,12 +33,34 @@ from app.services.team_service import (
     get_team_by_id,
     get_team_membership,
 )
+from app.schemas.project_schema import (
+    ProjectDeleteResponse,
+    ProjectMemberResponse,
+    ProjectMemberUpdate,
+    ProjectResponse,
+    ProjectStatus,
+    ProjectUpdate,
+    TeamProjectCreate,
+)
+from app.services.project_service import (
+    can_manage_project,
+    create_team_project,
+    delete_team_project,
+    get_project_members,
+    get_project_membership,
+    get_team_project_by_id,
+    get_team_projects,
+    is_project_owner,
+    update_project_member_role,
+    update_team_project,
+)
 
 DBSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_verified_user)]
 
 TEAM_NOT_FOUND = "Team not found"
 PROJECT_NOT_FOUND = "Project not found"
+PROJECT_MEMBER_NOT_FOUND = "Project member not found"
 NOT_ALLOWED = "You are not allowed to perform this action"
 
 router = APIRouter(
@@ -290,4 +312,67 @@ def list_project_members(
     return get_project_members(
         db=db,
         project_id=project_id,
+    )
+
+
+@router.patch(
+    "/{project_id}/members/{user_id}",
+    response_model=ProjectMemberResponse,
+)
+def update_member_project_role(
+    team_id: int,
+    project_id: int,
+    user_id: int,
+    member_data: ProjectMemberUpdate,
+    db: DBSession,
+    current_user: CurrentUser,
+):
+    project = get_team_project_by_id(
+        db=db,
+        team_id=team_id,
+        project_id=project_id,
+    )
+
+    if project is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=PROJECT_NOT_FOUND,
+        )
+
+    current_project_membership = get_project_membership(
+        db=db,
+        project_id=project_id,
+        user_id=current_user.user_id,
+    )
+
+    if current_project_membership is None or not is_project_owner(
+        current_project_membership
+    ):
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail=NOT_ALLOWED,
+        )
+
+    member = get_project_membership(
+        db=db,
+        project_id=project_id,
+        user_id=user_id,
+    )
+
+    if member is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=PROJECT_MEMBER_NOT_FOUND,
+        )
+
+    if member.role == "owner":
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Project owner role cannot be changed through this endpoint.",
+        )
+
+    return update_project_member_role(
+        db=db,
+        member=member,
+        role=member_data.role,
     )

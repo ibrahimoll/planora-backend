@@ -16,6 +16,14 @@ from app.schemas.project_schema import (
     ProjectUpdate,
     TeamProjectCreate,
 )
+from app.schemas.project_schema import (
+    ProjectAssignableRole,
+    ProjectCreate,
+    ProjectMemberRole,
+    ProjectStatus,
+    ProjectUpdate,
+    TeamProjectCreate,
+)
 from app.services.activity_log_service import create_activity_log
 
 
@@ -322,3 +330,16 @@ def is_project_owner(
     membership: ProjectMember,
 ) -> bool:
     return membership.role == ProjectMemberRole.owner.value
+
+
+def update_project_member_role(
+    db: Session,
+    member: ProjectMember,
+    role: ProjectAssignableRole,
+) -> ProjectMember:
+    member.role = role.value
+
+    db.commit()
+    db.refresh(member)
+
+    return member
