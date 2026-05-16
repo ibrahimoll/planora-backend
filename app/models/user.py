@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from app.models.user_progress import UserProgress
     from app.models.ai_plan import AIPlan
     from app.models.smart_schedule import SmartSchedule
+    from app.models.admin_log import AdminLog
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -177,4 +178,14 @@ class User(Base):
 
     generated_smart_schedules: Mapped[list["SmartSchedule"]] = relationship(
         back_populates="generated_by_user",
+    )
+
+    admin_logs: Mapped[list["AdminLog"]] = relationship(
+        foreign_keys="AdminLog.admin_id",
+        back_populates="admin",
+    )
+
+    target_admin_logs: Mapped[list["AdminLog"]] = relationship(
+        foreign_keys="AdminLog.target_user_id",
+        back_populates="target_user",
     )

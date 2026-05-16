@@ -53,6 +53,192 @@ def _task_sort_key(task: Task) -> tuple[int, datetime, int]:
     )
 
 
+def _get_start_date(
+    schedule_request: SmartScheduleRequest,
+    now: datetime,
+    warnings: list[str],
+) -> datetime:
+    start_date = (
+        _to_utc(schedule_request.start_date)
+        if schedule_request.start_date is not None
+        else now
+    )
+
+    if start_date < now:
+        warnings.append("Start date was in the past, so scheduling starts from now.")
+        return now
+
+    return start_date
+
+
+def _get_completed_tasks(tasks: list[Task]) -> list[Task]:
+    return [
+        task
+        for task in tasks
+        if task.status == "completed"
+    ]
+
+
+def _get_schedulable_tasks(tasks: list[Task]) -> list[Task]:
+    return sorted(
+        [
+            task
+            for task in tasks
+            if task.status != "completed"
+        ],
+        key=_task_sort_key,
+    )
+
+
+def _get_effective_estimated_hours(task: Task) -> float:
+    estimated_hours = _number_to_float(task.estimated_hours)
+
+    if estimated_hours <= 0:
+        return 1.0
+
+    return estimated_hours
+
+
+def _should_move_to_next_day(
+    estimated_hours: float,
+    remaining_capacity: float,
+    daily_capacity_hours: float,
+) -> bool:
+    return estimated_hours > remaining_capacity and remaining_capacity < daily_capacity_hours
+
+
+def _calculate_suggested_due_date(
+    current_date: datetime,
+    estimated_hours: float,
+    daily_capacity_hours: float,
+) -> datetime:
+    days_needed = max(
+        1,
+        ceil(estimated_hours / daily_capacity_hours),
+    )
+
+    return _end_of_day(
+        current_date + timedelta(days=days_needed - 1)
+    )
+
+
+def _get_next_schedule_position(
+    suggested_due_date: datetime,
+    remaining_after_task: float,
+    daily_capacity_hours: float,
+) -> tuple[datetime, float]:
+    if remaining_after_task <= 0:
+        return (
+            _end_of_day(suggested_due_date + timedelta(days=1)),
+            daily_capacity_hours,
+        )
+
+    return suggested_due_date, remaining_after_task
+
+
+def _build_scheduled_item(
+    task: Task,
+    estimated_hours: float,
+    suggested_due_date: datetime,
+    project_deadline: datetime,
+) -> SmartScheduleTaskItem:
+    return SmartScheduleTaskItem(
+        task_id=task.task_id,
+        title=task.title,
+        priority=task.priority,
+        status=task.status,
+        assigned_to=task.assigned_to,
+        estimated_hours=round(estimated_hours, 2),
+        old_due_date=task.due_date,
+        suggested_due_date=suggested_due_date,
+        is_after_project_deadline=suggested_due_date > project_deadline,
+    )
+
+
+def _build_scheduled_items(
+    schedulable_tasks: list[Task],
+    start_date: datetime,
+    daily_capacity_hours: float,
+    project_deadline: datetime,
+) -> tuple[list[SmartScheduleTaskItem], float]:
+    current_date = _end_of_day(start_date)
+    remaining_capacity = daily_capacity_hours
+    estimated_total_hours = 0.0
+    scheduled_items: list[SmartScheduleTaskItem] = []
+
+    for task in schedulable_tasks:
+        estimated_hours = _get_effective_estimated_hours(task)
+        estimated_total_hours += estimated_hours
+
+        if _should_move_to_next_day(
+            estimated_hours=estimated_hours,
+            remaining_capacity=remaining_capacity,
+            daily_capacity_hours=daily_capacity_hours,
+        ):
+            current_date = _end_of_day(current_date + timedelta(days=1))
+            remaining_capacity = daily_capacity_hours
+
+        suggested_due_date = _calculate_suggested_due_date(
+            current_date=current_date,
+            estimated_hours=estimated_hours,
+            daily_capacity_hours=daily_capacity_hours,
+        )
+
+        remaining_after_task = remaining_capacity - estimated_hours
+
+        current_date, remaining_capacity = _get_next_schedule_position(
+            suggested_due_date=suggested_due_date,
+            remaining_after_task=remaining_after_task,
+            daily_capacity_hours=daily_capacity_hours,
+        )
+
+        scheduled_items.append(
+            _build_scheduled_item(
+                task=task,
+                estimated_hours=estimated_hours,
+                suggested_due_date=suggested_due_date,
+                project_deadline=project_deadline,
+            )
+        )
+
+    return scheduled_items, estimated_total_hours
+
+
+def _get_first_suggested_due_date(
+    scheduled_items: list[SmartScheduleTaskItem],
+) -> datetime | None:
+    if not scheduled_items:
+        return None
+
+    return scheduled_items[0].suggested_due_date
+
+
+def _get_last_suggested_due_date(
+    scheduled_items: list[SmartScheduleTaskItem],
+) -> datetime | None:
+    if not scheduled_items:
+        return None
+
+    return scheduled_items[-1].suggested_due_date
+
+
+def _add_schedule_warnings(
+    warnings: list[str],
+    project_deadline: datetime,
+    start_date: datetime,
+    schedulable_tasks: list[Task],
+    last_suggested_due_date: datetime | None,
+) -> None:
+    if project_deadline <= start_date:
+        warnings.append("Project deadline is already passed or too close for normal scheduling.")
+
+    if not schedulable_tasks:
+        warnings.append("There are no incomplete tasks to schedule.")
+
+    if last_suggested_due_date is not None and last_suggested_due_date > project_deadline:
+        warnings.append("The generated schedule goes beyond the project deadline.")
+
+
 def get_project_tasks_for_smart_schedule(
     db: Session,
     project_id: int,
@@ -68,104 +254,34 @@ def build_smart_schedule_preview(
 ) -> SmartSchedulePreviewResponse:
     now = datetime.now(timezone.utc)
     project_deadline = _to_utc(project.deadline)
-
-    start_date = (
-        _to_utc(schedule_request.start_date)
-        if schedule_request.start_date is not None
-        else now
-    )
-
     warnings: list[str] = []
 
-    if start_date < now:
-        start_date = now
-        warnings.append("Start date was in the past, so scheduling starts from now.")
-
-    if project_deadline <= start_date:
-        warnings.append("Project deadline is already passed or too close for normal scheduling.")
-
-    completed_tasks = [
-        task
-        for task in tasks
-        if task.status == "completed"
-    ]
-
-    schedulable_tasks = sorted(
-        [
-            task
-            for task in tasks
-            if task.status != "completed"
-        ],
-        key=_task_sort_key,
+    start_date = _get_start_date(
+        schedule_request=schedule_request,
+        now=now,
+        warnings=warnings,
     )
 
-    if not schedulable_tasks:
-        warnings.append("There are no incomplete tasks to schedule.")
+    completed_tasks = _get_completed_tasks(tasks)
+    schedulable_tasks = _get_schedulable_tasks(tasks)
 
-    current_date = _end_of_day(start_date)
-    remaining_capacity = schedule_request.daily_capacity_hours
-
-    scheduled_items: list[SmartScheduleTaskItem] = []
-    estimated_total_hours = 0.0
-
-    for task in schedulable_tasks:
-        estimated_hours = _number_to_float(task.estimated_hours)
-
-        if estimated_hours <= 0:
-            estimated_hours = 1.0
-
-        estimated_total_hours += estimated_hours
-
-        if estimated_hours > remaining_capacity and remaining_capacity < schedule_request.daily_capacity_hours:
-            current_date = _end_of_day(current_date + timedelta(days=1))
-            remaining_capacity = schedule_request.daily_capacity_hours
-
-        days_needed = max(
-            1,
-            ceil(estimated_hours / schedule_request.daily_capacity_hours),
-        )
-
-        suggested_due_date = _end_of_day(
-            current_date + timedelta(days=days_needed - 1)
-        )
-
-        remaining_after_task = remaining_capacity - estimated_hours
-
-        if remaining_after_task <= 0:
-            current_date = _end_of_day(suggested_due_date + timedelta(days=1))
-            remaining_capacity = schedule_request.daily_capacity_hours
-        else:
-            current_date = suggested_due_date
-            remaining_capacity = remaining_after_task
-
-        scheduled_items.append(
-            SmartScheduleTaskItem(
-                task_id=task.task_id,
-                title=task.title,
-                priority=task.priority,
-                status=task.status,
-                assigned_to=task.assigned_to,
-                estimated_hours=round(estimated_hours, 2),
-                old_due_date=task.due_date,
-                suggested_due_date=suggested_due_date,
-                is_after_project_deadline=suggested_due_date > project_deadline,
-            )
-        )
-
-    first_suggested_due_date = (
-        scheduled_items[0].suggested_due_date
-        if scheduled_items
-        else None
+    scheduled_items, estimated_total_hours = _build_scheduled_items(
+        schedulable_tasks=schedulable_tasks,
+        start_date=start_date,
+        daily_capacity_hours=schedule_request.daily_capacity_hours,
+        project_deadline=project_deadline,
     )
 
-    last_suggested_due_date = (
-        scheduled_items[-1].suggested_due_date
-        if scheduled_items
-        else None
-    )
+    first_suggested_due_date = _get_first_suggested_due_date(scheduled_items)
+    last_suggested_due_date = _get_last_suggested_due_date(scheduled_items)
 
-    if last_suggested_due_date is not None and last_suggested_due_date > project_deadline:
-        warnings.append("The generated schedule goes beyond the project deadline.")
+    _add_schedule_warnings(
+        warnings=warnings,
+        project_deadline=project_deadline,
+        start_date=start_date,
+        schedulable_tasks=schedulable_tasks,
+        last_suggested_due_date=last_suggested_due_date,
+    )
 
     return SmartSchedulePreviewResponse(
         project_id=project.project_id,
@@ -256,8 +372,6 @@ def create_smart_schedule_for_project(
 
     db.add(smart_schedule)
     db.flush()
-
-    applied_task_ids: list[int] = []
 
     if schedule_request.apply_schedule:
         applied_task_ids = apply_smart_schedule_to_tasks(

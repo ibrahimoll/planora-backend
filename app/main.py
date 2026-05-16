@@ -19,6 +19,7 @@ from app.routers.progress_routes import router as progress_router
 from app.routers.ai_plan_routes import router as ai_plan_router
 from app.routers.risk_analysis_routes import router as risk_analysis_router
 from app.routers.smart_schedule_routes import router as smart_schedule_router
+from app.routers.admin_dashboard_routes import router as admin_dashboard_router
 
 app = FastAPI(
     title="Planora API",
@@ -53,6 +54,7 @@ app.include_router(progress_router)
 app.include_router(ai_plan_router)
 app.include_router(risk_analysis_router)
 app.include_router(smart_schedule_router)
+app.include_router(admin_dashboard_router)
 
 
 @app.get("/")
