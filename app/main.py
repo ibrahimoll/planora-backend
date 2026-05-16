@@ -16,6 +16,7 @@ from app.routers.deadline_reminder_routes import router as deadline_reminder_rou
 from app.routers.report_routes import router as report_router
 from app.routers.activity_log_routes import router as activity_log_router
 from app.routers.progress_routes import router as progress_router
+from app.routers.productivity_insight_routes import router as productivity_insight_router
 from app.routers.ai_plan_routes import router as ai_plan_router
 from app.routers.risk_analysis_routes import router as risk_analysis_router
 from app.routers.smart_schedule_routes import router as smart_schedule_router
@@ -54,6 +55,7 @@ app.include_router(deadline_reminder_router)
 app.include_router(report_router)
 app.include_router(activity_log_router)
 app.include_router(progress_router)
+app.include_router(productivity_insight_router)
 app.include_router(ai_plan_router)
 app.include_router(risk_analysis_router)
 app.include_router(smart_schedule_router)
