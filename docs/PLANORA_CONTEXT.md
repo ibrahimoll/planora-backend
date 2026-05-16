@@ -10,18 +10,22 @@ Planora is an AI-powered project planning and collaboration system with:
 - Personal Project Mode.
 - Team Collaboration Mode.
 - AI project planning MVP implemented in Step 19 using a local rule-based generator.
-- Smart scheduling, risk prediction, productivity insights, real AI API integration, and AI chat assistant planned for later phases.
+- Risk analysis / delay prediction MVP implemented in Step 20 using a local rule-based risk engine.
+- Smart scheduling, productivity insights expansion, real AI API integration, and AI chat assistant planned for later phases.
 
 The backend currently uses FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, Google social login, SMTP email for verification/reset flows, and local file storage for development.
 
-Current AI status:
+Current AI/status intelligence features:
 
-- The first AI feature exists: AI Project Planning MVP.
+- AI Project Planning MVP exists.
 - It saves generated plans in `ai_plans`.
 - It can create tasks from generated plans.
 - It currently uses `local_rule_based_v1`.
-- It is not connected to OpenAI, Gemini, or another real AI API yet.
-- Later, only the generator logic inside `app/services/ai_plan_service.py` should need replacement while keeping the same API contract.
+- Risk Analysis / Delay Prediction MVP exists.
+- It saves generated risk snapshots in `risk_analysis`.
+- It calculates risk using project deadline, task completion, overdue tasks, blocked tasks, and remaining estimated hours.
+- These features are not connected to OpenAI, Gemini, or another real AI API yet.
+- Later, only the generator/analyzer logic inside service files should need replacement while keeping the same API contracts.
 
 Firebase decision:
 
@@ -54,12 +58,13 @@ Completed backend steps:
 18. Project member role update endpoint.
 18.1. Cleanup duplicate imports in team project routes.
 19. AI project planning MVP.
+20. Risk analysis / delay prediction MVP.
 
 Latest confirmed regression result:
 
-- `63 passed`
-- Command used by the user: `python -m pytest -x -v`
-- Confirmed after Step 19 AI Project Planning MVP.
+- `70 passed`
+- Command used by the user: `pytest tests/test_risk_analysis.py -v` for Step 20 test verification, followed by full regression confirmation.
+- Confirmed after Step 20 Risk Analysis / Delay Prediction MVP.
 - Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
 
 Important current notes:
@@ -71,7 +76,7 @@ Important current notes:
 - Authenticated users who are not allowed to perform an action should receive `403 Forbidden`.
 - `notifications.type` must allow: `task`, `project`, `team`, `comment`, `mention`, `invite`, `deadline`, `ai`, `risk`, `system`.
 - `activity_logs.event_type` must allow `ai_plan_generated` after Step 19.
-- If invitation, mention, or deadline notifications fail when inserting notification types, fix the live PostgreSQL notification check constraint.
+- If invitation, mention, deadline, or future risk notifications fail when inserting notification types, fix the live PostgreSQL notification check constraint.
 - If AI plan activity logging fails, fix the live PostgreSQL `activity_logs` check constraint to include `ai_plan_generated`.
 - Team roles and project roles are separate.
 - Updating `team_members.role` does not automatically update `project_members.role`.
@@ -85,10 +90,8 @@ A pytest regression suite exists in the `tests/` folder and should be used after
 
 Latest full regression result:
 
-- 63 tests collected.
-- 63 tests passed.
-- Command used: `python -m pytest -x -v`.
-- Result was confirmed after Step 19 AI Project Planning MVP.
+- 70 tests passed.
+- Result was confirmed after Step 20 Risk Analysis / Delay Prediction MVP.
 
 Current test coverage includes:
 
@@ -116,6 +119,7 @@ Current test coverage includes:
 - Activity log listing, ordering, event-type filtering, pagination, project isolation, personal-project protection, team-member access, and unauthenticated access protection.
 - Progress tracking for personal projects and team projects, cross-user protection, and missing-token protection.
 - AI project planning for personal projects and team projects, optional generated-task creation, generated plan listing, cross-user protection, missing-token protection, and team-member generation restrictions.
+- Risk analysis preview, risk analysis creation, saved risk analysis listing, cross-user protection, low-risk calculation, high-risk overdue-task calculation, and database save behavior.
 
 Important test setup notes:
 
@@ -140,6 +144,7 @@ Current pytest-related files:
 - `tests/test_09_progress_api.py`
 - `tests/test_10_project_member_roles_api.py`
 - `tests/test_11_ai_plans_api.py`
+- `tests/test_risk_analysis.py`
 - `tests/test_activity_log_routes.py`
 - `tests/test_report_routes.py`
 - `tests/test_attachment_security.py`
@@ -636,6 +641,81 @@ Testing:
 - Step 19 added 7 AI plan API tests.
 - User confirmed full regression result after Step 19: `63 passed`.
 
+## Step 20 — Risk Analysis / Delay Prediction MVP Completed
+
+Step 20 added the first risk prediction backend feature.
+
+Step 20 endpoints:
+
+- `GET /projects/{project_id}/risk-analysis/preview`
+- `POST /projects/{project_id}/risk-analysis`
+- `GET /projects/{project_id}/risk-analysis`
+
+Step 20 files:
+
+- `app/models/risk_analysis.py`
+- `app/schemas/risk_analysis_schema.py`
+- `app/services/risk_analysis_service.py`
+- `app/routers/risk_analysis_routes.py`
+- Updated `app/models/__init__.py`.
+- Updated `app/models/project.py`.
+- Updated `app/main.py`.
+- Added `tests/test_risk_analysis.py`.
+
+Tables used by Step 20:
+
+- `risk_analysis`
+- `projects`
+- `tasks`
+- `project_members`
+- `users`
+
+Current `risk_analysis` table columns:
+
+- `risk_id`
+- `project_id`
+- `risk_level`
+- `predicted_delay_days`
+- `reason`
+- `recommendation`
+- `created_at`
+
+Current risk analysis behavior:
+
+- Personal project owners can preview and generate risk analysis.
+- Team project members can access risk analysis for team projects they belong to through the shared project access helper.
+- Users cannot access another user's personal project risk analysis.
+- Preview endpoint calculates risk but does not save a row.
+- Generate endpoint calculates risk and saves a row in `risk_analysis`.
+- List endpoint returns saved risk analyses ordered newest first.
+- Risk level can be `low`, `medium`, or `high`.
+- Predicted delay days is never negative.
+- The local rule-based engine considers:
+  - Total tasks.
+  - Completed tasks.
+  - Overdue tasks.
+  - Blocked tasks.
+  - Remaining estimated hours.
+  - Days until project deadline.
+- The engine currently uses local deterministic backend logic and is not connected to a real AI API yet.
+
+Step 20 testing:
+
+- Step 20 added 7 pytest tests in `tests/test_risk_analysis.py`.
+- Test coverage includes:
+  - Risk preview route.
+  - Risk generation route.
+  - Saved risk list route.
+  - Cross-user personal project protection.
+  - Low-risk calculation.
+  - High-risk overdue-task calculation.
+  - Risk analysis database save behavior.
+- User confirmed regression result after Step 20: `70 passed`.
+
+Recommended next improvement:
+
+- Step 21 should connect high-risk analyses to notifications, so a `high` risk result can create an in-app `risk` notification for the project owner/team members.
+
 ## Role Management Decision
 
 There are two separate membership systems:
@@ -699,9 +779,9 @@ Planned/polish tables:
 
 Next feature step candidates:
 
-- Risk analysis and delay prediction.
+- Risk notifications for high-risk projects.
 - Smart scheduling.
-- Real AI API integration for AI project planning.
+- Real AI API integration for AI project planning and risk analysis.
 - AI chat assistant.
 - Admin dashboard APIs.
 
