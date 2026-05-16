@@ -21,6 +21,7 @@ Latest confirmed full regression result:
 - `101 passed`
 - Confirmed after Admin Control Center expansion from Step 23.2 through Step 23.6.
 - Previous confirmed result was `96 passed` after Step 23.1 Admin Project Oversight.
+- Step 25 code and tests were added directly to GitHub, but local pytest confirmation is still needed after pulling.
 - Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
 
 Completed backend steps:
@@ -56,12 +57,14 @@ Completed backend steps:
 23.4. Admin Reports Center.
 23.5. Admin Logs Filters and Audit Improvements.
 23.6. Admin User Search/Filters and User Activity View.
+25. Productivity Insights Center.
 
 Latest completed feature group:
 
-- Step 23.2–23.6 — Admin Control Center expansion.
-- Added `tests/test_15_admin_control_center_expansion_api.py`.
-- Confirmed local pytest result: `101 passed`.
+- Step 25 — Productivity Insights Center.
+- Added `GET /insights/me`.
+- Added `tests/test_16_productivity_insights_api.py`.
+- Expected full regression result after local verification: `105 passed` if the previous `101 passed` suite is unchanged.
 
 ## Current Main Tables
 
@@ -274,6 +277,44 @@ Future AI integration rule:
 
 - Replace only generator/analyzer/scheduler logic inside service files while keeping the same API contracts.
 
+## Step 25 — Productivity Insights Center
+
+Endpoint:
+
+- `GET /insights/me`
+
+Files added/updated:
+
+- Added `app/schemas/productivity_insight_schema.py`.
+- Added `app/services/productivity_insight_service.py`.
+- Added `app/routers/productivity_insight_routes.py`.
+- Updated `app/main.py` to include `productivity_insight_router`.
+- Added `tests/test_16_productivity_insights_api.py`.
+
+Tables used:
+
+- `users`
+- `projects`
+- `project_members`
+- `tasks`
+- `user_progress` indirectly remains part of the progress system, but Step 25 does not need a new table or migration.
+
+Current behavior:
+
+- Active verified users can request their own productivity insights.
+- Missing/invalid token returns `401 Unauthorized`.
+- Personal projects are included only when owned by the current user.
+- Team projects are included when the current user is a project member.
+- Other users' personal projects are excluded.
+- Response includes project totals, active/completed project counts, total visible task count, assigned task counts, completed assigned tasks, overdue assigned tasks, blocked assigned tasks, completion percentage, workload summary, per-project health, and rule-based recommendations.
+- Workload is marked overloaded when assigned incomplete tasks are high or remaining estimated hours are high.
+- Project health can be `excellent`, `good`, `needs_attention`, or `at_risk`.
+
+Testing:
+
+- Step 25 added 4 API tests.
+- Expected full regression after pulling and local test verification: previous `101 passed` + 4 new tests = `105 passed`.
+
 ## Role Management Decision
 
 There are separate role systems:
@@ -302,6 +343,7 @@ python -m pytest -x -v
 Useful local commands:
 
 ```powershell
+python -m pytest tests/test_16_productivity_insights_api.py -v
 python -m pytest --collect-only -q
 python -m pytest --cov=app --cov-report=term-missing
 python -m compileall app tests
@@ -316,21 +358,9 @@ Future testing rule:
 
 ## Roadmap From Here
 
-Next major step:
+Next feature candidates:
 
-- Step 24 — AI Chat Assistant MVP.
-
-Step 24 should include:
-
-- Backend chat endpoint for project-specific AI assistant messages.
-- Store user and AI messages in `chat_messages`.
-- Use local deterministic/rule-based assistant logic first.
-- Support personal projects and team projects with the same access rules used by other project features.
-- Keep the API contract ready for later OpenAI/Gemini replacement.
-- Include pytest coverage for permissions, saved messages, and assistant response behavior.
-
-Later feature candidates:
-
+- Step 24 — AI Chat Assistant MVP, if not already completed locally.
 - Real AI API integration.
 - Productivity insights expansion.
 - CORS/frontend/mobile integration.
