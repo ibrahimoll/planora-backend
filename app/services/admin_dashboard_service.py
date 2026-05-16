@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.activity_log import ActivityLog
@@ -29,24 +29,17 @@ def count_query(db: Session, stmt: Select[tuple[int]]) -> int:
 
 
 def count_all(db: Session, model: type) -> int:
-    return count_query(
-        db,
-        select(func.count()).select_from(model),
-    )
+    return count_query(db, select(func.count()).select_from(model))
 
 
 def count_where(db: Session, model: type, *conditions) -> int:
     stmt = select(func.count()).select_from(model)
-
     if conditions:
         stmt = stmt.where(*conditions)
-
     return count_query(db, stmt)
 
 
-def get_admin_dashboard_overview(
-    db: Session,
-) -> AdminDashboardOverviewResponse:
+def get_admin_dashboard_overview(db: Session) -> AdminDashboardOverviewResponse:
     now = datetime.now(timezone.utc)
 
     total_users = count_all(db, User)
@@ -56,13 +49,8 @@ def get_admin_dashboard_overview(
 
     total_projects = count_all(db, Project)
     total_tasks = count_all(db, Task)
-
     total_notifications = count_all(db, Notification)
-    unread_notifications = count_where(
-        db,
-        Notification,
-        Notification.is_read.is_(False),
-    )
+    unread_notifications = count_where(db, Notification, Notification.is_read.is_(False))
 
     return AdminDashboardOverviewResponse(
         users=AdminUserStats(
@@ -75,50 +63,18 @@ def get_admin_dashboard_overview(
         ),
         projects=AdminProjectStats(
             total_projects=total_projects,
-            personal_projects=count_where(
-                db,
-                Project,
-                Project.project_type == "personal",
-            ),
-            team_projects=count_where(
-                db,
-                Project,
-                Project.project_type == "team",
-            ),
-            not_started_projects=count_where(
-                db,
-                Project,
-                Project.status == "not_started",
-            ),
-            in_progress_projects=count_where(
-                db,
-                Project,
-                Project.status == "in_progress",
-            ),
-            completed_projects=count_where(
-                db,
-                Project,
-                Project.status == "completed",
-            ),
-            on_hold_projects=count_where(
-                db,
-                Project,
-                Project.status == "on_hold",
-            ),
-            cancelled_projects=count_where(
-                db,
-                Project,
-                Project.status == "cancelled",
-            ),
+            personal_projects=count_where(db, Project, Project.project_type == "personal"),
+            team_projects=count_where(db, Project, Project.project_type == "team"),
+            not_started_projects=count_where(db, Project, Project.status == "not_started"),
+            in_progress_projects=count_where(db, Project, Project.status == "in_progress"),
+            completed_projects=count_where(db, Project, Project.status == "completed"),
+            on_hold_projects=count_where(db, Project, Project.status == "on_hold"),
+            cancelled_projects=count_where(db, Project, Project.status == "cancelled"),
         ),
         tasks=AdminTaskStats(
             total_tasks=total_tasks,
             todo_tasks=count_where(db, Task, Task.status == "todo"),
-            in_progress_tasks=count_where(
-                db,
-                Task,
-                Task.status == "in_progress",
-            ),
+            in_progress_tasks=count_where(db, Task, Task.status == "in_progress"),
             completed_tasks=count_where(db, Task, Task.status == "completed"),
             blocked_tasks=count_where(db, Task, Task.status == "blocked"),
             overdue_tasks=count_where(
@@ -132,21 +88,9 @@ def get_admin_dashboard_overview(
         teams_total=count_all(db, Team),
         risks=AdminRiskStats(
             total_risk_records=count_all(db, RiskAnalysis),
-            low_risk_records=count_where(
-                db,
-                RiskAnalysis,
-                RiskAnalysis.risk_level == "low",
-            ),
-            medium_risk_records=count_where(
-                db,
-                RiskAnalysis,
-                RiskAnalysis.risk_level == "medium",
-            ),
-            high_risk_records=count_where(
-                db,
-                RiskAnalysis,
-                RiskAnalysis.risk_level == "high",
-            ),
+            low_risk_records=count_where(db, RiskAnalysis, RiskAnalysis.risk_level == "low"),
+            medium_risk_records=count_where(db, RiskAnalysis, RiskAnalysis.risk_level == "medium"),
+            high_risk_records=count_where(db, RiskAnalysis, RiskAnalysis.risk_level == "high"),
         ),
         notifications=AdminNotificationStats(
             total_notifications=total_notifications,
@@ -161,41 +105,61 @@ def get_admin_users(
     db: Session,
     limit: int,
     offset: int,
+    role: str | None = None,
+    is_active: bool | None = None,
+    is_email_verified: bool | None = None,
+    search: str | None = None,
 ) -> list[User]:
-    stmt = (
-        select(User)
-        .order_by(User.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )
+    stmt = select(User).order_by(User.created_at.desc())
 
-    return list(db.execute(stmt).scalars().all())
+    if role is not None:
+        stmt = stmt.where(User.role == role)
+    if is_active is not None:
+        stmt = stmt.where(User.is_active.is_(is_active))
+    if is_email_verified is not None:
+        stmt = stmt.where(User.is_email_verified.is_(is_email_verified))
+    if search is not None and search.strip():
+        pattern = f"%{search.strip()}%"
+        stmt = stmt.where(
+            or_(
+                User.username.ilike(pattern),
+                User.email.ilike(pattern),
+                User.full_name.ilike(pattern),
+            )
+        )
+
+    return list(db.execute(stmt.offset(offset).limit(limit)).scalars().all())
 
 
-def get_recent_activity_logs(
-    db: Session,
-    limit: int,
-) -> list[ActivityLog]:
-    stmt = (
-        select(ActivityLog)
-        .order_by(ActivityLog.created_at.desc())
-        .limit(limit)
-    )
-
+def get_recent_activity_logs(db: Session, limit: int) -> list[ActivityLog]:
+    stmt = select(ActivityLog).order_by(ActivityLog.created_at.desc()).limit(limit)
     return list(db.execute(stmt).scalars().all())
 
 
 def get_admin_logs(
     db: Session,
     limit: int,
+    offset: int = 0,
+    admin_id: int | None = None,
+    target_user_id: int | None = None,
+    action: str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
 ) -> list[AdminLog]:
-    stmt = (
-        select(AdminLog)
-        .order_by(AdminLog.created_at.desc())
-        .limit(limit)
-    )
+    stmt = select(AdminLog).order_by(AdminLog.created_at.desc())
 
-    return list(db.execute(stmt).scalars().all())
+    if admin_id is not None:
+        stmt = stmt.where(AdminLog.admin_id == admin_id)
+    if target_user_id is not None:
+        stmt = stmt.where(AdminLog.target_user_id == target_user_id)
+    if action is not None and action.strip():
+        stmt = stmt.where(AdminLog.action.ilike(f"%{action.strip()}%"))
+    if created_from is not None:
+        stmt = stmt.where(AdminLog.created_at >= created_from)
+    if created_to is not None:
+        stmt = stmt.where(AdminLog.created_at <= created_to)
+
+    return list(db.execute(stmt.offset(offset).limit(limit)).scalars().all())
 
 
 def create_admin_log(
@@ -204,14 +168,8 @@ def create_admin_log(
     action: str,
     target_user_id: int | None = None,
 ) -> AdminLog:
-    log = AdminLog(
-        admin_id=admin_id,
-        target_user_id=target_user_id,
-        action=action,
-    )
-
+    log = AdminLog(admin_id=admin_id, target_user_id=target_user_id, action=action)
     db.add(log)
     db.commit()
     db.refresh(log)
-
     return log
