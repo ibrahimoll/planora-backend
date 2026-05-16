@@ -1,0 +1,310 @@
+﻿from __future__ import annotations
+
+from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from tests.conftest import (
+    auth_headers,
+    create_personal_project,
+    create_team,
+    create_team_project,
+    create_verified_user_and_login,
+)
+
+
+def test_generate_ai_plan_for_personal_project_creates_tasks(
+    client: TestClient,
+    db: Session,
+):
+    user_id, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_owner",
+        email="ai_owner@example.com",
+    )
+
+    project = create_personal_project(
+        client=client,
+        token=token,
+        title="AI Personal Project",
+    )
+
+    response = client.post(
+        f"/projects/{project['project_id']}/ai-plans",
+        headers=auth_headers(token),
+        json={
+            "input_prompt": "Plan my final year project backend.",
+            "create_tasks": True,
+            "task_count": 4,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+
+    data = response.json()
+
+    assert data["project_id"] == project["project_id"]
+    assert data["generated_by"] == user_id
+    assert data["input_prompt"] == "Plan my final year project backend."
+    assert data["generated_plan"]["source"] == "local_rule_based_v1"
+    assert len(data["generated_plan"]["tasks"]) == 4
+    assert len(data["generated_plan"]["created_task_ids"]) == 4
+
+    tasks_response = client.get(
+        f"/projects/{project['project_id']}/tasks",
+        headers=auth_headers(token),
+    )
+
+    assert tasks_response.status_code == 200, tasks_response.text
+    assert len(tasks_response.json()) == 4
+
+
+def test_generate_ai_plan_without_task_creation_stores_plan_only(
+    client: TestClient,
+    db: Session,
+):
+    _, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_no_tasks",
+        email="ai_no_tasks@example.com",
+    )
+
+    project = create_personal_project(
+        client=client,
+        token=token,
+        title="AI Plan Only Project",
+    )
+
+    response = client.post(
+        f"/projects/{project['project_id']}/ai-plans",
+        headers=auth_headers(token),
+        json={
+            "input_prompt": "Only generate the plan, do not create tasks.",
+            "create_tasks": False,
+            "task_count": 3,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+
+    data = response.json()
+
+    assert len(data["generated_plan"]["tasks"]) == 3
+    assert data["generated_plan"]["created_task_ids"] == []
+
+    tasks_response = client.get(
+        f"/projects/{project['project_id']}/tasks",
+        headers=auth_headers(token),
+    )
+
+    assert tasks_response.status_code == 200, tasks_response.text
+    assert tasks_response.json() == []
+
+
+def test_list_personal_project_ai_plans(
+    client: TestClient,
+    db: Session,
+):
+    _, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_list_owner",
+        email="ai_list_owner@example.com",
+    )
+
+    project = create_personal_project(
+        client=client,
+        token=token,
+        title="AI List Project",
+    )
+
+    for prompt in ["First plan", "Second plan"]:
+        response = client.post(
+            f"/projects/{project['project_id']}/ai-plans",
+            headers=auth_headers(token),
+            json={
+                "input_prompt": prompt,
+                "create_tasks": False,
+                "task_count": 3,
+            },
+        )
+
+        assert response.status_code == 201, response.text
+
+    list_response = client.get(
+        f"/projects/{project['project_id']}/ai-plans",
+        headers=auth_headers(token),
+    )
+
+    assert list_response.status_code == 200, list_response.text
+
+    plans = list_response.json()
+
+    assert len(plans) == 2
+    assert plans[0]["project_id"] == project["project_id"]
+    assert plans[1]["project_id"] == project["project_id"]
+
+
+def test_cross_user_cannot_generate_ai_plan_for_personal_project(
+    client: TestClient,
+    db: Session,
+):
+    _, owner_token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_cross_owner",
+        email="ai_cross_owner@example.com",
+    )
+
+    _, stranger_token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_cross_stranger",
+        email="ai_cross_stranger@example.com",
+    )
+
+    project = create_personal_project(
+        client=client,
+        token=owner_token,
+        title="Private AI Project",
+    )
+
+    response = client.post(
+        f"/projects/{project['project_id']}/ai-plans",
+        headers=auth_headers(stranger_token),
+        json={
+            "input_prompt": "Try to generate for another user's project.",
+            "create_tasks": False,
+            "task_count": 3,
+        },
+    )
+
+    assert response.status_code == 404, response.text
+
+
+def test_missing_token_cannot_generate_ai_plan(
+    client: TestClient,
+    db: Session,
+):
+    _, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_missing_token",
+        email="ai_missing_token@example.com",
+    )
+
+    project = create_personal_project(
+        client=client,
+        token=token,
+        title="Missing Token AI Project",
+    )
+
+    response = client.post(
+        f"/projects/{project['project_id']}/ai-plans",
+        json={
+            "input_prompt": "No token request.",
+            "create_tasks": False,
+            "task_count": 3,
+        },
+    )
+
+    assert response.status_code == 401, response.text
+
+
+def test_team_project_owner_can_generate_ai_plan(
+    client: TestClient,
+    db: Session,
+):
+    owner_id, owner_token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_team_owner",
+        email="ai_team_owner@example.com",
+    )
+
+    team = create_team(
+        client=client,
+        token=owner_token,
+        name="AI Team",
+    )
+
+    project = create_team_project(
+        client=client,
+        token=owner_token,
+        team_id=team["team_id"],
+        title="AI Team Project",
+    )
+
+    response = client.post(
+        f"/teams/{team['team_id']}/projects/{project['project_id']}/ai-plans",
+        headers=auth_headers(owner_token),
+        json={
+            "input_prompt": "Generate a team project plan.",
+            "create_tasks": True,
+            "task_count": 3,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+
+    data = response.json()
+
+    assert data["project_id"] == project["project_id"]
+    assert data["generated_by"] == owner_id
+    assert len(data["generated_plan"]["created_task_ids"]) == 3
+
+
+def test_team_project_member_cannot_generate_ai_plan(
+    client: TestClient,
+    db: Session,
+):
+    _, owner_token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_team_owner_2",
+        email="ai_team_owner_2@example.com",
+    )
+
+    _, member_token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_team_member",
+        email="ai_team_member@example.com",
+    )
+
+    team = create_team(
+        client=client,
+        token=owner_token,
+        name="AI Permission Team",
+    )
+
+    add_member_response = client.post(
+        f"/teams/{team['team_id']}/members",
+        headers=auth_headers(owner_token),
+        json={
+            "email": "ai_team_member@example.com",
+            "role": "member",
+        },
+    )
+
+    assert add_member_response.status_code == 201, add_member_response.text
+
+    project = create_team_project(
+        client=client,
+        token=owner_token,
+        team_id=team["team_id"],
+        title="AI Permission Team Project",
+    )
+
+    response = client.post(
+        f"/teams/{team['team_id']}/projects/{project['project_id']}/ai-plans",
+        headers=auth_headers(member_token),
+        json={
+            "input_prompt": "Member should not generate.",
+            "create_tasks": False,
+            "task_count": 3,
+        },
+    )
+
+    assert response.status_code == 403, response.text

@@ -41,7 +41,8 @@ class ActivityLog(Base):
                 'comment_deleted',
                 'attachment_uploaded',
                 'attachment_deleted',
-                'deadline_reminder_generated'
+                'deadline_reminder_generated',
+                'ai_plan_generated'
             )
             """,
             name="chk_activity_logs_event_type",
