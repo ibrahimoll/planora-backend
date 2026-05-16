@@ -9,9 +9,19 @@ Planora is an AI-powered project planning and collaboration system with:
 - No guest access past authentication.
 - Personal Project Mode.
 - Team Collaboration Mode.
-- AI planning, smart scheduling, risk prediction, productivity insights, and AI chat assistant planned for later phases.
+- AI project planning MVP implemented in Step 19 using a local rule-based generator.
+- Smart scheduling, risk prediction, productivity insights, real AI API integration, and AI chat assistant planned for later phases.
 
 The backend currently uses FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, Google social login, SMTP email for verification/reset flows, and local file storage for development.
+
+Current AI status:
+
+- The first AI feature exists: AI Project Planning MVP.
+- It saves generated plans in `ai_plans`.
+- It can create tasks from generated plans.
+- It currently uses `local_rule_based_v1`.
+- It is not connected to OpenAI, Gemini, or another real AI API yet.
+- Later, only the generator logic inside `app/services/ai_plan_service.py` should need replacement while keeping the same API contract.
 
 Firebase decision:
 
@@ -43,12 +53,13 @@ Completed backend steps:
 17. Progress tracking and productivity insights.
 18. Project member role update endpoint.
 18.1. Cleanup duplicate imports in team project routes.
+19. AI project planning MVP.
 
 Latest confirmed regression result:
 
-- `56 passed`
+- `63 passed`
 - Command used by the user: `python -m pytest -x -v`
-- Confirmed again after Step 18.1 cleanup.
+- Confirmed after Step 19 AI Project Planning MVP.
 - Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
 
 Important current notes:
@@ -59,7 +70,9 @@ Important current notes:
 - Missing/invalid bearer tokens return `401 Unauthorized` through the auth dependency.
 - Authenticated users who are not allowed to perform an action should receive `403 Forbidden`.
 - `notifications.type` must allow: `task`, `project`, `team`, `comment`, `mention`, `invite`, `deadline`, `ai`, `risk`, `system`.
+- `activity_logs.event_type` must allow `ai_plan_generated` after Step 19.
 - If invitation, mention, or deadline notifications fail when inserting notification types, fix the live PostgreSQL notification check constraint.
+- If AI plan activity logging fails, fix the live PostgreSQL `activity_logs` check constraint to include `ai_plan_generated`.
 - Team roles and project roles are separate.
 - Updating `team_members.role` does not automatically update `project_members.role`.
 - A team `admin` is not automatically a project `manager` for existing projects.
@@ -72,10 +85,10 @@ A pytest regression suite exists in the `tests/` folder and should be used after
 
 Latest full regression result:
 
-- 56 tests collected.
-- 56 tests passed.
+- 63 tests collected.
+- 63 tests passed.
 - Command used: `python -m pytest -x -v`.
-- Result was confirmed after Step 18.1 cleanup.
+- Result was confirmed after Step 19 AI Project Planning MVP.
 
 Current test coverage includes:
 
@@ -102,6 +115,7 @@ Current test coverage includes:
 - Export project report missing-token protection.
 - Activity log listing, ordering, event-type filtering, pagination, project isolation, personal-project protection, team-member access, and unauthenticated access protection.
 - Progress tracking for personal projects and team projects, cross-user protection, and missing-token protection.
+- AI project planning for personal projects and team projects, optional generated-task creation, generated plan listing, cross-user protection, missing-token protection, and team-member generation restrictions.
 
 Important test setup notes:
 
@@ -125,6 +139,7 @@ Current pytest-related files:
 - `tests/test_07_deadline_reminders_api.py`
 - `tests/test_09_progress_api.py`
 - `tests/test_10_project_member_roles_api.py`
+- `tests/test_11_ai_plans_api.py`
 - `tests/test_activity_log_routes.py`
 - `tests/test_report_routes.py`
 - `tests/test_attachment_security.py`
@@ -455,6 +470,7 @@ Current activity behavior:
 - Invalid activity event type, limit, or offset returns `422`.
 - Unauthenticated access returns `401`.
 - Activity logs preserve snapshots for deleted or changed objects where needed.
+- Step 19 added `ai_plan_generated` as an additional activity event type.
 
 ## Step 17 — Progress Tracking and Productivity Insights Completed
 
@@ -548,6 +564,78 @@ Testing:
 
 - User confirmed full regression result after Step 18.1: `56 passed`.
 
+## Step 19 — AI Project Planning MVP Completed
+
+Step 19 added the first AI planning backend feature.
+
+Step 19 endpoints:
+
+- `POST /projects/{project_id}/ai-plans`
+- `GET /projects/{project_id}/ai-plans`
+- `POST /teams/{team_id}/projects/{project_id}/ai-plans`
+- `GET /teams/{team_id}/projects/{project_id}/ai-plans`
+
+Step 19 files:
+
+- `app/models/ai_plan.py`
+- `app/schemas/ai_plan_schema.py`
+- `app/services/ai_plan_service.py`
+- `app/routers/ai_plan_routes.py`
+- Updated `app/models/__init__.py`.
+- Updated `app/models/project.py`.
+- Updated `app/models/user.py`.
+- Updated `app/models/activity_log.py`.
+- Updated `app/schemas/activity_log_schema.py`.
+- Updated `app/main.py`.
+- Added `tests/test_11_ai_plans_api.py`.
+
+Tables used by Step 19:
+
+- `ai_plans`
+- `projects`
+- `tasks`
+- `project_members`
+- `users`
+- `activity_logs`
+
+Current `ai_plans` table columns:
+
+- `plan_id`
+- `project_id`
+- `generated_by`
+- `input_prompt`
+- `generated_plan`
+- `created_at`
+
+Current AI planning behavior:
+
+- Personal project owners can generate AI plans.
+- Personal project AI plans can optionally create tasks.
+- Personal project generated tasks are assigned to the current user.
+- Team project owners/managers can generate AI plans.
+- Normal team project members cannot generate AI plans.
+- Team project generated tasks are created unassigned so managers can assign them later.
+- Users can list generated AI plans for projects they can access.
+- Generated plans are saved in `ai_plans.generated_plan` as JSONB.
+- Generated plans currently use local deterministic backend logic named `local_rule_based_v1`.
+- Real OpenAI/Gemini integration is not connected yet.
+- Activity logs support `ai_plan_generated`.
+
+Step 19 live database fixes applied during Swagger testing:
+
+- Added/fixed `ai_plans` in the real development database.
+- Updated `activity_logs` event-type constraint to allow `ai_plan_generated`.
+- Fixed schema drift in the real development database:
+  - `tasks.estimated_hours` nullable.
+  - `tasks.actual_hours` nullable.
+  - `tasks.due_date` nullable.
+  - `ai_plans.generated_plan` converted to `JSONB`.
+
+Testing:
+
+- Step 19 added 7 AI plan API tests.
+- User confirmed full regression result after Step 19: `63 passed`.
+
 ## Role Management Decision
 
 There are two separate membership systems:
@@ -611,9 +699,9 @@ Planned/polish tables:
 
 Next feature step candidates:
 
-- AI project planning.
-- Smart scheduling.
 - Risk analysis and delay prediction.
+- Smart scheduling.
+- Real AI API integration for AI project planning.
 - AI chat assistant.
 - Admin dashboard APIs.
 
