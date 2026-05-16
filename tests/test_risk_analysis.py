@@ -1,7 +1,8 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from app.models.notification import Notification
 from app.models.project import Project
 from app.models.task import Task
 from app.services.risk_analysis_service import (
@@ -18,7 +19,7 @@ from tests.conftest import (
 
 
 def test_preview_project_risk_analysis_route(client, db):
-    user_id, token = create_verified_user_and_login(
+    _user_id, token = create_verified_user_and_login(
         client=client,
         db=db,
         username="risk_preview_user",
@@ -56,7 +57,7 @@ def test_preview_project_risk_analysis_route(client, db):
 
 
 def test_generate_project_risk_analysis_route(client, db):
-    user_id, token = create_verified_user_and_login(
+    _user_id, token = create_verified_user_and_login(
         client=client,
         db=db,
         username="risk_generate_user",
@@ -95,7 +96,7 @@ def test_generate_project_risk_analysis_route(client, db):
 
 
 def test_list_project_risk_analyses_route(client, db):
-    user_id, token = create_verified_user_and_login(
+    _user_id, token = create_verified_user_and_login(
         client=client,
         db=db,
         username="risk_list_user",
@@ -138,14 +139,14 @@ def test_list_project_risk_analyses_route(client, db):
 
 
 def test_user_cannot_access_other_users_project_risk_analysis(client, db):
-    owner_id, owner_token = create_verified_user_and_login(
+    _owner_id, owner_token = create_verified_user_and_login(
         client=client,
         db=db,
         username="risk_owner_user",
         email="risk_owner_user@example.com",
     )
 
-    other_id, other_token = create_verified_user_and_login(
+    _other_id, other_token = create_verified_user_and_login(
         client=client,
         db=db,
         username="risk_other_user",
@@ -167,7 +168,7 @@ def test_user_cannot_access_other_users_project_risk_analysis(client, db):
 
 
 def test_calculate_low_risk_for_stable_project(client, db):
-    user_id, token = create_verified_user_and_login(
+    _user_id, token = create_verified_user_and_login(
         client=client,
         db=db,
         username="risk_low_user",
@@ -210,7 +211,7 @@ def test_calculate_low_risk_for_stable_project(client, db):
 
 
 def test_calculate_high_risk_when_task_is_overdue(client, db):
-    user_id, token = create_verified_user_and_login(
+    _user_id, token = create_verified_user_and_login(
         client=client,
         db=db,
         username="risk_high_user",
@@ -256,7 +257,7 @@ def test_calculate_high_risk_when_task_is_overdue(client, db):
 
 
 def test_create_risk_analysis_saves_record(client, db):
-    user_id, token = create_verified_user_and_login(
+    _user_id, token = create_verified_user_and_login(
         client=client,
         db=db,
         username="risk_save_user",
@@ -290,3 +291,99 @@ def test_create_risk_analysis_saves_record(client, db):
     assert risk_analysis.predicted_delay_days >= 0
     assert risk_analysis.reason
     assert risk_analysis.recommendation
+
+
+def test_high_risk_analysis_creates_risk_notification_for_personal_owner(client, db):
+    user_id, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="risk_notify_owner",
+        email="risk_notify_owner@example.com",
+    )
+
+    project_data = create_personal_project(
+        client=client,
+        token=token,
+        title="High Risk Notification Project",
+    )
+
+    task_data = create_personal_task(
+        client=client,
+        token=token,
+        project_id=project_data["project_id"],
+        title="Overdue Notification Task",
+    )
+
+    task = db.get(Task, task_data["task_id"])
+    assert task is not None
+
+    task.due_date = datetime.now(timezone.utc) - timedelta(days=3)
+    task.estimated_hours = 20
+    db.commit()
+
+    response = client.post(
+        f"/projects/{project_data['project_id']}/risk-analysis",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 201, response.text
+
+    risk_data = response.json()
+    assert risk_data["risk_level"] == "high"
+
+    notification = (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == user_id,
+            Notification.type == "risk",
+        )
+        .first()
+    )
+
+    assert notification is not None
+    assert notification.title == "High project risk detected"
+    assert "High Risk Notification Project" in notification.message
+    assert notification.is_read is False
+
+
+def test_low_risk_analysis_does_not_create_risk_notification(client, db):
+    user_id, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="risk_no_notify_user",
+        email="risk_no_notify_user@example.com",
+    )
+
+    project_data = create_personal_project(
+        client=client,
+        token=token,
+        title="Low Risk No Notification Project",
+    )
+
+    create_personal_task(
+        client=client,
+        token=token,
+        project_id=project_data["project_id"],
+        title="Stable No Notification Task",
+    )
+
+    response = client.post(
+        f"/projects/{project_data['project_id']}/risk-analysis",
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 201, response.text
+
+    risk_data = response.json()
+    assert risk_data["risk_level"] == "low"
+
+    notification = (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == user_id,
+            Notification.type == "risk",
+        )
+        .first()
+    )
+
+    assert notification is None

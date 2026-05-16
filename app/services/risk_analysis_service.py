@@ -13,6 +13,8 @@ from app.models.risk_analysis import RiskAnalysis
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.risk_analysis_schema import RiskAnalysisPreviewResponse, RiskLevel
+from app.schemas.notification_schema import NotificationType
+from app.services.notification_service import create_notification
 
 
 DAILY_WORK_CAPACITY_HOURS = 4.0
@@ -164,6 +166,48 @@ def calculate_risk_preview(
     )
 
 
+def get_risk_notification_user_ids(
+    db: Session,
+    project: Project,
+) -> list[int]:
+    if project.project_type == "personal":
+        return [project.created_by]
+
+    stmt = select(ProjectMember.user_id).where(
+        ProjectMember.project_id == project.project_id,
+    )
+
+    return sorted(set(db.execute(stmt).scalars().all()))
+
+
+def create_high_risk_notifications(
+    db: Session,
+    project: Project,
+    risk_analysis: RiskAnalysis,
+) -> None:
+    user_ids = get_risk_notification_user_ids(
+        db=db,
+        project=project,
+    )
+
+    title = "High project risk detected"
+    message = (
+        f"Project '{project.title}' is currently high risk. "
+        f"Predicted delay: {risk_analysis.predicted_delay_days} day(s). "
+        f"Recommendation: {risk_analysis.recommendation}"
+    )
+
+    for user_id in user_ids:
+        create_notification(
+            db=db,
+            user_id=user_id,
+            title=title,
+            message=message,
+            notification_type=NotificationType.RISK,
+            commit=False,
+        )
+
+
 def create_risk_analysis_for_project(
     db: Session,
     project: Project,
@@ -187,6 +231,15 @@ def create_risk_analysis_for_project(
     )
 
     db.add(risk_analysis)
+    db.flush()
+
+    if risk_analysis.risk_level == RiskLevel.high.value:
+        create_high_risk_notifications(
+            db=db,
+            project=project,
+            risk_analysis=risk_analysis,
+        )
+
     db.commit()
     db.refresh(risk_analysis)
 
