@@ -12,7 +12,8 @@ Planora is an AI-powered project planning and collaboration system with:
 - AI project planning MVP implemented in Step 19 using a local rule-based generator.
 - Risk analysis / delay prediction MVP implemented in Step 20 using a local rule-based risk engine.
 - High-risk project notifications implemented in Step 20.1 using the existing notifications system.
-- Smart scheduling, productivity insights expansion, real AI API integration, and AI chat assistant planned for later phases.
+- Smart scheduling MVP implemented in Step 21 using a local deterministic scheduling engine.
+- Productivity insights expansion, real AI API integration, and AI chat assistant planned for later phases.
 
 The backend currently uses FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, Google social login, SMTP email for verification/reset flows, and local file storage for development.
 
@@ -26,8 +27,13 @@ Current AI/status intelligence features:
 - It saves generated risk snapshots in `risk_analysis`.
 - It calculates risk using project deadline, task completion, overdue tasks, blocked tasks, and remaining estimated hours.
 - When a saved risk analysis is `high`, Step 20.1 creates in-app `risk` notifications for the affected project users.
+- Smart Scheduling MVP exists.
+- It saves generated schedule snapshots in `smart_schedules`.
+- It can preview schedules without modifying tasks.
+- It can optionally apply generated schedules by updating incomplete task due dates.
+- It currently uses a local deterministic balanced scheduling strategy.
 - These features are not connected to OpenAI, Gemini, or another real AI API yet.
-- Later, only the generator/analyzer logic inside service files should need replacement while keeping the same API contracts.
+- Later, only the generator/analyzer/scheduler logic inside service files should need replacement while keeping the same API contracts.
 
 Firebase decision:
 
@@ -62,19 +68,19 @@ Completed backend steps:
 19. AI project planning MVP.
 20. Risk analysis / delay prediction MVP.
 20.1. Risk notifications for high-risk projects.
+21. Smart scheduling MVP.
 
 Latest confirmed full regression result:
 
-- `70 passed`
-- Confirmed after Step 20 Risk Analysis / Delay Prediction MVP.
-- Full regression after Step 20.1 has not been confirmed yet.
+- `78 passed`
+- Confirmed after Step 21 Smart Scheduling MVP.
 - Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
 
-Latest confirmed Step 20.1 feature test result:
+Latest confirmed Step 21 feature test result:
 
-- `9 passed`
-- Command used by the user: `pytest tests/test_risk_analysis.py -v`.
-- Confirmed after adding high-risk project notifications to risk analysis.
+- `6 passed`
+- Command used by the user: `python -m pytest tests/test_12_smart_schedules_api.py -v`.
+- Confirmed after adding Smart Scheduling MVP.
 
 Important current notes:
 
@@ -99,13 +105,12 @@ A pytest regression suite exists in the `tests/` folder and should be used after
 
 Latest full regression result:
 
-- 70 tests passed.
-- Result was confirmed after Step 20 Risk Analysis / Delay Prediction MVP.
-- Full regression should be rerun after Step 20.1; expected total is around 72 tests if no other tests changed.
+- 78 tests passed.
+- Result was confirmed after Step 21 Smart Scheduling MVP.
 
-Latest Step 20.1 feature test result:
+Latest Step 21 feature test result:
 
-- 9 tests passed in `tests/test_risk_analysis.py`.
+- 6 tests passed in `tests/test_12_smart_schedules_api.py`.
 
 Current test coverage includes:
 
@@ -134,6 +139,7 @@ Current test coverage includes:
 - Progress tracking for personal projects and team projects, cross-user protection, and missing-token protection.
 - AI project planning for personal projects and team projects, optional generated-task creation, generated plan listing, cross-user protection, missing-token protection, and team-member generation restrictions.
 - Risk analysis preview, risk analysis creation, saved risk analysis listing, cross-user protection, low-risk calculation, high-risk overdue-task calculation, database save behavior, high-risk notification creation, and low-risk no-notification behavior.
+- Smart scheduling preview, schedule generation, saved schedule listing, optional schedule application to task due dates, personal-project protection, team-project owner/manager permissions, and missing-token protection.
 
 Important test setup notes:
 
@@ -158,6 +164,7 @@ Current pytest-related files:
 - `tests/test_09_progress_api.py`
 - `tests/test_10_project_member_roles_api.py`
 - `tests/test_11_ai_plans_api.py`
+- `tests/test_12_smart_schedules_api.py`
 - `tests/test_risk_analysis.py`
 - `tests/test_activity_log_routes.py`
 - `tests/test_report_routes.py`
@@ -705,13 +712,7 @@ Current risk analysis behavior:
 - List endpoint returns saved risk analyses ordered newest first.
 - Risk level can be `low`, `medium`, or `high`.
 - Predicted delay days is never negative.
-- The local rule-based engine considers:
-  - Total tasks.
-  - Completed tasks.
-  - Overdue tasks.
-  - Blocked tasks.
-  - Remaining estimated hours.
-  - Days until project deadline.
+- The local rule-based engine considers total tasks, completed tasks, overdue tasks, blocked tasks, remaining estimated hours, and days until project deadline.
 - The engine currently uses local deterministic backend logic and is not connected to a real AI API yet.
 
 Step 20.1 risk notification behavior:
@@ -726,18 +727,99 @@ Step 20 testing:
 
 - Step 20 originally added 7 pytest tests in `tests/test_risk_analysis.py`.
 - Step 20.1 expanded `tests/test_risk_analysis.py` to 9 tests.
-- Test coverage includes:
-  - Risk preview route.
-  - Risk generation route.
-  - Saved risk list route.
-  - Cross-user personal project protection.
-  - Low-risk calculation.
-  - High-risk overdue-task calculation.
-  - Risk analysis database save behavior.
-  - High-risk notification creation.
-  - Low-risk no-notification behavior.
+- Test coverage includes risk preview route, risk generation route, saved risk list route, cross-user personal project protection, low-risk calculation, high-risk overdue-task calculation, risk analysis database save behavior, high-risk notification creation, and low-risk no-notification behavior.
 - User confirmed Step 20.1 feature test result: `9 passed`.
-- Latest full regression after Step 20 remains: `70 passed`; full regression after Step 20.1 still needs confirmation.
+
+## Step 21 — Smart Scheduling MVP Completed
+
+Step 21 added backend smart scheduling for project tasks.
+
+Step 21 endpoints:
+
+- `POST /projects/{project_id}/smart-schedules/preview`
+- `POST /projects/{project_id}/smart-schedules`
+- `GET /projects/{project_id}/smart-schedules`
+- `POST /teams/{team_id}/projects/{project_id}/smart-schedules/preview`
+- `POST /teams/{team_id}/projects/{project_id}/smart-schedules`
+- `GET /teams/{team_id}/projects/{project_id}/smart-schedules`
+
+Step 21 files:
+
+- `app/models/smart_schedule.py`
+- `app/schemas/smart_schedule_schema.py`
+- `app/services/smart_schedule_service.py`
+- `app/routers/smart_schedule_routes.py`
+- Updated `app/models/__init__.py`.
+- Updated `app/models/project.py`.
+- Updated `app/models/user.py`.
+- Updated `app/main.py`.
+- Added `tests/test_12_smart_schedules_api.py`.
+
+Tables used by Step 21:
+
+- `smart_schedules`
+- `projects`
+- `tasks`
+- `project_members`
+- `users`
+
+Current `smart_schedules` table columns:
+
+- `schedule_id`
+- `project_id`
+- `generated_by`
+- `strategy`
+- `schedule_data`
+- `applied_at`
+- `created_at`
+
+Current smart scheduling behavior:
+
+- Personal project owners can preview smart schedules.
+- Personal project owners can generate and save smart schedules.
+- Personal project owners can optionally apply the generated schedule to update incomplete task due dates.
+- Team project members can preview and list smart schedules.
+- Team project owners/managers can generate smart schedules.
+- Normal team project members cannot generate/apply saved smart schedules.
+- Completed tasks are ignored by the scheduler.
+- Incomplete tasks are sorted by priority: high, medium, then low.
+- The scheduler uses daily capacity hours, defaults to 4 hours/day, and currently supports the `balanced` strategy.
+- Schedule payloads are saved in `smart_schedules.schedule_data` as JSONB.
+- Applied schedules store `applied_at` and `applied_task_ids`.
+- The scheduler currently uses local deterministic backend logic and is not connected to a real AI API yet.
+
+Step 21 live database SQL table:
+
+```sql
+CREATE TABLE IF NOT EXISTS smart_schedules (
+    schedule_id BIGSERIAL PRIMARY KEY,
+    project_id BIGINT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+    generated_by BIGINT NULL REFERENCES users(user_id) ON DELETE SET NULL,
+    strategy VARCHAR(50) NOT NULL DEFAULT 'balanced',
+    schedule_data JSONB NOT NULL,
+    applied_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT chk_smart_schedules_strategy
+    CHECK (strategy IN ('balanced'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_smart_schedules_project_id
+ON smart_schedules(project_id);
+
+CREATE INDEX IF NOT EXISTS idx_smart_schedules_generated_by
+ON smart_schedules(generated_by);
+
+CREATE INDEX IF NOT EXISTS idx_smart_schedules_created_at
+ON smart_schedules(created_at);
+```
+
+Step 21 testing:
+
+- Step 21 added 6 pytest API tests in `tests/test_12_smart_schedules_api.py`.
+- Test coverage includes personal smart schedule preview, saved schedule generation, applying schedule to update task due dates, cross-user personal project protection, team project owner schedule generation, and missing-token protection.
+- User confirmed Step 21 feature test result: `6 passed`.
+- User confirmed full regression result after Step 21: `78 passed`.
 
 ## Role Management Decision
 
@@ -785,6 +867,7 @@ Important behavior:
 - `activity_logs`
 - `ai_plans`
 - `risk_analysis`
+- `smart_schedules`
 - `user_progress`
 - `chat_messages`
 - `admin_logs`
@@ -802,10 +885,10 @@ Planned/polish tables:
 
 Next feature step candidates:
 
-- Smart scheduling.
-- Real AI API integration for AI project planning and risk analysis.
+- Real AI API integration for AI project planning, risk analysis, and smart scheduling.
 - AI chat assistant.
 - Admin dashboard APIs.
+- Productivity insights expansion.
 
 Later steps:
 
