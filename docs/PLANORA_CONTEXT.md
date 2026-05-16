@@ -42,11 +42,13 @@ Completed backend steps:
 16. Activity timeline / activity logs.
 17. Progress tracking and productivity insights.
 18. Project member role update endpoint.
+18.1. Cleanup duplicate imports in team project routes.
 
 Latest confirmed regression result:
 
 - `56 passed`
 - Command used by the user: `python -m pytest -x -v`
+- Confirmed again after Step 18.1 cleanup.
 - Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
 
 Important current notes:
@@ -61,8 +63,8 @@ Important current notes:
 - Team roles and project roles are separate.
 - Updating `team_members.role` does not automatically update `project_members.role`.
 - A team `admin` is not automatically a project `manager` for existing projects.
-- Project member role update is now implemented through the Step 18 endpoint.
-- Code cleanup note: after Step 18, `app/routers/team_project_routes.py` may contain duplicate import blocks. Tests pass, but the imports should be cleaned in a later polish pass.
+- Project member role update is implemented through the Step 18 endpoint.
+- Step 18.1 cleaned duplicate import blocks in `app/routers/team_project_routes.py`; no behavior change was intended.
 
 ## Regression Testing Status — 2026-05-16
 
@@ -73,6 +75,7 @@ Latest full regression result:
 - 56 tests collected.
 - 56 tests passed.
 - Command used: `python -m pytest -x -v`.
+- Result was confirmed after Step 18.1 cleanup.
 
 Current test coverage includes:
 
@@ -531,6 +534,20 @@ Testing:
 
 No SQL migration is required for Step 18 because `project_members.role` already allows `owner`, `manager`, and `member`.
 
+## Step 18.1 — Import Cleanup Completed
+
+Step 18.1 cleaned duplicate import blocks in `app/routers/team_project_routes.py` after Step 18.
+
+Behavior:
+
+- No endpoint behavior was changed.
+- The project-member role update endpoint remains the same.
+- The cleanup only removed duplicate imports and kept one complete import block.
+
+Testing:
+
+- User confirmed full regression result after Step 18.1: `56 passed`.
+
 ## Role Management Decision
 
 There are two separate membership systems:
@@ -591,11 +608,6 @@ Planned/polish tables:
 - Optional report export history table only if the system later needs saved/download history. Step 15 does not need it.
 
 ## Roadmap From Here
-
-Immediate cleanup:
-
-- Clean duplicate import blocks in `app/routers/team_project_routes.py` after Step 18.
-- Keep expanding pytest coverage for future features and edge cases.
 
 Next feature step candidates:
 
