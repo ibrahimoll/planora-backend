@@ -21,6 +21,7 @@ from app.services.deadline_reminder_service import (
 
 DBSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_verified_user)]
+DeadlineReminderLimitQuery = Annotated[int, Query(ge=1, le=100)]
 
 router = APIRouter(
     prefix="/deadline-reminders",
@@ -65,7 +66,7 @@ def run_deadline_reminders(
 def list_my_deadline_reminders(
     db: DBSession,
     current_user: CurrentUser,
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: DeadlineReminderLimitQuery = 50,
 ):
     return get_my_deadline_reminders(
         db=db,
