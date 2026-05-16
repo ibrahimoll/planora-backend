@@ -43,20 +43,21 @@ Completed backend steps:
 21. Smart scheduling MVP.
 22. Admin dashboard backend.
 23. Admin Control Center foundation — admin user management.
+23.1. Admin Project Oversight.
 
 Latest confirmed full regression result:
 
-- `90 passed`
-- Confirmed after Step 23 Admin User Management.
-- Previous confirmed full regression after Step 22 was `82 passed`.
+- `96 passed`
+- Confirmed after Step 23.1 Admin Project Oversight.
+- Previous confirmed full regression after Step 23 was `90 passed`.
 - Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
 
 Latest completed feature step:
 
-- Step 23 — Admin Control Center foundation / Admin User Management.
-- Added 8 new admin user-management API tests.
-- Step 23 increased the suite from `82 passed` to `90 passed`.
-- Future admin expansion features should be treated as Step 23.x substeps, not separate top-level steps, because they belong to the same Admin Control Center module.
+- Step 23.1 — Admin Project Oversight.
+- Added 6 new admin project-oversight API tests.
+- Step 23.1 increased the suite from `90 passed` to `96 passed`.
+- Future admin expansion features should continue as Step 23.x substeps, not separate top-level steps, because they belong to the same Admin Control Center module.
 
 ## Current Main Tables
 
@@ -525,11 +526,64 @@ git commit -m "Add admin user management endpoints"
 git push
 ```
 
+## Step 23.1 — Admin Project Oversight Completed
+
+Step 23.1 added admin-only project oversight and moderation APIs for the web admin dashboard.
+
+Endpoints:
+
+- `GET /admin/projects`
+- `GET /admin/projects/{project_id}`
+- `PATCH /admin/projects/{project_id}/status`
+
+Files added/updated:
+
+- Added `app/schemas/admin_project_oversight_schema.py`.
+- Added `app/services/admin_project_oversight_service.py`.
+- Added `app/routers/admin_project_oversight_routes.py`.
+- Updated `app/main.py` to include `admin_project_oversight_router`.
+- Added `tests/test_14_admin_project_oversight_api.py`.
+
+Tables used:
+
+- `projects`
+- `tasks`
+- `users`
+- `teams`
+- `project_members`
+- `risk_analysis`
+- `admin_logs`
+
+Current behavior:
+
+- Admins can list all personal and team projects.
+- Admins can filter projects by project type, status, owner, team, and search text.
+- Admins can view detailed project information.
+- Project detail includes owner details, team details, task counts, overdue task count, blocked task count, completion percentage, members count, and latest risk analysis.
+- Admins can change project status to allowed project status values.
+- Project status changes create rows in `admin_logs`.
+- Normal users receive `403 Forbidden` with `Admin access required.` when accessing admin project oversight routes.
+- Invalid status values return FastAPI/Pydantic validation errors.
+
+Testing:
+
+- Step 23.1 added 6 admin project-oversight API tests.
+- Test coverage includes normal-user denial, listing personal/team projects, filters, project detail with latest risk, project status moderation, admin log creation, and invalid status validation.
+- User confirmed full regression result after Step 23.1: `96 passed`.
+
+Commit message used/recommended:
+
+```bash
+git add .
+git commit -m "Add admin project oversight endpoints"
+git push
+```
+
 ## Admin Control Center Roadmap
 
 The admin should be an overpowered but audited system commander. Admin expansion belongs under Step 23 as substeps:
 
-- Step 23.1 — Admin Project Oversight.
+- Step 23.1 — Admin Project Oversight. ✅ Completed.
 - Step 23.2 — Admin Task Oversight.
 - Step 23.3 — Admin Risk Center.
 - Step 23.4 — Admin Reports Center.
@@ -538,19 +592,19 @@ The admin should be an overpowered but audited system commander. Admin expansion
 
 Recommended immediate next substep:
 
-- Step 23.1 — Admin Project Oversight.
+- Step 23.2 — Admin Task Oversight.
 
-Step 23.1 should include:
+Step 23.2 should include:
 
-- `GET /admin/projects`
-- `GET /admin/projects/{project_id}`
-- Optional `PATCH /admin/projects/{project_id}/status`
-- List all personal/team projects.
-- Filter by project type, status, owner, team, deadline, and search text.
-- View project owner/team details.
-- View project task counts, overdue count, blocked count, completion percentage, and latest risk level.
-- Allow admin moderation through status changes such as `on_hold`, `cancelled`, or restoring to `in_progress`.
-- Create `admin_logs` rows for admin project status changes.
+- `GET /admin/tasks`
+- `GET /admin/tasks/{task_id}`
+- Optional `PATCH /admin/tasks/{task_id}/status`
+- Optional `PATCH /admin/tasks/{task_id}/assignment`
+- List all tasks across all projects.
+- Filter tasks by status, priority, project, assignee, creator, overdue, unassigned, and search text.
+- View task project, owner, team, assignee, creator, due date, hours, comments/attachments counts, and overdue status.
+- Allow admin moderation through status changes such as blocked, todo, in_progress, or completed.
+- Create `admin_logs` rows for admin task status and assignment changes.
 
 Step 23.x design rule:
 
@@ -617,6 +671,7 @@ Current pytest-related files:
 - `tests/test_11_ai_plans_api.py`
 - `tests/test_12_smart_schedules_api.py`
 - `tests/test_13_admin_user_management_api.py`
+- `tests/test_14_admin_project_oversight_api.py`
 - `tests/test_admin_dashboard_routes.py`
 - `tests/test_risk_analysis.py`
 - `tests/test_activity_log_routes.py`
@@ -654,7 +709,7 @@ Future testing rule:
 
 Recommended next step:
 
-- Step 23.1 — Admin Project Oversight.
+- Step 23.2 — Admin Task Oversight.
 
 After completing the Admin Control Center substeps, continue with:
 
