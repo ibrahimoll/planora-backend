@@ -16,3 +16,4 @@ from app.models.deadline_reminder import DeadlineReminder
 from app.models.activity_log import ActivityLog
 from app.models.user_progress import UserProgress
 from app.models.ai_plan import AIPlan
+from app.models.risk_analysis import RiskAnalysis

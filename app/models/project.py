@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from app.models.activity_log import ActivityLog
     from app.models.user_progress import UserProgress
     from app.models.ai_plan import AIPlan
+    from app.models.risk_analysis import RiskAnalysis
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -154,6 +155,11 @@ class Project(Base):
     )
 
     ai_plans: Mapped[list["AIPlan"]] = relationship(
+        back_populates="project",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
+    )
+
+    risk_analyses: Mapped[list["RiskAnalysis"]] = relationship(
         back_populates="project",
         cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
