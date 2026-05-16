@@ -18,10 +18,9 @@ Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Googl
 
 Latest confirmed full regression result:
 
-- `101 passed`
-- Confirmed after Admin Control Center expansion from Step 23.2 through Step 23.6.
-- Previous confirmed result was `96 passed` after Step 23.1 Admin Project Oversight.
-- Step 25 code and tests were added directly to GitHub, but local pytest confirmation is still needed after pulling.
+- `105 passed`
+- Confirmed after Step 25 Productivity Insights Center.
+- Previous confirmed result was `101 passed` after Admin Control Center expansion from Step 23.2 through Step 23.6.
 - Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
 
 Completed backend steps:
@@ -64,7 +63,7 @@ Latest completed feature group:
 - Step 25 — Productivity Insights Center.
 - Added `GET /insights/me`.
 - Added `tests/test_16_productivity_insights_api.py`.
-- Expected full regression result after local verification: `105 passed` if the previous `101 passed` suite is unchanged.
+- Confirmed local pytest result: `105 passed`.
 
 ## Current Main Tables
 
@@ -313,7 +312,7 @@ Current behavior:
 Testing:
 
 - Step 25 added 4 API tests.
-- Expected full regression after pulling and local test verification: previous `101 passed` + 4 new tests = `105 passed`.
+- User confirmed Step 25 feature tests and full regression result: `105 passed`.
 
 ## Role Management Decision
 
