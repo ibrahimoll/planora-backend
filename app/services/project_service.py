@@ -10,13 +10,6 @@ from app.models.team_member import TeamMember
 from app.models.user import User
 from app.schemas.activity_log_schema import ActivityLogEventType
 from app.schemas.project_schema import (
-    ProjectCreate,
-    ProjectMemberRole,
-    ProjectStatus,
-    ProjectUpdate,
-    TeamProjectCreate,
-)
-from app.schemas.project_schema import (
     ProjectAssignableRole,
     ProjectCreate,
     ProjectMemberRole,

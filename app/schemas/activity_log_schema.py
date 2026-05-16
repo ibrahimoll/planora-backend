@@ -25,6 +25,8 @@ class ActivityLogEventType(StrEnum):
 
     DEADLINE_REMINDER_GENERATED = "deadline_reminder_generated"
 
+    AI_PLAN_GENERATED = "ai_plan_generated"
+
 
 class ActivityLogResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
