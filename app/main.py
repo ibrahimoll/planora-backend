@@ -21,6 +21,7 @@ from app.routers.risk_analysis_routes import router as risk_analysis_router
 from app.routers.smart_schedule_routes import router as smart_schedule_router
 from app.routers.admin_dashboard_routes import router as admin_dashboard_router
 from app.routers.admin_user_management_routes import router as admin_user_management_router
+from app.routers.admin_project_oversight_routes import router as admin_project_oversight_router
 
 
 app = FastAPI(
@@ -58,6 +59,7 @@ app.include_router(risk_analysis_router)
 app.include_router(smart_schedule_router)
 app.include_router(admin_dashboard_router)
 app.include_router(admin_user_management_router)
+app.include_router(admin_project_oversight_router)
 
 
 @app.get("/")
