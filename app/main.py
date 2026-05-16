@@ -23,6 +23,7 @@ from app.routers.admin_dashboard_routes import router as admin_dashboard_router
 from app.routers.admin_user_management_routes import router as admin_user_management_router
 from app.routers.admin_project_oversight_routes import router as admin_project_oversight_router
 from app.routers.admin_task_oversight_routes import router as admin_task_oversight_router
+from app.routers.admin_risk_report_routes import router as admin_risk_report_router
 
 app = FastAPI(
     title="Planora API",
@@ -60,6 +61,7 @@ app.include_router(admin_dashboard_router)
 app.include_router(admin_user_management_router)
 app.include_router(admin_project_oversight_router)
 app.include_router(admin_task_oversight_router)
+app.include_router(admin_risk_report_router)
 
 @app.get("/")
 def root():
