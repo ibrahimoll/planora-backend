@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from app.models.invitation import Invitation
     from app.models.deadline_reminder import DeadlineReminder
     from app.models.activity_log import ActivityLog
+    from app.models.user_progress import UserProgress
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -142,6 +143,11 @@ class Project(Base):
     )
 
     activity_logs: Mapped[list["ActivityLog"]] = relationship(
+        back_populates="project",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
+    )
+
+    user_progress_records: Mapped[list["UserProgress"]] = relationship(
         back_populates="project",
         cascade=CASCADE_ALL_DELETE_ORPHAN,
     )

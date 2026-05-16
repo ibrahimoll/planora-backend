@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from app.models.comment_mention import CommentMention
     from app.models.deadline_reminder import DeadlineReminder
     from app.models.activity_log import ActivityLog
+    from app.models.user_progress import UserProgress
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -161,4 +162,9 @@ class User(Base):
 
     activity_logs: Mapped[list["ActivityLog"]] = relationship(
         back_populates="actor",
+    )
+
+    progress_records: Mapped[list["UserProgress"]] = relationship(
+        back_populates="user",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
