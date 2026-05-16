@@ -22,14 +22,13 @@ from app.routers.smart_schedule_routes import router as smart_schedule_router
 from app.routers.admin_dashboard_routes import router as admin_dashboard_router
 from app.routers.admin_user_management_routes import router as admin_user_management_router
 from app.routers.admin_project_oversight_routes import router as admin_project_oversight_router
-
+from app.routers.admin_task_oversight_routes import router as admin_task_oversight_router
 
 app = FastAPI(
     title="Planora API",
-    description="Backend API for the Planora AI project planning and colab system",
+    description="Backend API for the Planora AI project planning and collaboration system",
     version="1.0.0",
 )
-
 
 @app.middleware("http")
 async def add_security_headers(request, call_next):
@@ -60,20 +59,13 @@ app.include_router(smart_schedule_router)
 app.include_router(admin_dashboard_router)
 app.include_router(admin_user_management_router)
 app.include_router(admin_project_oversight_router)
-
+app.include_router(admin_task_oversight_router)
 
 @app.get("/")
 def root():
-    return {
-        "message": "Planora backend is running"
-    }
-
+    return {"message": "Planora backend is running"}
 
 @app.get("/health/db")
 def database_health_check():
     result = test_database_connection()
-
-    return {
-        "message": "Database connection successful",
-        "result": result,
-    }
+    return {"message": "Database connection successful", "result": result}
