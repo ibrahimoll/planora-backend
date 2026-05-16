@@ -42,18 +42,20 @@ Completed backend steps:
 20.1. Risk notifications for high-risk projects.
 21. Smart scheduling MVP.
 22. Admin dashboard backend.
+23. Admin user management.
 
 Latest confirmed full regression result:
 
-- `82 passed`
-- Confirmed after Step 22 Admin Dashboard Backend.
+- `90 passed`
+- Confirmed after Step 23 Admin User Management.
+- Previous confirmed full regression after Step 22 was `82 passed`.
 - Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
 
 Latest completed feature step:
 
-- Step 22 — Admin Dashboard Backend.
-- Added 4 new admin dashboard tests.
-- Previous result after Step 21 was `78 passed`; Step 22 increased the suite to `82 passed`.
+- Step 23 — Admin User Management.
+- Added 8 new admin user-management API tests.
+- Step 23 increased the suite from `82 passed` to `90 passed`.
 
 ## Current Main Tables
 
@@ -98,9 +100,9 @@ Admin access rule:
 
 - Public registration must always create normal users with `role = 'user'`.
 - Never allow public registration to accept `role = 'admin'`.
-- A user becomes admin only when `users.role = 'admin'` in PostgreSQL or when a future existing-admin endpoint promotes them.
-- First admin should be promoted manually in PostgreSQL.
-- Future admin promotion should be implemented in Step 23 through an admin-only endpoint.
+- A user becomes admin only when `users.role = 'admin'` in PostgreSQL or when an existing admin promotes them through the admin-only role endpoint.
+- First admin should still be promoted manually in PostgreSQL.
+- After the first admin exists, admins can promote or demote other users through Step 23 Admin User Management.
 
 Manual first-admin SQL:
 
@@ -465,12 +467,77 @@ git commit -m "Add admin dashboard backend endpoints"
 git push
 ```
 
+## Step 23 — Admin User Management Completed
+
+Step 23 added admin-only user management APIs for the web admin dashboard.
+
+Endpoints:
+
+- `GET /admin/users/{user_id}`
+- `PATCH /admin/users/{user_id}/deactivate`
+- `PATCH /admin/users/{user_id}/activate`
+- `PATCH /admin/users/{user_id}/role`
+
+Files added/updated:
+
+- Added `app/schemas/admin_user_management_schema.py`.
+- Added `app/services/admin_user_management_service.py`.
+- Added `app/routers/admin_user_management_routes.py`.
+- Updated `app/main.py` to include `admin_user_management_router`.
+- Added `tests/test_13_admin_user_management_api.py`.
+
+Tables used:
+
+- `users`
+- `projects`
+- `tasks`
+- `notifications`
+- `admin_logs`
+
+Current behavior:
+
+- Admins can view detailed user information with related counts.
+- Admins can deactivate users.
+- Admins can activate users.
+- Admins can change another user's role between `user` and `admin`.
+- Public registration still cannot create admins.
+- First admin still needs to be promoted manually in PostgreSQL.
+- After the first admin exists, future admin promotions can be done through `PATCH /admin/users/{user_id}/role`.
+- Admin actions create rows in `admin_logs`.
+- Admins cannot deactivate their own admin account.
+- Admins cannot remove their own admin role.
+- The backend protects against removing/deactivating the last active verified admin.
+- Normal users receive `403 Forbidden` with `Admin access required.` when accessing admin user-management routes.
+- Invalid role values return FastAPI/Pydantic validation errors.
+
+Testing:
+
+- Step 23 added 8 admin user-management API tests.
+- Test coverage includes normal-user denial, user detail with counts, activate/deactivate, admin logs, self-deactivation blocking, promotion, demotion, self-demotion blocking, and invalid role validation.
+- User confirmed full regression result after Step 23: `90 passed`.
+
+Commit message used/recommended:
+
+```bash
+git add .
+git commit -m "Add admin user management endpoints"
+git push
+```
+
 ## Role Management Decision
 
-There are two separate membership systems:
+There are separate role systems in Planora:
 
-- `team_members.role`: `owner`, `admin`, `member`.
-- `project_members.role`: `owner`, `manager`, `member`.
+- Global user role: `users.role`: `user`, `admin`.
+- Team membership role: `team_members.role`: `owner`, `admin`, `member`.
+- Project membership role: `project_members.role`: `owner`, `manager`, `member`.
+
+Global admin role endpoint:
+
+- `PATCH /admin/users/{user_id}/role` updates `users.role`.
+- Only global admins can access this endpoint.
+- This controls access to admin dashboard/admin management routes.
+- This does not automatically change team or project membership roles.
 
 Team role endpoint:
 
@@ -490,6 +557,7 @@ Project role endpoint:
 
 Important behavior:
 
+- If a user is changed to global `admin`, they can access admin dashboard routes.
 - If a user is changed to team `admin`, `GET /teams/{team_id}/members` should show admin.
 - `GET /teams/{team_id}/projects/{project_id}/members` can still show project `member` for existing projects because that reads `project_members.role`.
 - This is expected, not a bug.
@@ -513,6 +581,7 @@ Current pytest-related files:
 - `tests/test_10_project_member_roles_api.py`
 - `tests/test_11_ai_plans_api.py`
 - `tests/test_12_smart_schedules_api.py`
+- `tests/test_13_admin_user_management_api.py`
 - `tests/test_admin_dashboard_routes.py`
 - `tests/test_risk_analysis.py`
 - `tests/test_activity_log_routes.py`
@@ -550,20 +619,20 @@ Future testing rule:
 
 Recommended next step:
 
-- Step 23 — Admin User Management.
+- Step 24 — AI Chat Assistant MVP.
 
-Step 23 should include:
+Step 24 should include:
 
-- Admin deactivate user.
-- Admin activate user.
-- Admin change user role.
-- Admin view user details.
-- Admin log creation when admin performs actions.
+- Backend chat endpoint for project-specific AI assistant messages.
+- Store user and AI messages in `chat_messages`.
+- Use local deterministic/rule-based assistant logic first.
+- Support personal projects and team projects with the same access rules used by other project features.
+- Keep the API contract ready for later OpenAI/Gemini replacement.
+- Include pytest coverage for permissions, saved messages, and assistant response behavior.
 
 Later feature step candidates:
 
-- Real AI API integration for AI project planning, risk analysis, and smart scheduling.
-- AI chat assistant.
+- Real AI API integration for AI project planning, risk analysis, smart scheduling, and AI chat.
 - Productivity insights expansion.
 - CORS/frontend/mobile integration.
 - Firebase FCM for push notifications.
