@@ -42,7 +42,7 @@ Completed backend steps:
 20.1. Risk notifications for high-risk projects.
 21. Smart scheduling MVP.
 22. Admin dashboard backend.
-23. Admin user management.
+23. Admin Control Center foundation — admin user management.
 
 Latest confirmed full regression result:
 
@@ -53,9 +53,10 @@ Latest confirmed full regression result:
 
 Latest completed feature step:
 
-- Step 23 — Admin User Management.
+- Step 23 — Admin Control Center foundation / Admin User Management.
 - Added 8 new admin user-management API tests.
 - Step 23 increased the suite from `82 passed` to `90 passed`.
+- Future admin expansion features should be treated as Step 23.x substeps, not separate top-level steps, because they belong to the same Admin Control Center module.
 
 ## Current Main Tables
 
@@ -467,9 +468,9 @@ git commit -m "Add admin dashboard backend endpoints"
 git push
 ```
 
-## Step 23 — Admin User Management Completed
+## Step 23 — Admin Control Center Foundation Completed
 
-Step 23 added admin-only user management APIs for the web admin dashboard.
+Step 23 added admin-only user management APIs for the web admin dashboard. This is the foundation of the wider Admin Control Center. Future admin project/task/risk/report powers should be implemented as Step 23.x substeps, not as separate top-level steps.
 
 Endpoints:
 
@@ -523,6 +524,40 @@ git add .
 git commit -m "Add admin user management endpoints"
 git push
 ```
+
+## Admin Control Center Roadmap
+
+The admin should be an overpowered but audited system commander. Admin expansion belongs under Step 23 as substeps:
+
+- Step 23.1 — Admin Project Oversight.
+- Step 23.2 — Admin Task Oversight.
+- Step 23.3 — Admin Risk Center.
+- Step 23.4 — Admin Reports Center.
+- Step 23.5 — Admin Logs Filters and Audit Improvements.
+- Step 23.6 — Admin User Search/Filters and User Activity View.
+
+Recommended immediate next substep:
+
+- Step 23.1 — Admin Project Oversight.
+
+Step 23.1 should include:
+
+- `GET /admin/projects`
+- `GET /admin/projects/{project_id}`
+- Optional `PATCH /admin/projects/{project_id}/status`
+- List all personal/team projects.
+- Filter by project type, status, owner, team, deadline, and search text.
+- View project owner/team details.
+- View project task counts, overdue count, blocked count, completion percentage, and latest risk level.
+- Allow admin moderation through status changes such as `on_hold`, `cancelled`, or restoring to `in_progress`.
+- Create `admin_logs` rows for admin project status changes.
+
+Step 23.x design rule:
+
+- Admin powers can be strong, but destructive actions should be avoided unless needed.
+- Prefer visibility, moderation, status changes, audit logs, and reports.
+- Critical admin actions must create `admin_logs` rows.
+- Admin should not silently bypass all project/team rules without traceability.
 
 ## Role Management Decision
 
@@ -618,6 +653,10 @@ Future testing rule:
 ## Roadmap From Here
 
 Recommended next step:
+
+- Step 23.1 — Admin Project Oversight.
+
+After completing the Admin Control Center substeps, continue with:
 
 - Step 24 — AI Chat Assistant MVP.
 
