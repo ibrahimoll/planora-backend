@@ -1,5 +1,7 @@
 # Planora Backend Context
 
+Last updated: 2026-05-16
+
 ## Main Idea
 
 Planora is an AI-powered project planning and collaboration system with:
@@ -9,40 +11,10 @@ Planora is an AI-powered project planning and collaboration system with:
 - No guest access past authentication.
 - Personal Project Mode.
 - Team Collaboration Mode.
-- AI project planning MVP implemented in Step 19 using a local rule-based generator.
-- Risk analysis / delay prediction MVP implemented in Step 20 using a local rule-based risk engine.
-- High-risk project notifications implemented in Step 20.1 using the existing notifications system.
-- Smart scheduling MVP implemented in Step 21 using a local deterministic scheduling engine.
-- Productivity insights expansion, real AI API integration, and AI chat assistant planned for later phases.
 
 The backend currently uses FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, Google social login, SMTP email for verification/reset flows, and local file storage for development.
 
-Current AI/status intelligence features:
-
-- AI Project Planning MVP exists.
-- It saves generated plans in `ai_plans`.
-- It can create tasks from generated plans.
-- It currently uses `local_rule_based_v1`.
-- Risk Analysis / Delay Prediction MVP exists.
-- It saves generated risk snapshots in `risk_analysis`.
-- It calculates risk using project deadline, task completion, overdue tasks, blocked tasks, and remaining estimated hours.
-- When a saved risk analysis is `high`, Step 20.1 creates in-app `risk` notifications for the affected project users.
-- Smart Scheduling MVP exists.
-- It saves generated schedule snapshots in `smart_schedules`.
-- It can preview schedules without modifying tasks.
-- It can optionally apply generated schedules by updating incomplete task due dates.
-- It currently uses a local deterministic balanced scheduling strategy.
-- These features are not connected to OpenAI, Gemini, or another real AI API yet.
-- Later, only the generator/analyzer/scheduler logic inside service files should need replacement while keeping the same API contracts.
-
-Firebase decision:
-
-- Firebase Cloud Messaging will be used later for real mobile push notifications.
-- Firebase Storage will be used later for attachments/files.
-- For now, notifications are stored as in-app rows in the `notifications` table.
-- For now, attachments are stored locally during backend development.
-
-## Current Verified Status — 2026-05-16
+## Current Verified Status
 
 Completed backend steps:
 
@@ -69,786 +41,19 @@ Completed backend steps:
 20. Risk analysis / delay prediction MVP.
 20.1. Risk notifications for high-risk projects.
 21. Smart scheduling MVP.
+22. Admin dashboard backend.
 
 Latest confirmed full regression result:
 
-- `78 passed`
-- Confirmed after Step 21 Smart Scheduling MVP.
+- `82 passed`
+- Confirmed after Step 22 Admin Dashboard Backend.
 - Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
 
-Latest confirmed Step 21 feature test result:
-
-- `6 passed`
-- Command used by the user: `python -m pytest tests/test_12_smart_schedules_api.py -v`.
-- Confirmed after adding Smart Scheduling MVP.
-
-Important current notes:
-
-- Google-created accounts cannot use Swagger password authorization unless they set a Planora password through forgot/reset password.
-- Google-created users normally authenticate through `POST /auth/google` and receive a Planora JWT.
-- Protected routes require active and email-verified Planora users.
-- Missing/invalid bearer tokens return `401 Unauthorized` through the auth dependency.
-- Authenticated users who are not allowed to perform an action should receive `403 Forbidden`.
-- `notifications.type` must allow: `task`, `project`, `team`, `comment`, `mention`, `invite`, `deadline`, `ai`, `risk`, `system`.
-- `activity_logs.event_type` must allow `ai_plan_generated` after Step 19.
-- If invitation, mention, deadline, or risk notifications fail when inserting notification types, fix the live PostgreSQL notification check constraint.
-- If AI plan activity logging fails, fix the live PostgreSQL `activity_logs` check constraint to include `ai_plan_generated`.
-- Team roles and project roles are separate.
-- Updating `team_members.role` does not automatically update `project_members.role`.
-- A team `admin` is not automatically a project `manager` for existing projects.
-- Project member role update is implemented through the Step 18 endpoint.
-- Step 18.1 cleaned duplicate import blocks in `app/routers/team_project_routes.py`; no behavior change was intended.
-
-## Regression Testing Status — 2026-05-16
-
-A pytest regression suite exists in the `tests/` folder and should be used after every backend feature step.
-
-Latest full regression result:
-
-- 78 tests passed.
-- Result was confirmed after Step 21 Smart Scheduling MVP.
-
-Latest Step 21 feature test result:
-
-- 6 tests passed in `tests/test_12_smart_schedules_api.py`.
-
-Current test coverage includes:
-
-- Authentication registration, weak-password rejection, verified-login behavior, `/auth/me`, duplicate email rejection, and missing-token protection.
-- Personal project CRUD and cross-user access protection.
-- Personal task CRUD and completed-task timestamp behavior.
-- Team creation, owner membership, adding members, and updating team member roles.
-- Team project creation and team task update flow.
-- Project member role update permissions and validation.
-- Personal task comments CRUD.
-- Team comment mentions creating unread `mention` notifications.
-- Notification unread count and mark-as-read behavior.
-- Team invitation accept and reject flows.
-- Profile route availability.
-- Attachment route protection and attachment filename/path-traversal security helpers.
-- Rate-limit blocking behavior.
-- Deadline reminder admin-only scan permissions.
-- Deadline reminder due-soon and overdue notification creation.
-- Deadline reminder duplicate-prevention behavior.
-- Deadline reminder history listing through `/deadline-reminders/me`.
-- Deadline scan ignoring completed tasks.
-- Export project report success for owner.
-- Export project report cross-user protection.
-- Export project report missing-token protection.
-- Activity log listing, ordering, event-type filtering, pagination, project isolation, personal-project protection, team-member access, and unauthenticated access protection.
-- Progress tracking for personal projects and team projects, cross-user protection, and missing-token protection.
-- AI project planning for personal projects and team projects, optional generated-task creation, generated plan listing, cross-user protection, missing-token protection, and team-member generation restrictions.
-- Risk analysis preview, risk analysis creation, saved risk analysis listing, cross-user protection, low-risk calculation, high-risk overdue-task calculation, database save behavior, high-risk notification creation, and low-risk no-notification behavior.
-- Smart scheduling preview, schedule generation, saved schedule listing, optional schedule application to task due dates, personal-project protection, team-project owner/manager permissions, and missing-token protection.
-
-Important test setup notes:
-
-- Tests use `TEST_DATABASE_URL`, not the normal development `DATABASE_URL`.
-- The current local test database is `planora_test_db`.
-- `tests/conftest.py` overrides FastAPI `get_db()` to use the test database.
-- `tests/conftest.py` disables real outbound verification/password-reset emails during tests.
-- `tests/conftest.py` imports the FastAPI instance as `fastapi_app` to avoid shadowing it with the Python `app` package.
-- The test database schema is dropped and recreated by pytest, so never point `TEST_DATABASE_URL` to `planora_db`.
-
-Current pytest-related files:
-
-- `tests/conftest.py`
-- `tests/__init__.py`
-- `tests/test_01_auth_api.py`
-- `tests/test_02_personal_projects_tasks_api.py`
-- `tests/test_03_teams_team_projects_tasks_api.py`
-- `tests/test_04_comments_mentions_notifications_api.py`
-- `tests/test_05_invitations_api.py`
-- `tests/test_06_profile_attachments_smoke_api.py`
-- `tests/test_07_deadline_reminders_api.py`
-- `tests/test_09_progress_api.py`
-- `tests/test_10_project_member_roles_api.py`
-- `tests/test_11_ai_plans_api.py`
-- `tests/test_12_smart_schedules_api.py`
-- `tests/test_risk_analysis.py`
-- `tests/test_activity_log_routes.py`
-- `tests/test_report_routes.py`
-- `tests/test_attachment_security.py`
-- `tests/test_rate_limit.py`
-
-Standard local pytest command pattern:
-
-```powershell
-$pgPassword = Read-Host "Enter your PostgreSQL postgres password"
-$encodedPassword = [uri]::EscapeDataString($pgPassword)
-$env:TEST_DATABASE_URL = "postgresql+psycopg://postgres:$encodedPassword@localhost:5432/planora_test_db"
-python -m pytest -x -v
-```
-
-Useful local commands:
-
-```powershell
-python -m pytest --collect-only -q
-python -m pytest --cov=app --cov-report=term-missing
-python -m compileall app tests
-python -m pip check
-```
-
-Future testing rule:
-
-- Every new backend feature step should include pytest tests in the same style before the step is considered fully done.
-- Prefer API-level tests with `TestClient`, isolated PostgreSQL test database, disabled outbound email, and clear assertions for permissions, success cases, and edge cases.
-- Keep using `python -m pytest -x -v` as the first full regression check.
-- User prefers pytest tests and does not want long PowerShell API scripts by default.
-
-## Step 12 — Invitation System Completed
-
-Step 12 uses the existing `invitations` table. Do not create a separate `team_invitations` table.
-
-Current invitation flow:
-
-- Team owner/admin invites by Planora username.
-- Backend resolves `users.username` to `invited_user_id`.
-- `email` stays `NULL` for current registered-user app flow.
-- Backend creates a pending row in `invitations`.
-- Backend creates an in-app notification with `type = invite`.
-- Invited user can list pending invitations.
-- Invited user can accept or reject.
-- Accepting adds the user to `team_members`.
-- Accepting also adds the user to existing team projects as project `member`, unless already present.
-
-Step 12 files:
-
-- `app/models/invitation.py`
-- `app/schemas/invitation_schema.py`
-- `app/services/invitation_service.py`
-- `app/routers/invitation_routes.py`
-- `app/main.py` includes `invitation_router`.
-
-Step 12 endpoints:
-
-- `POST /teams/{team_id}/invitations`
-- `GET /invitations/me`
-- `POST /invitations/{invitation_id}/accept`
-- `POST /invitations/{invitation_id}/reject`
-
-Current invitation table columns:
-
-- `invitation_id`
-- `invited_by`
-- `invited_user_id`
-- `email`
-- `team_id`
-- `project_id`
-- `role`
-- `status`
-- `expires_at`
-- `created_at`
-- `responded_at`
-
-Invitation status values:
-
-- `pending`
-- `accepted`
-- `rejected`
-- `expired`
-
-Invitation role values:
-
-- `admin`
-- `manager`
-- `member`
-
-Team invitation role rule:
-
-- Team invitations should only use `admin` or `member`.
-- `manager` is for project-level invitations later.
-- `owner` should not be assignable through normal invitations.
-
-Duplicate invite rule:
-
-- Prevent duplicate pending invitations for the same team and same invited user.
-
-Recommended partial unique index:
-
-```sql
-CREATE UNIQUE INDEX IF NOT EXISTS uq_invitations_pending_team_user
-ON invitations(team_id, invited_user_id)
-WHERE status = 'pending' AND project_id IS NULL;
-```
-
-Notification constraint fix if needed:
-
-```sql
-ALTER TABLE notifications
-DROP CONSTRAINT IF EXISTS fk_notifications_type;
-
-ALTER TABLE notifications
-DROP CONSTRAINT IF EXISTS chk_notifications_type;
-
-ALTER TABLE notifications
-ADD CONSTRAINT chk_notifications_type
-CHECK (
-    type IN (
-        'task',
-        'project',
-        'team',
-        'comment',
-        'mention',
-        'invite',
-        'deadline',
-        'ai',
-        'risk',
-        'system'
-    )
-);
-```
-
-## Step 13 — Mentions in Comments Completed
-
-Step 13 adds `@username` mentions inside task comments.
-
-Current mention behavior:
-
-- User writes a comment containing one or more usernames, for example `@ali`.
-- Backend parses mentioned usernames from `comment_text`.
-- Backend ignores duplicate usernames inside the same comment.
-- Backend checks that the username exists and belongs to the same project before creating a mention.
-- For team projects, only project members can be mentioned.
-- For personal projects, the system should not notify random outside users.
-- Backend saves mention rows in `comment_mentions`.
-- Backend creates in-app notifications with `type = mention`.
-- The author should not receive a mention notification for mentioning themselves.
-- When a comment is updated, old mention rows are replaced based on the new comment text.
-- When a comment is deleted, related mention rows are deleted through cascade.
-
-Step 13 files:
-
-- `app/models/comment_mention.py`
-- Updated `app/models/comment.py`
-- Updated `app/models/user.py`
-- Updated `app/models/__init__.py`
-- Updated `app/services/comment_service.py`
-- Updated `app/routers/comment_routes.py`
-
-Current `comment_mentions` table columns:
-
-- `mention_id`
-- `comment_id`
-- `project_id`
-- `task_id`
-- `mentioned_user_id`
-- `mentioned_by`
-- `created_at`
-
-Important constraints/indexes:
-
-- `comment_id` references `comments(comment_id)` with `ON DELETE CASCADE`.
-- `project_id` references `projects(project_id)` with `ON DELETE CASCADE`.
-- `task_id` references `tasks(task_id)` with `ON DELETE CASCADE`.
-- `mentioned_user_id` references `users(user_id)` with `ON DELETE CASCADE`.
-- `mentioned_by` references `users(user_id)` with `ON DELETE CASCADE`.
-- Unique rule: one mentioned user should appear only once per comment.
-- Indexes should exist for `comment_id`, `project_id`, `task_id`, `mentioned_user_id`, and `mentioned_by`.
-
-## Step 14 — Deadline Reminders Completed
-
-Step 14 adds backend deadline reminder scanning and in-app deadline notifications.
-
-Current deadline reminder behavior:
-
-- Admins can manually run a deadline scan.
-- Normal users cannot run the scan.
-- Incomplete assigned tasks with `due_date` inside the scan window create `due_soon` reminders.
-- Incomplete assigned tasks with `due_date` in the past create `overdue` reminders when `include_overdue = true`.
-- Completed tasks are ignored.
-- Tasks without assignees or without due dates are ignored.
-- Duplicate reminders are prevented by the `deadline_reminders` table unique rule.
-- Reminder creation also creates an in-app notification with `type = deadline`.
-- Users can list their own reminder history.
-
-Step 14 files:
-
-- `app/models/deadline_reminder.py`
-- `app/schemas/deadline_reminder_schema.py`
-- `app/services/deadline_reminder_service.py`
-- `app/routers/deadline_reminder_routes.py`
-- Updated `app/models/task.py`
-- Updated `app/models/project.py`
-- Updated `app/models/user.py`
-- Updated `app/models/__init__.py`
-- Updated `app/main.py` to include `deadline_reminder_router`.
-- `tests/test_07_deadline_reminders_api.py`
-
-Step 14 endpoints:
-
-- `POST /deadline-reminders/run`
-- `GET /deadline-reminders/me`
-
-Current `deadline_reminders` table columns:
-
-- `reminder_id`
-- `task_id`
-- `project_id`
-- `user_id`
-- `reminder_type`
-- `due_date_snapshot`
-- `generated_at`
-
-Deadline reminder type values:
-
-- `due_soon`
-- `overdue`
-
-Important constraints/indexes:
-
-- `task_id` references `tasks(task_id)` with `ON DELETE CASCADE`.
-- `project_id` references `projects(project_id)` with `ON DELETE CASCADE`.
-- `user_id` references `users(user_id)` with `ON DELETE CASCADE`.
-- `reminder_type` must be `due_soon` or `overdue`.
-- Unique rule: one reminder per `(task_id, user_id, reminder_type, due_date_snapshot)`.
-- Indexes should exist for `task_id`, `project_id`, `user_id`, `reminder_type`, and `generated_at`.
-
-## Step 15 — Export Project Report Completed
-
-Step 15 adds an export-ready JSON project report endpoint. It does not add a new database table. It reads from existing Planora tables and returns structured project, progress, task, member, hours, and activity summary data.
-
-Step 15 endpoint:
-
-- `GET /reports/projects/{project_id}`
-
-Step 15 files:
-
-- `app/schemas/report_schema.py`
-- `app/services/report_service.py`
-- `app/routers/report_routes.py`
-- Updated `app/main.py` to include `report_router`.
-- `tests/test_report_routes.py`
-
-Tables used by Step 15:
-
-- `projects` for title, description, status, type, deadline, created/updated timestamps.
-- `tasks` for task list, task status counts, priority counts, completion percentage, overdue count, estimated hours, and actual hours.
-- `project_members` and `users` for team project member details.
-- `comments` for project comment count.
-- `attachments` for project attachment count.
-- `deadline_reminders` for project deadline reminder count.
-
-Current report behavior:
-
-- Personal project owner can export the report.
-- Team project members can export the report.
-- A user cannot export another user's personal project report.
-- Missing or invalid bearer token returns `401 Unauthorized`.
-- Unauthorized project access returns `404 Project not found` to avoid leaking project existence.
-- The endpoint returns JSON only for now; frontend/mobile can later convert it to PDF or display it as a report screen.
-
-Current report response sections:
-
-- `generated_at`
-- `project`
-- `progress`
-- `task_status_counts`
-- `task_priority_counts`
-- `hours`
-- `activity`
-- `members`
-- `tasks`
-
-Important Step 15 code fixes applied:
-
-- `ReportProjectStatus(project.status)` and `ReportProjectType(project.project_type)` are used to satisfy Pylance enum type checking.
-- `is_task_overdue()` and `build_task_report_item()` helper functions reduce SonarLint cognitive complexity in `generate_project_report()`.
-- `project.py` uses `CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"` to avoid duplicate string warnings.
-- `tests/test_report_routes.py` expects `401` for missing token and uses `pytest.approx(0.0)` for float comparison.
-
-No SQL migration is required for Step 15.
-
-## Step 16 — Activity Timeline / Activity Logs Completed
-
-Step 16 adds project activity logs for important project events.
-
-Step 16 endpoint:
-
-- `GET /projects/{project_id}/activity`
-
-Step 16 files include:
-
-- `app/models/activity_log.py`
-- `app/schemas/activity_log_schema.py`
-- `app/services/activity_log_service.py`
-- `app/routers/activity_log_routes.py`
-- Updated project, task, comment, attachment, and deadline reminder flows to create activity logs.
-- `tests/test_activity_log_routes.py`
-
-Tables used by Step 16:
-
-- `activity_logs`
-- `projects`
-- `tasks`
-- `project_members`
-- `users`
-
-Current activity behavior:
-
-- Project owners can list activity logs.
-- Team project members can list team project activity logs.
-- Non-members cannot view team project activity logs.
-- Users cannot view another user's personal project activity logs.
-- Activity logs are ordered newest first.
-- Activity logs support event-type filtering.
-- Activity logs support `limit` and `offset` pagination.
-- Invalid activity event type, limit, or offset returns `422`.
-- Unauthenticated access returns `401`.
-- Activity logs preserve snapshots for deleted or changed objects where needed.
-- Step 19 added `ai_plan_generated` as an additional activity event type.
-
-## Step 17 — Progress Tracking and Productivity Insights Completed
-
-Step 17 adds backend progress tracking and productivity insights.
-
-Step 17 endpoint:
-
-- `GET /projects/{project_id}/progress`
-
-Step 17 files:
-
-- `app/models/user_progress.py`
-- `app/schemas/progress_schema.py`
-- `app/services/progress_service.py`
-- `app/routers/progress_routes.py`
-- Updated `app/main.py`.
-- Updated `app/models/user.py`.
-- Updated `app/models/project.py`.
-- Updated `app/models/__init__.py`.
-- `tests/test_09_progress_api.py`
-
-Tables used by Step 17:
-
-- `projects`
-- `tasks`
-- `project_members`
-- `users`
-- `user_progress`
-
-Current progress behavior:
-
-- Personal project owner can view project progress.
-- Team project members can view team project progress.
-- Cross-user personal project access returns `404 Project not found`.
-- Missing or invalid bearer token returns `401 Unauthorized`.
-- Backend calculates total tasks, completed tasks, pending tasks, overdue tasks, task status counts, hours summary, current user progress, member progress, productivity status, and recommendations.
-- Backend upserts rows into `user_progress`.
-
-## Step 18 — Project Member Role Update Completed
-
-Step 18 adds a project-member role update endpoint for team projects.
-
-Step 18 endpoint:
-
-- `PATCH /teams/{team_id}/projects/{project_id}/members/{user_id}`
-
-Step 18 files:
-
-- Updated `app/schemas/project_schema.py` with `ProjectAssignableRole` and `ProjectMemberUpdate`.
-- Updated `app/services/project_service.py` with `update_project_member_role()`.
-- Updated `app/routers/team_project_routes.py` with the project-member role update route.
-- Added `tests/test_10_project_member_roles_api.py`.
-
-Tables used by Step 18:
-
-- `projects`
-- `project_members`
-- `team_members`
-- `users`
-
-Current project role behavior:
-
-- Only the project owner can update project member roles.
-- Allowed target roles are `manager` and `member`.
-- `owner` cannot be assigned through this endpoint.
-- The existing project owner role cannot be changed through this endpoint.
-- Project managers cannot update project member roles.
-- Missing or invalid bearer token returns `401 Unauthorized`.
-- Unauthorized role update returns `403 Forbidden`.
-- Missing project returns `404 Project not found`.
-- Missing project member returns `404 Project member not found`.
-
-Testing:
-
-- Step 18 added 4 pytest route tests.
-- User confirmed full regression result after Step 18: `56 passed`.
-
-No SQL migration is required for Step 18 because `project_members.role` already allows `owner`, `manager`, and `member`.
-
-## Step 18.1 — Import Cleanup Completed
-
-Step 18.1 cleaned duplicate import blocks in `app/routers/team_project_routes.py` after Step 18.
-
-Behavior:
-
-- No endpoint behavior was changed.
-- The project-member role update endpoint remains the same.
-- The cleanup only removed duplicate imports and kept one complete import block.
-
-Testing:
-
-- User confirmed full regression result after Step 18.1: `56 passed`.
-
-## Step 19 — AI Project Planning MVP Completed
-
-Step 19 added the first AI planning backend feature.
-
-Step 19 endpoints:
-
-- `POST /projects/{project_id}/ai-plans`
-- `GET /projects/{project_id}/ai-plans`
-- `POST /teams/{team_id}/projects/{project_id}/ai-plans`
-- `GET /teams/{team_id}/projects/{project_id}/ai-plans`
-
-Step 19 files:
-
-- `app/models/ai_plan.py`
-- `app/schemas/ai_plan_schema.py`
-- `app/services/ai_plan_service.py`
-- `app/routers/ai_plan_routes.py`
-- Updated `app/models/__init__.py`.
-- Updated `app/models/project.py`.
-- Updated `app/models/user.py`.
-- Updated `app/models/activity_log.py`.
-- Updated `app/schemas/activity_log_schema.py`.
-- Updated `app/main.py`.
-- Added `tests/test_11_ai_plans_api.py`.
-
-Tables used by Step 19:
-
-- `ai_plans`
-- `projects`
-- `tasks`
-- `project_members`
-- `users`
-- `activity_logs`
-
-Current `ai_plans` table columns:
-
-- `plan_id`
-- `project_id`
-- `generated_by`
-- `input_prompt`
-- `generated_plan`
-- `created_at`
-
-Current AI planning behavior:
-
-- Personal project owners can generate AI plans.
-- Personal project AI plans can optionally create tasks.
-- Personal project generated tasks are assigned to the current user.
-- Team project owners/managers can generate AI plans.
-- Normal team project members cannot generate AI plans.
-- Team project generated tasks are created unassigned so managers can assign them later.
-- Users can list generated AI plans for projects they can access.
-- Generated plans are saved in `ai_plans.generated_plan` as JSONB.
-- Generated plans currently use local deterministic backend logic named `local_rule_based_v1`.
-- Real OpenAI/Gemini integration is not connected yet.
-- Activity logs support `ai_plan_generated`.
-
-Step 19 live database fixes applied during Swagger testing:
-
-- Added/fixed `ai_plans` in the real development database.
-- Updated `activity_logs` event-type constraint to allow `ai_plan_generated`.
-- Fixed schema drift in the real development database:
-  - `tasks.estimated_hours` nullable.
-  - `tasks.actual_hours` nullable.
-  - `tasks.due_date` nullable.
-  - `ai_plans.generated_plan` converted to `JSONB`.
-
-Testing:
-
-- Step 19 added 7 AI plan API tests.
-- User confirmed full regression result after Step 19: `63 passed`.
-
-## Step 20 — Risk Analysis / Delay Prediction + Risk Notifications Completed
-
-Step 20 added the first risk prediction backend feature. Step 20.1 completed the notification polish for high-risk results.
-
-Step 20 endpoints:
-
-- `GET /projects/{project_id}/risk-analysis/preview`
-- `POST /projects/{project_id}/risk-analysis`
-- `GET /projects/{project_id}/risk-analysis`
-
-Step 20 files:
-
-- `app/models/risk_analysis.py`
-- `app/schemas/risk_analysis_schema.py`
-- `app/services/risk_analysis_service.py`
-- `app/routers/risk_analysis_routes.py`
-- Updated `app/models/__init__.py`.
-- Updated `app/models/project.py`.
-- Updated `app/main.py`.
-- Added/updated `tests/test_risk_analysis.py`.
-
-Tables used by Step 20:
-
-- `risk_analysis`
-- `projects`
-- `tasks`
-- `project_members`
-- `users`
-- `notifications` for Step 20.1 high-risk notifications.
-
-Current `risk_analysis` table columns:
-
-- `risk_id`
-- `project_id`
-- `risk_level`
-- `predicted_delay_days`
-- `reason`
-- `recommendation`
-- `created_at`
-
-Current risk analysis behavior:
-
-- Personal project owners can preview and generate risk analysis.
-- Team project members can access risk analysis for team projects they belong to through the shared project access helper.
-- Users cannot access another user's personal project risk analysis.
-- Preview endpoint calculates risk but does not save a row.
-- Generate endpoint calculates risk and saves a row in `risk_analysis`.
-- List endpoint returns saved risk analyses ordered newest first.
-- Risk level can be `low`, `medium`, or `high`.
-- Predicted delay days is never negative.
-- The local rule-based engine considers total tasks, completed tasks, overdue tasks, blocked tasks, remaining estimated hours, and days until project deadline.
-- The engine currently uses local deterministic backend logic and is not connected to a real AI API yet.
-
-Step 20.1 risk notification behavior:
-
-- When a saved risk analysis has `risk_level = 'high'`, the backend creates in-app notifications with `type = 'risk'`.
-- Personal project high-risk notifications go to the personal project owner.
-- Team project high-risk notifications go to project members returned from `project_members`.
-- Low and medium risk analyses do not create risk notifications.
-- Notifications are created in the same transaction as the saved risk analysis using `commit=False` inside `create_notification()`.
-
-Step 20 testing:
-
-- Step 20 originally added 7 pytest tests in `tests/test_risk_analysis.py`.
-- Step 20.1 expanded `tests/test_risk_analysis.py` to 9 tests.
-- Test coverage includes risk preview route, risk generation route, saved risk list route, cross-user personal project protection, low-risk calculation, high-risk overdue-task calculation, risk analysis database save behavior, high-risk notification creation, and low-risk no-notification behavior.
-- User confirmed Step 20.1 feature test result: `9 passed`.
-
-## Step 21 — Smart Scheduling MVP Completed
-
-Step 21 added backend smart scheduling for project tasks.
-
-Step 21 endpoints:
-
-- `POST /projects/{project_id}/smart-schedules/preview`
-- `POST /projects/{project_id}/smart-schedules`
-- `GET /projects/{project_id}/smart-schedules`
-- `POST /teams/{team_id}/projects/{project_id}/smart-schedules/preview`
-- `POST /teams/{team_id}/projects/{project_id}/smart-schedules`
-- `GET /teams/{team_id}/projects/{project_id}/smart-schedules`
-
-Step 21 files:
-
-- `app/models/smart_schedule.py`
-- `app/schemas/smart_schedule_schema.py`
-- `app/services/smart_schedule_service.py`
-- `app/routers/smart_schedule_routes.py`
-- Updated `app/models/__init__.py`.
-- Updated `app/models/project.py`.
-- Updated `app/models/user.py`.
-- Updated `app/main.py`.
-- Added `tests/test_12_smart_schedules_api.py`.
-
-Tables used by Step 21:
-
-- `smart_schedules`
-- `projects`
-- `tasks`
-- `project_members`
-- `users`
-
-Current `smart_schedules` table columns:
-
-- `schedule_id`
-- `project_id`
-- `generated_by`
-- `strategy`
-- `schedule_data`
-- `applied_at`
-- `created_at`
-
-Current smart scheduling behavior:
-
-- Personal project owners can preview smart schedules.
-- Personal project owners can generate and save smart schedules.
-- Personal project owners can optionally apply the generated schedule to update incomplete task due dates.
-- Team project members can preview and list smart schedules.
-- Team project owners/managers can generate smart schedules.
-- Normal team project members cannot generate/apply saved smart schedules.
-- Completed tasks are ignored by the scheduler.
-- Incomplete tasks are sorted by priority: high, medium, then low.
-- The scheduler uses daily capacity hours, defaults to 4 hours/day, and currently supports the `balanced` strategy.
-- Schedule payloads are saved in `smart_schedules.schedule_data` as JSONB.
-- Applied schedules store `applied_at` and `applied_task_ids`.
-- The scheduler currently uses local deterministic backend logic and is not connected to a real AI API yet.
-
-Step 21 live database SQL table:
-
-```sql
-CREATE TABLE IF NOT EXISTS smart_schedules (
-    schedule_id BIGSERIAL PRIMARY KEY,
-    project_id BIGINT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
-    generated_by BIGINT NULL REFERENCES users(user_id) ON DELETE SET NULL,
-    strategy VARCHAR(50) NOT NULL DEFAULT 'balanced',
-    schedule_data JSONB NOT NULL,
-    applied_at TIMESTAMPTZ NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    CONSTRAINT chk_smart_schedules_strategy
-    CHECK (strategy IN ('balanced'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_smart_schedules_project_id
-ON smart_schedules(project_id);
-
-CREATE INDEX IF NOT EXISTS idx_smart_schedules_generated_by
-ON smart_schedules(generated_by);
-
-CREATE INDEX IF NOT EXISTS idx_smart_schedules_created_at
-ON smart_schedules(created_at);
-```
-
-Step 21 testing:
-
-- Step 21 added 6 pytest API tests in `tests/test_12_smart_schedules_api.py`.
-- Test coverage includes personal smart schedule preview, saved schedule generation, applying schedule to update task due dates, cross-user personal project protection, team project owner schedule generation, and missing-token protection.
-- User confirmed Step 21 feature test result: `6 passed`.
-- User confirmed full regression result after Step 21: `78 passed`.
-
-## Role Management Decision
-
-There are two separate membership systems:
-
-- `team_members.role`: `owner`, `admin`, `member`.
-- `project_members.role`: `owner`, `manager`, `member`.
-
-Team role endpoint:
-
-- `PATCH /teams/{team_id}/members/{user_id}` updates `team_members.role`.
-- Only the team owner should be allowed to update team member roles.
-- Team member role update should only allow `admin` and `member`.
-- Do not allow assigning `owner` through normal role update.
-- Ownership transfer should be a separate future feature if needed.
-
-Project role endpoint:
-
-- `PATCH /teams/{team_id}/projects/{project_id}/members/{user_id}` updates `project_members.role`.
-- Only the project owner can update project member roles.
-- Project member role update allows changing between `manager` and `member`.
-- It does not allow assigning `owner` through normal role update.
-- The current project owner role cannot be changed through this endpoint.
-
-Important behavior:
-
-- If user 2 is changed to team `admin`, `GET /teams/{team_id}/members` should show admin.
-- `GET /teams/{team_id}/projects/{project_id}/members` can still show project `member` for existing projects because that reads `project_members.role`.
-- This is expected, not a bug.
+Latest completed feature step:
+
+- Step 22 — Admin Dashboard Backend.
+- Added 4 new admin dashboard tests.
+- Previous result after Step 21 was `78 passed`; Step 22 increased the suite to `82 passed`.
 
 ## Current Main Tables
 
@@ -879,19 +84,487 @@ Planned/polish tables:
 
 - `device_tokens` for Firebase Cloud Messaging tokens.
 - `notification_preferences`.
-- Optional report export history table only if the system later needs saved/download history. Step 15 does not need it.
+- Optional report export history table only if the system later needs saved/download history.
+
+## Authentication and Admin Access Rules
+
+Normal login endpoint:
+
+- `POST /auth/login`
+
+There is no separate admin login endpoint. Admins login with the same normal login flow, then protected admin routes check `users.role`.
+
+Admin access rule:
+
+- Public registration must always create normal users with `role = 'user'`.
+- Never allow public registration to accept `role = 'admin'`.
+- A user becomes admin only when `users.role = 'admin'` in PostgreSQL or when a future existing-admin endpoint promotes them.
+- First admin should be promoted manually in PostgreSQL.
+- Future admin promotion should be implemented in Step 23 through an admin-only endpoint.
+
+Manual first-admin SQL:
+
+```sql
+UPDATE users
+SET role = 'admin',
+    is_active = true,
+    is_email_verified = true
+WHERE email = 'your_email@example.com';
+```
+
+Protected route rules:
+
+- Missing or invalid bearer token returns `401 Unauthorized`.
+- Unverified or inactive users are blocked by `get_current_active_verified_user`.
+- Authenticated normal users trying to access admin routes receive `403 Forbidden` with `Admin access required.`.
+- Admin-only routes should depend on `get_current_admin_user`.
+
+Google login notes:
+
+- Google-created users authenticate through `POST /auth/google` and receive a Planora JWT.
+- Google-created accounts cannot use Swagger password authorization unless they set a Planora password through forgot/reset password.
+- `/auth/me` requires a Planora JWT, not a raw Google token.
+
+## Current AI / Intelligence Features
+
+AI Project Planning MVP:
+
+- Saves generated plans in `ai_plans`.
+- Can optionally create tasks from generated plans.
+- Uses local deterministic/rule-based logic named `local_rule_based_v1`.
+- Real OpenAI/Gemini integration is not connected yet.
+
+Risk Analysis / Delay Prediction MVP:
+
+- Saves generated risk snapshots in `risk_analysis`.
+- Calculates risk using project deadline, task completion, overdue tasks, blocked tasks, and remaining estimated hours.
+- When a saved risk analysis is `high`, the backend creates in-app `risk` notifications for affected project users.
+- Uses local deterministic/rule-based logic.
+
+Smart Scheduling MVP:
+
+- Saves generated schedule snapshots in `smart_schedules`.
+- Can preview schedules without modifying tasks.
+- Can optionally apply generated schedules by updating incomplete task due dates.
+- Uses local deterministic balanced scheduling strategy.
+
+Future AI integration rule:
+
+- Replace only generator/analyzer/scheduler logic inside service files while keeping the same API contracts.
+
+## Firebase Decision
+
+- Firebase Cloud Messaging will be used later for real mobile push notifications.
+- Firebase Storage will be used later for attachments/files.
+- For now, notifications are stored as in-app rows in the `notifications` table.
+- For now, attachments are stored locally during backend development.
+
+## Step 12 — Invitation System Completed
+
+Step 12 uses the existing `invitations` table. Do not create a separate `team_invitations` table.
+
+Endpoints:
+
+- `POST /teams/{team_id}/invitations`
+- `GET /invitations/me`
+- `POST /invitations/{invitation_id}/accept`
+- `POST /invitations/{invitation_id}/reject`
+
+Current behavior:
+
+- Team owner/admin invites by Planora username.
+- Backend resolves `users.username` to `invited_user_id`.
+- Backend creates a pending row in `invitations`.
+- Backend creates an in-app notification with `type = invite`.
+- Invited user can accept or reject.
+- Accepting adds the user to `team_members`.
+- Accepting also adds the user to existing team projects as project `member`, unless already present.
+- Prevent duplicate pending invitations for the same team and invited user.
+
+## Step 13 — Mentions in Comments Completed
+
+Step 13 adds `@username` mentions inside task comments.
+
+Current behavior:
+
+- Backend parses mentioned usernames from `comment_text`.
+- Duplicate usernames inside one comment are ignored.
+- Backend checks that the mentioned username exists and belongs to the same project.
+- Mention rows are saved in `comment_mentions`.
+- Mention notifications use `notifications.type = 'mention'`.
+- The author should not receive a notification for mentioning themselves.
+- Updating a comment replaces old mention rows based on the new text.
+
+## Step 14 — Deadline Reminders Completed
+
+Endpoints:
+
+- `POST /deadline-reminders/run`
+- `GET /deadline-reminders/me`
+
+Current behavior:
+
+- Admins can manually run a deadline scan.
+- Normal users cannot run the scan.
+- Incomplete assigned tasks near due date create `due_soon` reminders.
+- Incomplete assigned overdue tasks create `overdue` reminders when `include_overdue = true`.
+- Completed tasks are ignored.
+- Tasks without assignees or due dates are ignored.
+- Duplicate reminders are prevented by the `deadline_reminders` table unique rule.
+- Reminder creation creates an in-app notification with `type = deadline`.
+
+## Step 15 — Export Project Report Completed
+
+Endpoint:
+
+- `GET /reports/projects/{project_id}`
+
+Current behavior:
+
+- Personal project owner can export the report.
+- Team project members can export the report.
+- Cross-user personal project access returns `404 Project not found`.
+- Missing token returns `401 Unauthorized`.
+- Returns JSON only for now; frontend/mobile can later convert it to PDF or render it as a report screen.
+
+Tables used:
+
+- `projects`
+- `tasks`
+- `project_members`
+- `users`
+- `comments`
+- `attachments`
+- `deadline_reminders`
+
+## Step 16 — Activity Timeline / Activity Logs Completed
+
+Endpoint:
+
+- `GET /projects/{project_id}/activity`
+
+Current behavior:
+
+- Personal project owners can list activity logs.
+- Team project members can list team project activity logs.
+- Non-members cannot view team project activity logs.
+- Users cannot view another user's personal project activity logs.
+- Activity logs are ordered newest first.
+- Supports event-type filtering and `limit`/`offset` pagination.
+- Step 19 added `ai_plan_generated` as an activity event type.
+
+## Step 17 — Progress Tracking and Productivity Insights Completed
+
+Endpoint:
+
+- `GET /projects/{project_id}/progress`
+
+Current behavior:
+
+- Personal project owner can view project progress.
+- Team project members can view team project progress.
+- Cross-user personal project access returns `404 Project not found`.
+- Backend calculates task counts, overdue tasks, hours summary, current user progress, member progress, productivity status, and recommendations.
+- Backend upserts rows into `user_progress`.
+
+## Step 18 — Project Member Role Update Completed
+
+Endpoint:
+
+- `PATCH /teams/{team_id}/projects/{project_id}/members/{user_id}`
+
+Current behavior:
+
+- Only project owner can update project member roles.
+- Allowed target roles are `manager` and `member`.
+- `owner` cannot be assigned through this endpoint.
+- The current project owner role cannot be changed through this endpoint.
+- Project managers cannot update project member roles.
+
+## Step 18.1 — Import Cleanup Completed
+
+- Cleaned duplicate import blocks in `app/routers/team_project_routes.py`.
+- No endpoint behavior changed.
+
+## Step 19 — AI Project Planning MVP Completed
+
+Endpoints:
+
+- `POST /projects/{project_id}/ai-plans`
+- `GET /projects/{project_id}/ai-plans`
+- `POST /teams/{team_id}/projects/{project_id}/ai-plans`
+- `GET /teams/{team_id}/projects/{project_id}/ai-plans`
+
+Current behavior:
+
+- Personal project owners can generate AI plans.
+- Personal project AI plans can optionally create tasks.
+- Personal project generated tasks are assigned to the current user.
+- Team project owners/managers can generate AI plans.
+- Normal team project members cannot generate AI plans.
+- Team project generated tasks are created unassigned.
+- Generated plans are saved in `ai_plans.generated_plan` as JSONB.
+- Activity logs support `ai_plan_generated`.
+
+Testing:
+
+- Step 19 full regression result: `63 passed`.
+
+## Step 20 — Risk Analysis / Delay Prediction MVP Completed
+
+Endpoints:
+
+- `GET /projects/{project_id}/risk-analysis/preview`
+- `POST /projects/{project_id}/risk-analysis`
+- `GET /projects/{project_id}/risk-analysis`
+
+Current behavior:
+
+- Personal project owners can preview and generate risk analysis.
+- Team project members can access risk analysis for team projects they belong to.
+- Users cannot access another user's personal project risk analysis.
+- Preview calculates risk but does not save a row.
+- Generate calculates risk and saves a row in `risk_analysis`.
+- List returns saved risk analyses ordered newest first.
+- Risk level can be `low`, `medium`, or `high`.
+- Predicted delay days is never negative.
+
+## Step 20.1 — Risk Notifications Completed
+
+Current behavior:
+
+- Saved high-risk analyses create in-app notifications with `type = 'risk'`.
+- Personal project high-risk notifications go to the project owner.
+- Team project high-risk notifications go to project members.
+- Low and medium risk analyses do not create risk notifications.
+
+Testing:
+
+- Step 20.1 feature result: `9 passed`.
+
+## Step 21 — Smart Scheduling MVP Completed
+
+Endpoints:
+
+- `POST /projects/{project_id}/smart-schedules/preview`
+- `POST /projects/{project_id}/smart-schedules`
+- `GET /projects/{project_id}/smart-schedules`
+- `POST /teams/{team_id}/projects/{project_id}/smart-schedules/preview`
+- `POST /teams/{team_id}/projects/{project_id}/smart-schedules`
+- `GET /teams/{team_id}/projects/{project_id}/smart-schedules`
+
+Files:
+
+- `app/models/smart_schedule.py`
+- `app/schemas/smart_schedule_schema.py`
+- `app/services/smart_schedule_service.py`
+- `app/routers/smart_schedule_routes.py`
+- `tests/test_12_smart_schedules_api.py`
+
+Tables used:
+
+- `smart_schedules`
+- `projects`
+- `tasks`
+- `project_members`
+- `users`
+
+Current behavior:
+
+- Personal project owners can preview, generate, save, and optionally apply smart schedules.
+- Team project members can preview and list smart schedules.
+- Team project owners/managers can generate smart schedules.
+- Normal team project members cannot generate/apply saved smart schedules.
+- Completed tasks are ignored by the scheduler.
+- Incomplete tasks are sorted by priority: high, medium, then low.
+- Scheduler uses daily capacity hours and currently supports `balanced` strategy.
+- Schedule payloads are saved in `smart_schedules.schedule_data` as JSONB.
+
+Testing:
+
+- Step 21 feature result: `6 passed`.
+- Full regression after Step 21: `78 passed`.
+
+## Step 22 — Admin Dashboard Backend Completed
+
+Step 22 added backend APIs for the web admin dashboard.
+
+Endpoints:
+
+- `GET /admin/dashboard/overview`
+- `GET /admin/users`
+- `GET /admin/dashboard/recent-activity`
+- `GET /admin/logs`
+
+Files added/updated:
+
+- Added `app/models/admin_log.py`.
+- Added `app/schemas/admin_dashboard_schema.py`.
+- Added `app/services/admin_dashboard_service.py`.
+- Added `app/routers/admin_dashboard_routes.py`.
+- Updated `app/models/user.py` with admin-log relationships.
+- Updated `app/models/__init__.py` to import `AdminLog`.
+- Updated `app/dependencies/auth.py` with `get_current_admin_user`.
+- Updated `app/main.py` to include `admin_dashboard_router`.
+- Added `tests/test_admin_dashboard_routes.py`.
+
+Tables used:
+
+- `users`
+- `projects`
+- `tasks`
+- `teams`
+- `risk_analysis`
+- `notifications`
+- `activity_logs`
+- `admin_logs`
+
+Current behavior:
+
+- Admin dashboard overview returns user, project, task, team, risk, and notification statistics.
+- Admin users endpoint returns paginated users.
+- Recent activity endpoint returns newest activity logs.
+- Admin logs endpoint returns newest admin logs.
+- Admin routes require an active, verified user with `users.role = 'admin'`.
+- Normal users receive `403 Forbidden` with `Admin access required.`.
+- Missing or invalid token returns `401 Unauthorized`.
+- Admins login through the normal `/auth/login` route; there is no separate admin login.
+
+Live database SQL for `admin_logs` if needed:
+
+```sql
+CREATE TABLE IF NOT EXISTS admin_logs (
+    log_id BIGSERIAL PRIMARY KEY,
+    admin_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
+    target_user_id BIGINT NULL REFERENCES users(user_id) ON DELETE SET NULL,
+    action TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_logs_admin_id
+ON admin_logs(admin_id);
+
+CREATE INDEX IF NOT EXISTS idx_admin_logs_target_user_id
+ON admin_logs(target_user_id);
+
+CREATE INDEX IF NOT EXISTS idx_admin_logs_created_at
+ON admin_logs(created_at);
+```
+
+Testing:
+
+- Step 22 added 4 admin dashboard API tests.
+- Test coverage includes normal-user admin denial, admin dashboard overview, admin users listing, and recent activity/admin logs routes.
+- User confirmed full regression result after Step 22: `82 passed`.
+
+Commit message used/recommended:
+
+```bash
+git add .
+git commit -m "Add admin dashboard backend endpoints"
+git push
+```
+
+## Role Management Decision
+
+There are two separate membership systems:
+
+- `team_members.role`: `owner`, `admin`, `member`.
+- `project_members.role`: `owner`, `manager`, `member`.
+
+Team role endpoint:
+
+- `PATCH /teams/{team_id}/members/{user_id}` updates `team_members.role`.
+- Only the team owner should be allowed to update team member roles.
+- Team member role update should only allow `admin` and `member`.
+- Do not allow assigning `owner` through normal role update.
+- Ownership transfer should be a separate future feature if needed.
+
+Project role endpoint:
+
+- `PATCH /teams/{team_id}/projects/{project_id}/members/{user_id}` updates `project_members.role`.
+- Only the project owner can update project member roles.
+- Project member role update allows changing between `manager` and `member`.
+- It does not allow assigning `owner` through normal role update.
+- The current project owner role cannot be changed through this endpoint.
+
+Important behavior:
+
+- If a user is changed to team `admin`, `GET /teams/{team_id}/members` should show admin.
+- `GET /teams/{team_id}/projects/{project_id}/members` can still show project `member` for existing projects because that reads `project_members.role`.
+- This is expected, not a bug.
+
+## Regression Testing Status
+
+A pytest regression suite exists in the `tests/` folder and should be used after every backend feature step.
+
+Current pytest-related files:
+
+- `tests/conftest.py`
+- `tests/__init__.py`
+- `tests/test_01_auth_api.py`
+- `tests/test_02_personal_projects_tasks_api.py`
+- `tests/test_03_teams_team_projects_tasks_api.py`
+- `tests/test_04_comments_mentions_notifications_api.py`
+- `tests/test_05_invitations_api.py`
+- `tests/test_06_profile_attachments_smoke_api.py`
+- `tests/test_07_deadline_reminders_api.py`
+- `tests/test_09_progress_api.py`
+- `tests/test_10_project_member_roles_api.py`
+- `tests/test_11_ai_plans_api.py`
+- `tests/test_12_smart_schedules_api.py`
+- `tests/test_admin_dashboard_routes.py`
+- `tests/test_risk_analysis.py`
+- `tests/test_activity_log_routes.py`
+- `tests/test_report_routes.py`
+- `tests/test_attachment_security.py`
+- `tests/test_rate_limit.py`
+
+Standard local pytest command pattern:
+
+```powershell
+$pgPassword = Read-Host "Enter your PostgreSQL postgres password"
+$encodedPassword = [uri]::EscapeDataString($pgPassword)
+$env:TEST_DATABASE_URL = "postgresql+psycopg://postgres:$encodedPassword@localhost:5432/planora_test_db"
+python -m pytest -x -v
+```
+
+Useful local commands:
+
+```powershell
+python -m pytest --collect-only -q
+python -m pytest --cov=app --cov-report=term-missing
+python -m compileall app tests
+python -m pip check
+```
+
+Future testing rule:
+
+- Every new backend feature step should include pytest tests in the same style before the step is considered fully done.
+- Prefer API-level tests with `TestClient`, isolated PostgreSQL test database, disabled outbound email, and clear assertions for permissions, success cases, and edge cases.
+- Keep using `python -m pytest -x -v` as the first full regression check.
+- User prefers pytest tests and does not want long PowerShell API scripts by default.
+- Only test files should be created using terminal commands when the user specifically says: "only test files are created using a command".
 
 ## Roadmap From Here
 
-Next feature step candidates:
+Recommended next step:
+
+- Step 23 — Admin User Management.
+
+Step 23 should include:
+
+- Admin deactivate user.
+- Admin activate user.
+- Admin change user role.
+- Admin view user details.
+- Admin log creation when admin performs actions.
+
+Later feature step candidates:
 
 - Real AI API integration for AI project planning, risk analysis, and smart scheduling.
 - AI chat assistant.
-- Admin dashboard APIs.
 - Productivity insights expansion.
-
-Later steps:
-
 - CORS/frontend/mobile integration.
 - Firebase FCM for push notifications.
 - Firebase Storage for attachments.
@@ -900,9 +573,10 @@ Later steps:
 
 ## User Preference
 
-- When the user says `done` after a backend step/test, immediately update `docs/PLANORA_CONTEXT.md`.
+- When the user says `done` after a backend step/test, update `docs/PLANORA_CONTEXT.md`.
 - Do not provide long PowerShell test scripts by default.
 - Prefer Swagger, Thunder Client, or short manual API testing instructions unless PowerShell is explicitly requested.
 - For backend feature steps, always include pytest tests and run/verify them with the same terminal pattern used for Step 14 and later.
 - If the user asks to create tests only, do not create the whole feature step.
 - When updating the repo, avoid adding new feature files unless the user explicitly asks for implementation.
+- Keep Docker as final polish after core system features are stable.
