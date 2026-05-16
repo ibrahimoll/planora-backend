@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.models.activity_log import ActivityLog
 from app.models.admin_log import AdminLog
 from app.models.notification import Notification
 from app.models.project import Project
@@ -79,31 +80,11 @@ def _build_user_detail(
     user: User,
 ) -> AdminUserDetailResponse:
     counts = AdminUserCountsResponse(
-        projects_created=_count_where(
-            db,
-            Project,
-            Project.created_by == user.user_id,
-        ),
-        assigned_tasks=_count_where(
-            db,
-            Task,
-            Task.assigned_to == user.user_id,
-        ),
-        created_tasks=_count_where(
-            db,
-            Task,
-            Task.created_by == user.user_id,
-        ),
-        notifications=_count_where(
-            db,
-            Notification,
-            Notification.user_id == user.user_id,
-        ),
-        admin_logs_as_target=_count_where(
-            db,
-            AdminLog,
-            AdminLog.target_user_id == user.user_id,
-        ),
+        projects_created=_count_where(db, Project, Project.created_by == user.user_id),
+        assigned_tasks=_count_where(db, Task, Task.assigned_to == user.user_id),
+        created_tasks=_count_where(db, Task, Task.created_by == user.user_id),
+        notifications=_count_where(db, Notification, Notification.user_id == user.user_id),
+        admin_logs_as_target=_count_where(db, AdminLog, AdminLog.target_user_id == user.user_id),
     )
 
     return AdminUserDetailResponse(
@@ -120,19 +101,26 @@ def _build_user_detail(
     )
 
 
-def get_admin_user_detail(
-    db: Session,
-    user_id: int,
-) -> AdminUserDetailResponse:
+def get_admin_user_detail(db: Session, user_id: int) -> AdminUserDetailResponse:
     user = _get_user_or_404(db=db, user_id=user_id)
     return _build_user_detail(db=db, user=user)
 
 
-def deactivate_user_by_admin(
-    db: Session,
-    admin: User,
-    user_id: int,
-) -> AdminUserActionResponse:
+def get_admin_user_activity(db: Session, user_id: int, limit: int, offset: int) -> list[ActivityLog]:
+    _get_user_or_404(db=db, user_id=user_id)
+
+    stmt = (
+        select(ActivityLog)
+        .where(ActivityLog.actor_id == user_id)
+        .order_by(ActivityLog.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+
+    return list(db.execute(stmt).scalars().all())
+
+
+def deactivate_user_by_admin(db: Session, admin: User, user_id: int) -> AdminUserActionResponse:
     user = _get_user_or_404(db=db, user_id=user_id)
 
     if user.user_id == admin.user_id:
@@ -170,11 +158,7 @@ def deactivate_user_by_admin(
     )
 
 
-def activate_user_by_admin(
-    db: Session,
-    admin: User,
-    user_id: int,
-) -> AdminUserActionResponse:
+def activate_user_by_admin(db: Session, admin: User, user_id: int) -> AdminUserActionResponse:
     user = _get_user_or_404(db=db, user_id=user_id)
 
     user.is_active = True
@@ -195,12 +179,7 @@ def activate_user_by_admin(
     )
 
 
-def change_user_role_by_admin(
-    db: Session,
-    admin: User,
-    user_id: int,
-    new_role: str,
-) -> AdminUserActionResponse:
+def change_user_role_by_admin(db: Session, admin: User, user_id: int, new_role: str) -> AdminUserActionResponse:
     user = _get_user_or_404(db=db, user_id=user_id)
     old_role = user.role
 
