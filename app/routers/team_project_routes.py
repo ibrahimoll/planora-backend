@@ -12,30 +12,6 @@ from app.models.user import User
 from app.schemas.project_schema import (
     ProjectDeleteResponse,
     ProjectMemberResponse,
-    ProjectResponse,
-    ProjectStatus,
-    ProjectUpdate,
-    TeamProjectCreate,
-)
-from app.services.project_service import (
-    can_manage_project,
-    create_team_project,
-    delete_team_project,
-    get_project_members,
-    get_project_membership,
-    get_team_project_by_id,
-    get_team_projects,
-    is_project_owner,
-    update_team_project,
-)
-from app.services.team_service import (
-    can_manage_team,
-    get_team_by_id,
-    get_team_membership,
-)
-from app.schemas.project_schema import (
-    ProjectDeleteResponse,
-    ProjectMemberResponse,
     ProjectMemberUpdate,
     ProjectResponse,
     ProjectStatus,
@@ -53,6 +29,11 @@ from app.services.project_service import (
     is_project_owner,
     update_project_member_role,
     update_team_project,
+)
+from app.services.team_service import (
+    can_manage_team,
+    get_team_by_id,
+    get_team_membership,
 )
 
 DBSession = Annotated[Session, Depends(get_db)]
