@@ -19,3 +19,4 @@ from app.models.ai_plan import AIPlan
 from app.models.risk_analysis import RiskAnalysis
 from app.models.smart_schedule import SmartSchedule
 from app.models.admin_log import AdminLog
+from app.models.chat_message import ChatMessage

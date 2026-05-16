@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from app.models.ai_plan import AIPlan
     from app.models.smart_schedule import SmartSchedule
     from app.models.admin_log import AdminLog
+    from app.models.chat_message import ChatMessage
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -188,4 +189,8 @@ class User(Base):
     target_admin_logs: Mapped[list["AdminLog"]] = relationship(
         foreign_keys="AdminLog.target_user_id",
         back_populates="target_user",
+    )
+
+    chat_messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="sender",
     )
