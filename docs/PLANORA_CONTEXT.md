@@ -20,7 +20,7 @@ Firebase decision:
 - For now, notifications are stored as in-app rows in the `notifications` table.
 - For now, attachments are stored locally during backend development.
 
-## Current Verified Status — 2026-05-15
+## Current Verified Status — 2026-05-16
 
 Completed backend steps:
 
@@ -39,6 +39,15 @@ Completed backend steps:
 13. Mentions in comments.
 14. Deadline reminders.
 15. Export project report.
+16. Activity timeline / activity logs.
+17. Progress tracking and productivity insights.
+18. Project member role update endpoint.
+
+Latest confirmed regression result:
+
+- `56 passed`
+- Command used by the user: `python -m pytest -x -v`
+- Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
 
 Important current notes:
 
@@ -50,31 +59,20 @@ Important current notes:
 - `notifications.type` must allow: `task`, `project`, `team`, `comment`, `mention`, `invite`, `deadline`, `ai`, `risk`, `system`.
 - If invitation, mention, or deadline notifications fail when inserting notification types, fix the live PostgreSQL notification check constraint.
 - Team roles and project roles are separate.
-- Updating `team_members.role` does not update `project_members.role`.
-- A team `admin` is not automatically a project `manager`.
+- Updating `team_members.role` does not automatically update `project_members.role`.
+- A team `admin` is not automatically a project `manager` for existing projects.
+- Project member role update is now implemented through the Step 18 endpoint.
+- Code cleanup note: after Step 18, `app/routers/team_project_routes.py` may contain duplicate import blocks. Tests pass, but the imports should be cleaned in a later polish pass.
 
-## Regression Testing Status — 2026-05-15
+## Regression Testing Status — 2026-05-16
 
 A pytest regression suite exists in the `tests/` folder and should be used after every backend feature step.
 
-Latest Step 15 route test status:
+Latest full regression result:
 
-- `tests/test_report_routes.py` was added.
-- `python -m pytest tests/test_report_routes.py -x -v` was run by the user.
-- Initial result: 2 passed, 1 failed because the unauthenticated report test expected `403` while the auth dependency correctly returned `401`.
-- The test was fixed to expect `401`.
-- The Step 15 test file also uses `pytest.approx(0.0)` for `completion_percentage` to avoid SonarLint float equality warnings.
-- User confirmed the Step 15 fixes were done.
-
-Latest full regression result explicitly recorded before Step 15:
-
-- 29 tests collected.
-- 29 tests passed.
+- 56 tests collected.
+- 56 tests passed.
 - Command used: `python -m pytest -x -v`.
-
-Expected test count after Step 15:
-
-- Existing 29 tests + 3 report route tests = 32 tests, assuming no additional test files were added by other tools.
 
 Current test coverage includes:
 
@@ -83,6 +81,7 @@ Current test coverage includes:
 - Personal task CRUD and completed-task timestamp behavior.
 - Team creation, owner membership, adding members, and updating team member roles.
 - Team project creation and team task update flow.
+- Project member role update permissions and validation.
 - Personal task comments CRUD.
 - Team comment mentions creating unread `mention` notifications.
 - Notification unread count and mark-as-read behavior.
@@ -98,6 +97,8 @@ Current test coverage includes:
 - Export project report success for owner.
 - Export project report cross-user protection.
 - Export project report missing-token protection.
+- Activity log listing, ordering, event-type filtering, pagination, project isolation, personal-project protection, team-member access, and unauthenticated access protection.
+- Progress tracking for personal projects and team projects, cross-user protection, and missing-token protection.
 
 Important test setup notes:
 
@@ -119,6 +120,9 @@ Current pytest-related files:
 - `tests/test_05_invitations_api.py`
 - `tests/test_06_profile_attachments_smoke_api.py`
 - `tests/test_07_deadline_reminders_api.py`
+- `tests/test_09_progress_api.py`
+- `tests/test_10_project_member_roles_api.py`
+- `tests/test_activity_log_routes.py`
 - `tests/test_report_routes.py`
 - `tests/test_attachment_security.py`
 - `tests/test_rate_limit.py`
@@ -411,6 +415,122 @@ Important Step 15 code fixes applied:
 
 No SQL migration is required for Step 15.
 
+## Step 16 — Activity Timeline / Activity Logs Completed
+
+Step 16 adds project activity logs for important project events.
+
+Step 16 endpoint:
+
+- `GET /projects/{project_id}/activity`
+
+Step 16 files include:
+
+- `app/models/activity_log.py`
+- `app/schemas/activity_log_schema.py`
+- `app/services/activity_log_service.py`
+- `app/routers/activity_log_routes.py`
+- Updated project, task, comment, attachment, and deadline reminder flows to create activity logs.
+- `tests/test_activity_log_routes.py`
+
+Tables used by Step 16:
+
+- `activity_logs`
+- `projects`
+- `tasks`
+- `project_members`
+- `users`
+
+Current activity behavior:
+
+- Project owners can list activity logs.
+- Team project members can list team project activity logs.
+- Non-members cannot view team project activity logs.
+- Users cannot view another user's personal project activity logs.
+- Activity logs are ordered newest first.
+- Activity logs support event-type filtering.
+- Activity logs support `limit` and `offset` pagination.
+- Invalid activity event type, limit, or offset returns `422`.
+- Unauthenticated access returns `401`.
+- Activity logs preserve snapshots for deleted or changed objects where needed.
+
+## Step 17 — Progress Tracking and Productivity Insights Completed
+
+Step 17 adds backend progress tracking and productivity insights.
+
+Step 17 endpoint:
+
+- `GET /projects/{project_id}/progress`
+
+Step 17 files:
+
+- `app/models/user_progress.py`
+- `app/schemas/progress_schema.py`
+- `app/services/progress_service.py`
+- `app/routers/progress_routes.py`
+- Updated `app/main.py`.
+- Updated `app/models/user.py`.
+- Updated `app/models/project.py`.
+- Updated `app/models/__init__.py`.
+- `tests/test_09_progress_api.py`
+
+Tables used by Step 17:
+
+- `projects`
+- `tasks`
+- `project_members`
+- `users`
+- `user_progress`
+
+Current progress behavior:
+
+- Personal project owner can view project progress.
+- Team project members can view team project progress.
+- Cross-user personal project access returns `404 Project not found`.
+- Missing or invalid bearer token returns `401 Unauthorized`.
+- Backend calculates total tasks, completed tasks, pending tasks, overdue tasks, task status counts, hours summary, current user progress, member progress, productivity status, and recommendations.
+- Backend upserts rows into `user_progress`.
+
+## Step 18 — Project Member Role Update Completed
+
+Step 18 adds a project-member role update endpoint for team projects.
+
+Step 18 endpoint:
+
+- `PATCH /teams/{team_id}/projects/{project_id}/members/{user_id}`
+
+Step 18 files:
+
+- Updated `app/schemas/project_schema.py` with `ProjectAssignableRole` and `ProjectMemberUpdate`.
+- Updated `app/services/project_service.py` with `update_project_member_role()`.
+- Updated `app/routers/team_project_routes.py` with the project-member role update route.
+- Added `tests/test_10_project_member_roles_api.py`.
+
+Tables used by Step 18:
+
+- `projects`
+- `project_members`
+- `team_members`
+- `users`
+
+Current project role behavior:
+
+- Only the project owner can update project member roles.
+- Allowed target roles are `manager` and `member`.
+- `owner` cannot be assigned through this endpoint.
+- The existing project owner role cannot be changed through this endpoint.
+- Project managers cannot update project member roles.
+- Missing or invalid bearer token returns `401 Unauthorized`.
+- Unauthorized role update returns `403 Forbidden`.
+- Missing project returns `404 Project not found`.
+- Missing project member returns `404 Project member not found`.
+
+Testing:
+
+- Step 18 added 4 pytest route tests.
+- User confirmed full regression result after Step 18: `56 passed`.
+
+No SQL migration is required for Step 18 because `project_members.role` already allows `owner`, `manager`, and `member`.
+
 ## Role Management Decision
 
 There are two separate membership systems:
@@ -426,17 +546,18 @@ Team role endpoint:
 - Do not allow assigning `owner` through normal role update.
 - Ownership transfer should be a separate future feature if needed.
 
-Project role endpoint still needed:
+Project role endpoint:
 
-- Add `PATCH /teams/{team_id}/projects/{project_id}/members/{user_id}`.
-- This should update `project_members.role`.
-- It should allow changing between `manager` and `member`.
-- It should not allow assigning `owner` through normal role update.
+- `PATCH /teams/{team_id}/projects/{project_id}/members/{user_id}` updates `project_members.role`.
+- Only the project owner can update project member roles.
+- Project member role update allows changing between `manager` and `member`.
+- It does not allow assigning `owner` through normal role update.
+- The current project owner role cannot be changed through this endpoint.
 
 Important behavior:
 
 - If user 2 is changed to team `admin`, `GET /teams/{team_id}/members` should show admin.
-- `GET /teams/{team_id}/projects/{project_id}/members` can still show project `member` because that reads `project_members.role`.
+- `GET /teams/{team_id}/projects/{project_id}/members` can still show project `member` for existing projects because that reads `project_members.role`.
 - This is expected, not a bug.
 
 ## Current Main Tables
@@ -453,6 +574,7 @@ Important behavior:
 - `notifications`
 - `invitations`
 - `deadline_reminders`
+- `activity_logs`
 - `ai_plans`
 - `risk_analysis`
 - `user_progress`
@@ -464,31 +586,27 @@ Important behavior:
 
 Planned/polish tables:
 
-- `activity_logs`
-- `device_tokens` for Firebase Cloud Messaging tokens
-- `notification_preferences`
+- `device_tokens` for Firebase Cloud Messaging tokens.
+- `notification_preferences`.
 - Optional report export history table only if the system later needs saved/download history. Step 15 does not need it.
 
 ## Roadmap From Here
 
 Immediate cleanup:
 
-- Add project-member role update endpoint.
+- Clean duplicate import blocks in `app/routers/team_project_routes.py` after Step 18.
 - Keep expanding pytest coverage for future features and edge cases.
-- Consider adding tests for project-member role update permissions after that endpoint is implemented.
 
 Next feature step candidates:
 
-- Progress tracking and productivity insights.
-- Project-member role update endpoint.
-- Activity timeline later, but do not start it unless explicitly requested.
+- AI project planning.
+- Smart scheduling.
+- Risk analysis and delay prediction.
+- AI chat assistant.
+- Admin dashboard APIs.
 
 Later steps:
 
-- AI project planning and smart scheduling.
-- Risk analysis.
-- AI chat assistant.
-- Admin dashboard APIs.
 - CORS/frontend/mobile integration.
 - Firebase FCM for push notifications.
 - Firebase Storage for attachments.
@@ -499,6 +617,6 @@ Later steps:
 
 - Do not provide long PowerShell test scripts by default.
 - Prefer Swagger, Thunder Client, or short manual API testing instructions unless PowerShell is explicitly requested.
-- For backend feature steps, always include pytest tests and run/verify them with the same terminal pattern used for Step 14.
+- For backend feature steps, always include pytest tests and run/verify them with the same terminal pattern used for Step 14 and later.
 - If the user asks to create tests only, do not create the whole feature step.
 - When updating the repo, avoid adding new feature files unless the user explicitly asks for implementation.
