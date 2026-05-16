@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from app.models.user_progress import UserProgress
     from app.models.ai_plan import AIPlan
     from app.models.risk_analysis import RiskAnalysis
+    from app.models.smart_schedule import SmartSchedule
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -160,6 +161,11 @@ class Project(Base):
     )
 
     risk_analyses: Mapped[list["RiskAnalysis"]] = relationship(
+        back_populates="project",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
+    )
+
+    smart_schedules: Mapped[list["SmartSchedule"]] = relationship(
         back_populates="project",
         cascade=CASCADE_ALL_DELETE_ORPHAN,
     )
