@@ -11,6 +11,7 @@ Planora is an AI-powered project planning and collaboration system with:
 - Team Collaboration Mode.
 - AI project planning MVP implemented in Step 19 using a local rule-based generator.
 - Risk analysis / delay prediction MVP implemented in Step 20 using a local rule-based risk engine.
+- High-risk project notifications implemented in Step 20.1 using the existing notifications system.
 - Smart scheduling, productivity insights expansion, real AI API integration, and AI chat assistant planned for later phases.
 
 The backend currently uses FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, Google social login, SMTP email for verification/reset flows, and local file storage for development.
@@ -24,6 +25,7 @@ Current AI/status intelligence features:
 - Risk Analysis / Delay Prediction MVP exists.
 - It saves generated risk snapshots in `risk_analysis`.
 - It calculates risk using project deadline, task completion, overdue tasks, blocked tasks, and remaining estimated hours.
+- When a saved risk analysis is `high`, Step 20.1 creates in-app `risk` notifications for the affected project users.
 - These features are not connected to OpenAI, Gemini, or another real AI API yet.
 - Later, only the generator/analyzer logic inside service files should need replacement while keeping the same API contracts.
 
@@ -59,13 +61,20 @@ Completed backend steps:
 18.1. Cleanup duplicate imports in team project routes.
 19. AI project planning MVP.
 20. Risk analysis / delay prediction MVP.
+20.1. Risk notifications for high-risk projects.
 
-Latest confirmed regression result:
+Latest confirmed full regression result:
 
 - `70 passed`
-- Command used by the user: `pytest tests/test_risk_analysis.py -v` for Step 20 test verification, followed by full regression confirmation.
 - Confirmed after Step 20 Risk Analysis / Delay Prediction MVP.
+- Full regression after Step 20.1 has not been confirmed yet.
 - Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
+
+Latest confirmed Step 20.1 feature test result:
+
+- `9 passed`
+- Command used by the user: `pytest tests/test_risk_analysis.py -v`.
+- Confirmed after adding high-risk project notifications to risk analysis.
 
 Important current notes:
 
@@ -76,7 +85,7 @@ Important current notes:
 - Authenticated users who are not allowed to perform an action should receive `403 Forbidden`.
 - `notifications.type` must allow: `task`, `project`, `team`, `comment`, `mention`, `invite`, `deadline`, `ai`, `risk`, `system`.
 - `activity_logs.event_type` must allow `ai_plan_generated` after Step 19.
-- If invitation, mention, deadline, or future risk notifications fail when inserting notification types, fix the live PostgreSQL notification check constraint.
+- If invitation, mention, deadline, or risk notifications fail when inserting notification types, fix the live PostgreSQL notification check constraint.
 - If AI plan activity logging fails, fix the live PostgreSQL `activity_logs` check constraint to include `ai_plan_generated`.
 - Team roles and project roles are separate.
 - Updating `team_members.role` does not automatically update `project_members.role`.
@@ -92,6 +101,11 @@ Latest full regression result:
 
 - 70 tests passed.
 - Result was confirmed after Step 20 Risk Analysis / Delay Prediction MVP.
+- Full regression should be rerun after Step 20.1; expected total is around 72 tests if no other tests changed.
+
+Latest Step 20.1 feature test result:
+
+- 9 tests passed in `tests/test_risk_analysis.py`.
 
 Current test coverage includes:
 
@@ -119,7 +133,7 @@ Current test coverage includes:
 - Activity log listing, ordering, event-type filtering, pagination, project isolation, personal-project protection, team-member access, and unauthenticated access protection.
 - Progress tracking for personal projects and team projects, cross-user protection, and missing-token protection.
 - AI project planning for personal projects and team projects, optional generated-task creation, generated plan listing, cross-user protection, missing-token protection, and team-member generation restrictions.
-- Risk analysis preview, risk analysis creation, saved risk analysis listing, cross-user protection, low-risk calculation, high-risk overdue-task calculation, and database save behavior.
+- Risk analysis preview, risk analysis creation, saved risk analysis listing, cross-user protection, low-risk calculation, high-risk overdue-task calculation, database save behavior, high-risk notification creation, and low-risk no-notification behavior.
 
 Important test setup notes:
 
@@ -641,9 +655,9 @@ Testing:
 - Step 19 added 7 AI plan API tests.
 - User confirmed full regression result after Step 19: `63 passed`.
 
-## Step 20 — Risk Analysis / Delay Prediction MVP Completed
+## Step 20 — Risk Analysis / Delay Prediction + Risk Notifications Completed
 
-Step 20 added the first risk prediction backend feature.
+Step 20 added the first risk prediction backend feature. Step 20.1 completed the notification polish for high-risk results.
 
 Step 20 endpoints:
 
@@ -660,7 +674,7 @@ Step 20 files:
 - Updated `app/models/__init__.py`.
 - Updated `app/models/project.py`.
 - Updated `app/main.py`.
-- Added `tests/test_risk_analysis.py`.
+- Added/updated `tests/test_risk_analysis.py`.
 
 Tables used by Step 20:
 
@@ -669,6 +683,7 @@ Tables used by Step 20:
 - `tasks`
 - `project_members`
 - `users`
+- `notifications` for Step 20.1 high-risk notifications.
 
 Current `risk_analysis` table columns:
 
@@ -699,9 +714,18 @@ Current risk analysis behavior:
   - Days until project deadline.
 - The engine currently uses local deterministic backend logic and is not connected to a real AI API yet.
 
+Step 20.1 risk notification behavior:
+
+- When a saved risk analysis has `risk_level = 'high'`, the backend creates in-app notifications with `type = 'risk'`.
+- Personal project high-risk notifications go to the personal project owner.
+- Team project high-risk notifications go to project members returned from `project_members`.
+- Low and medium risk analyses do not create risk notifications.
+- Notifications are created in the same transaction as the saved risk analysis using `commit=False` inside `create_notification()`.
+
 Step 20 testing:
 
-- Step 20 added 7 pytest tests in `tests/test_risk_analysis.py`.
+- Step 20 originally added 7 pytest tests in `tests/test_risk_analysis.py`.
+- Step 20.1 expanded `tests/test_risk_analysis.py` to 9 tests.
 - Test coverage includes:
   - Risk preview route.
   - Risk generation route.
@@ -710,11 +734,10 @@ Step 20 testing:
   - Low-risk calculation.
   - High-risk overdue-task calculation.
   - Risk analysis database save behavior.
-- User confirmed regression result after Step 20: `70 passed`.
-
-Recommended next improvement:
-
-- Step 21 should connect high-risk analyses to notifications, so a `high` risk result can create an in-app `risk` notification for the project owner/team members.
+  - High-risk notification creation.
+  - Low-risk no-notification behavior.
+- User confirmed Step 20.1 feature test result: `9 passed`.
+- Latest full regression after Step 20 remains: `70 passed`; full regression after Step 20.1 still needs confirmation.
 
 ## Role Management Decision
 
@@ -779,7 +802,6 @@ Planned/polish tables:
 
 Next feature step candidates:
 
-- Risk notifications for high-risk projects.
 - Smart scheduling.
 - Real AI API integration for AI project planning and risk analysis.
 - AI chat assistant.
@@ -795,6 +817,7 @@ Later steps:
 
 ## User Preference
 
+- When the user says `done` after a backend step/test, immediately update `docs/PLANORA_CONTEXT.md`.
 - Do not provide long PowerShell test scripts by default.
 - Prefer Swagger, Thunder Client, or short manual API testing instructions unless PowerShell is explicitly requested.
 - For backend feature steps, always include pytest tests and run/verify them with the same terminal pattern used for Step 14 and later.
