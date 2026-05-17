@@ -12,26 +12,17 @@ Planora is an AI-powered project planning and collaboration system with:
 - Personal Project Mode.
 - Team Collaboration Mode.
 
-Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, and local rule-based AI with optional Gemini provider configuration.
+Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, local rule-based AI with optional Gemini provider configuration, and push-notification groundwork for future Firebase Cloud Messaging integration.
 
 ## Current Verified Status
 
 Latest confirmed clean full regression result:
 
-- `105 passed`
-- Confirmed after Step 25 Productivity Insights Center.
-- Previous confirmed result was `101 passed` after Admin Control Center expansion from Step 23.2 through Step 23.6.
+- `119 passed`
+- Confirmed after Step 26 Push Notification Foundation.
+- Previous confirmed clean result was `105 passed` after Step 25 Productivity Insights Center.
+- Previous confirmed result before that was `101 passed` after Admin Control Center expansion from Step 23.2 through Step 23.6.
 - Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
-
-Latest in-progress regression attempt after Codex cleanup:
-
-- Command used: `python -m pytest -x -v`.
-- Pytest collected `113 items`.
-- Result before stopping with `-x`: `21 passed`, `1 failed`.
-- Failure is not a real API bug; it is a stale test assertion in `tests/test_07_deadline_reminders_api.py`.
-- The backend now correctly returns `403 Forbidden` with detail `Admin access required.` from the shared `get_current_admin_user` dependency.
-- The old test still expected `Only admins can run deadline reminder scans`.
-- Immediate fix: update the expected detail in `test_non_admin_cannot_run_deadline_scan` to `Admin access required.`, then rerun `python -m pytest -x -v` and finally `python -m pytest -v`.
 
 Completed backend steps:
 
@@ -68,11 +59,13 @@ Completed backend steps:
 23.6. Admin User Search/Filters and User Activity View.
 24. AI Chat Assistant MVP.
 25. Productivity Insights Center.
+26. Push Notification Foundation.
 
 Latest completed feature groups:
 
 - Step 24 — AI Chat Assistant MVP.
 - Step 25 — Productivity Insights Center.
+- Step 26 — Push Notification Foundation.
 - Codex backend security/cleanup pass after AI chat and productivity insights.
 
 ## Current Main Tables
@@ -99,12 +92,13 @@ Latest completed feature groups:
 - `email_verification_codes`
 - `password_reset_codes`
 - `oauth_accounts`
+- `device_tokens`
+- `notification_preferences`
 
 Planned/polish tables:
 
-- `device_tokens` for Firebase Cloud Messaging tokens.
-- `notification_preferences`.
 - Optional report export history table only if saved/download history is needed.
+- Optional Firebase push send log table only if delivery auditing/history is needed later.
 
 ## Authentication and Admin Rules
 
@@ -359,6 +353,57 @@ Testing:
 - Step 25 added 4 API tests.
 - User confirmed Step 25 feature tests and full regression result: `105 passed`.
 
+## Step 26 — Push Notification Foundation
+
+Purpose:
+
+- Prepare Planora for future Firebase Cloud Messaging push notifications.
+- Store user device tokens from Android, iOS, or web clients.
+- Store per-user notification preferences.
+- Do not send real Firebase notifications yet; real sending belongs to the next Firebase/FCM integration step.
+
+Endpoints:
+
+- `POST /push-notifications/device-tokens`
+- `GET /push-notifications/device-tokens`
+- `PATCH /push-notifications/device-tokens/{device_token_id}/deactivate`
+- `GET /push-notifications/preferences`
+- `PATCH /push-notifications/preferences`
+- `GET /push-notifications/status`
+
+Files added/updated:
+
+- Added `app/models/device_token.py`.
+- Added `app/models/notification_preference.py`.
+- Added `app/schemas/push_notification_schema.py`.
+- Added `app/services/push_notification_service.py`.
+- Added `app/routers/push_notification_routes.py`.
+- Added `tests/test_18_push_notifications_api.py`.
+- Updated `app/main.py` to include `push_notification_router`.
+- Updated `app/models/user.py` with `device_tokens` and `notification_preferences` relationships.
+- Updated `app/models/__init__.py` to import `DeviceToken` and `NotificationPreference` so SQLAlchemy test table creation includes them.
+
+Tables added:
+
+- `device_tokens`
+- `notification_preferences`
+
+Current behavior:
+
+- Active verified users can register or update their own device token.
+- Device token platforms are limited to `android`, `ios`, and `web`.
+- Users can list their own saved device tokens.
+- Users can deactivate their own device tokens.
+- Users can get default notification preferences.
+- Users can update notification preferences such as `push_enabled`, `deadline_notifications`, and `risk_notifications`.
+- Missing/invalid token returns `401 Unauthorized`.
+- Real Firebase sending is intentionally not implemented yet.
+
+Testing:
+
+- Step 26 added API tests in `tests/test_18_push_notifications_api.py`.
+- User confirmed full regression result after Step 26: `119 passed`.
+
 ## Codex Backend Security/Cleanup Pass — 2026-05-17
 
 Codex latest pushed cleanup changed these files:
@@ -384,7 +429,6 @@ Confirmed cleanup results:
 
 Important remaining items after Codex cleanup:
 
-- Run the full DB-backed suite after fixing the stale deadline reminder test assertion.
 - Add the live PostgreSQL migration for `chk_password_reset_codes_expiry`; model changes do not update existing tables automatically.
 - CORS is still not configured in `app/main.py`; add explicit allowlist CORS when frontend/mobile browser integration starts.
 - If `database/database_schema.sql` exists locally, align it with SQLAlchemy models or replace manual schema drift with migrations/Alembic.
@@ -439,19 +483,12 @@ Useful local commands:
 ```powershell
 python -m pytest tests/test_16_productivity_insights_api.py -v
 python -m pytest tests/test_17_ai_chat_assistant_api.py -v
+python -m pytest tests/test_18_push_notifications_api.py -v
 python -m pytest --collect-only -q
 python -m pytest --cov=app --cov-report=term-missing
 python -m compileall app tests
 python -m pip check
 ```
-
-Current known test fix needed:
-
-```python
-assert response.json()["detail"] == "Admin access required."
-```
-
-This should replace the stale expected message in `tests/test_07_deadline_reminders_api.py::test_non_admin_cannot_run_deadline_scan`.
 
 Future testing rule:
 
@@ -464,19 +501,18 @@ Future testing rule:
 
 Immediate next actions:
 
-1. Fix stale deadline reminder test expected detail.
-2. Rerun DB-backed full pytest suite until clean.
-3. Add live PostgreSQL migration for `chk_password_reset_codes_expiry`.
-4. Commit and push the test/memo updates.
+1. Commit and push the Step 26 memo update if it was changed locally.
+2. Start Step 27 only after deciding whether the next priority is Firebase Cloud Messaging sending, Firebase Storage for attachments, CORS/frontend integration, or Alembic migrations.
+3. Keep Docker as final polish after the core system is stable.
 
 Next feature/polish candidates:
 
-- Real AI API integration hardening.
-- Productivity insights expansion.
-- CORS/frontend/mobile integration.
-- Firebase FCM for push notifications.
+- Step 27 Firebase Cloud Messaging integration for real push sending.
 - Firebase Storage for attachments.
-- Tests/security cleanup/Alembic.
+- CORS/frontend/mobile integration.
+- Real AI API integration hardening.
+- Alembic migration setup to stop manual schema drift.
+- Tests/security cleanup/Ruff.
 - Docker and deployment polish after the core system is stable.
 
 ## User Preference
