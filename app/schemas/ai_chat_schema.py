@@ -24,7 +24,7 @@ class AIChatMessageResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     message_id: int
-    user_id: int | None
+    sender_id: int | None
     project_id: int
     message: str
     sender_type: str

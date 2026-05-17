@@ -25,24 +25,21 @@ class ChatMessage(Base):
             """
             (
                 sender_type = 'user'
-                AND user_id IS NOT NULL
+                AND sender_id IS NOT NULL
             )
             OR
             (
                 sender_type = 'ai'
-                AND user_id IS NULL
+                AND sender_id IS NULL
             )
             """,
             name="chk_chat_messages_sender_logic",
         ),
     )
 
-    message_id: Mapped[int] = mapped_column(
-        BigInteger,
-        primary_key=True,
-    )
+    message_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
-    user_id: Mapped[int | None] = mapped_column(
+    sender_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("users.user_id", ondelete="RESTRICT"),
         nullable=True,
@@ -56,15 +53,9 @@ class ChatMessage(Base):
         index=True,
     )
 
-    message: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
+    message: Mapped[str] = mapped_column(Text, nullable=False)
 
-    sender_type: Mapped[str] = mapped_column(
-        String(20),
-        nullable=False,
-    )
+    sender_type: Mapped[str] = mapped_column(String(20), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

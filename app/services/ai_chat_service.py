@@ -419,7 +419,7 @@ def create_ai_chat_exchange(
         ai_reply = fallback_reply
 
     user_message = ChatMessage(
-        user_id=current_user.user_id,
+        sender_id=current_user.user_id,
         project_id=project.project_id,
         message=chat_data.message,
         sender_type="user",
@@ -429,7 +429,7 @@ def create_ai_chat_exchange(
     db.flush()
 
     ai_message = ChatMessage(
-        user_id=None,
+        sender_id=None,
         project_id=project.project_id,
         message=ai_reply,
         sender_type="ai",
