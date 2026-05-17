@@ -51,11 +51,11 @@ def test_personal_project_ai_chat_creates_user_and_ai_messages(
     data = response.json()
 
     assert data["user_message"]["sender_type"] == "user"
-    assert data["user_message"]["user_id"] == user_id
+    assert data["user_message"]["sender_id"] == user_id
     assert data["user_message"]["message"] == "What should I do next?"
 
     assert data["ai_message"]["sender_type"] == "ai"
-    assert data["ai_message"]["user_id"] is None
+    assert data["ai_message"]["sender_id"] is None
     assert "AI Chat Personal Project" in data["ai_message"]["message"]
 
     saved_messages = (
@@ -201,7 +201,7 @@ def test_team_project_member_can_use_ai_chat(
 
     data = response.json()
 
-    assert data["user_message"]["user_id"] == member_id
+    assert data["user_message"]["sender_id"] == member_id
     assert data["ai_message"]["sender_type"] == "ai"
     assert "AI Chat Team Project" in data["ai_message"]["message"]
 

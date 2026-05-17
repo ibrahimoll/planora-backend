@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Text
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -14,6 +14,13 @@ if TYPE_CHECKING:
 
 class PasswordResetCode(Base):
     __tablename__ = "password_reset_codes"
+
+    __table_args__ = (
+        CheckConstraint(
+            "expires_at > created_at",
+            name="chk_password_reset_codes_expiry",
+        ),
+    )
 
     reset_code_id: Mapped[int] = mapped_column(
         BigInteger,

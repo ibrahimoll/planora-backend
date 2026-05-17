@@ -3,9 +3,6 @@ from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
 from app.models.user import User
-from app.schemas.profile_schema import ChangePasswordRequest, ProfileUpdate
-from app.schemas.profile_schema import ChangePasswordRequest, ProfileUpdate
-from app.schemas.profile_schema import DeleteAccountRequest
 from app.schemas.profile_schema import (
     ChangePasswordRequest,
     DeleteAccountRequest,
