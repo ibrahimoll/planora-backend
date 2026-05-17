@@ -9,13 +9,14 @@ importScripts("https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js
 importScripts("https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js");
 
 const firebaseConfig = {
-  apiKey: "PASTE_API_KEY",
-  authDomain: "PASTE_PROJECT.firebaseapp.com",
-  projectId: "PASTE_PROJECT_ID",
-  storageBucket: "PASTE_PROJECT.appspot.com",
-  messagingSenderId: "PASTE_SENDER_ID",
-  appId: "PASTE_APP_ID",
-};
+  apiKey: "AIzaSyBdr6C8WSs4kOniyTog-NkostDDK0nNI1k",
+  authDomain: "planora-7a684.firebaseapp.com",
+  projectId: "planora-7a684",
+  storageBucket: "planora-7a684.firebasestorage.app",
+  messagingSenderId: "179943761921",
+  appId: "1:179943761921:web:7461be36a0dbec1a697800",
+  measurementId: "G-9LVRS7MT84"
+  };
 
 firebase.initializeApp(firebaseConfig);
 
