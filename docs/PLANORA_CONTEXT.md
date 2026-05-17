@@ -66,6 +66,7 @@ Completed backend steps:
 26. Push Notification Foundation.
 27. CORS / Frontend-Mobile Integration.
 28. Firebase Cloud Messaging real push sending.
+29. Alembic Migration Setup.
 
 Latest completed feature groups:
 
@@ -74,6 +75,7 @@ Latest completed feature groups:
 - Step 26 — Push Notification Foundation.
 - Step 27 — CORS / Frontend-Mobile Integration.
 - Step 28 — Firebase Cloud Messaging real push sending.
+- Step 29 - Alembic Migration Setup.
 - Codex backend security/cleanup pass after AI chat and productivity insights.
 
 ## Current Main Tables
@@ -535,6 +537,60 @@ Manual web test helper:
 - Register the token in Planora.
 - Send `/push-notifications/test` from Swagger or from the page.
 
+## Step 29 - Alembic Migration Setup
+
+Purpose:
+
+- Stop manual PostgreSQL schema drift.
+- Add versioned migrations without recreating the existing live schema.
+- Keep FastAPI feature logic and authentication behavior unchanged.
+
+Files added/updated:
+
+- `requirements.txt` with Alembic.
+- `alembic.ini`.
+- `alembic/env.py`.
+- `alembic/script.py.mako`.
+- `alembic/versions/2bf54f983173_baseline_existing_planora_schema.py`.
+- `alembic/versions/7562179d6e8d_add_password_reset_expiry_check.py`.
+
+Current migration chain:
+
+- `2bf54f983173` - empty baseline for the existing Planora schema.
+- `7562179d6e8d` - adds `chk_password_reset_codes_expiry` on `password_reset_codes` with `CHECK (expires_at > created_at)`.
+
+Configuration:
+
+- `alembic/env.py` reads `settings.database_url` from `app.core.config`.
+- `alembic/env.py` imports `app.models` so all SQLAlchemy models are registered.
+- `target_metadata = Base.metadata` from `app.db.base`.
+- `alembic.ini` leaves `sqlalchemy.url` blank because runtime config comes from `settings.database_url`.
+
+Existing live database rule:
+
+- Do not run migrations that create all existing tables.
+- For an existing database that already matches the current schema, use Alembic stamping instead of replaying table-creation history.
+- If the live DB already has `chk_password_reset_codes_expiry`, `python -m alembic stamp head` marks it current.
+- If the live DB does not yet have `chk_password_reset_codes_expiry`, stamp the baseline revision first, then upgrade to head:
+
+```powershell
+python -m alembic stamp 2bf54f983173
+python -m alembic upgrade head
+```
+
+Future schema rule:
+
+- New schema changes should be represented as Alembic revisions.
+- Avoid editing PostgreSQL schema manually except for emergency repair with a matching follow-up migration.
+
+Step 29 verification from this Codex run:
+
+- `python -m compileall app tests` passed.
+- Plain `python -m pytest -x -v` could not run because the system Python interpreter did not have pytest installed.
+- `.\venv\Scripts\python.exe -m pytest -x -v` completed with `4 passed, 125 skipped`; DB-backed tests skipped because `TEST_DATABASE_URL` was not set for this run.
+- `.\venv\Scripts\python.exe -m alembic history` showed baseline -> password reset expiry check.
+- `.\venv\Scripts\python.exe -m alembic heads` showed `7562179d6e8d` as the single head.
+
 ## Codex Backend Security/Cleanup Pass — 2026-05-17
 
 Codex latest pushed cleanup changed these files:
@@ -560,20 +616,9 @@ Confirmed cleanup results:
 
 Important remaining items after Codex cleanup:
 
-- Add the live PostgreSQL migration for `chk_password_reset_codes_expiry`; model changes do not update existing tables automatically.
-- If `database/database_schema.sql` exists locally, align it with SQLAlchemy models or replace manual schema drift with migrations/Alembic.
+- Apply or stamp the Step 29 Alembic migration chain on live databases as described above.
+- Treat `database/database_schema.sql`, if kept, as reference-only; Alembic is now the migration source of truth.
 - Ruff is not installed yet; lint cleanup remains manual unless the project adds Ruff later.
-
-Live DB migration still required:
-
-```sql
-ALTER TABLE password_reset_codes
-DROP CONSTRAINT IF EXISTS chk_password_reset_codes_expiry;
-
-ALTER TABLE password_reset_codes
-ADD CONSTRAINT chk_password_reset_codes_expiry
-CHECK (expires_at > created_at);
-```
 
 Verification SQL:
 
@@ -620,7 +665,7 @@ Future testing rule:
 
 Immediate next actions:
 
-1. Consider Alembic migrations soon to stop manual schema drift.
+1. Apply or stamp the Alembic migration chain on the live development database.
 2. Firebase Storage for attachments can be a later separate step if file storage becomes urgent.
 3. Continue frontend/admin dashboard/mobile integration using the completed backend APIs.
 4. Real AI API integration hardening can be improved later without changing API contracts.
@@ -629,7 +674,6 @@ Immediate next actions:
 
 Next feature/polish candidates:
 
-- Alembic migration setup.
 - Firebase Storage for attachments.
 - Admin/notification polish.
 - Frontend/mobile integration.
