@@ -12,14 +12,17 @@ Planora is an AI-powered project planning and collaboration system with:
 - Personal Project Mode.
 - Team Collaboration Mode.
 
-Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, local rule-based AI with optional Gemini provider configuration, explicit CORS/frontend-mobile integration, and push-notification groundwork for future Firebase Cloud Messaging integration.
+Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, local rule-based AI with optional Gemini provider configuration, explicit CORS/frontend-mobile integration, Firebase Cloud Messaging real push sending, and manual Firebase web-push testing helpers.
 
 ## Current Verified Status
 
 Latest confirmed clean full regression result:
 
-- `124 passed`
-- Confirmed after Step 27 CORS / Frontend-Mobile Integration.
+- `129 passed`
+- Confirmed after Step 28 Firebase Cloud Messaging real push sending.
+- Step 28 isolated test result: `5 passed` for `tests/test_20_firebase_push_service.py`.
+- Step 28 manual Swagger result confirmed Firebase accepted one real push: `status = sent`, `sent_count = 1`, `failed_count = 0`.
+- Previous confirmed clean full regression result was `124 passed` after Step 27 CORS / Frontend-Mobile Integration.
 - Previous confirmed clean result was `119 passed` after Step 26 Push Notification Foundation.
 - Previous confirmed clean result before that was `105 passed` after Step 25 Productivity Insights Center.
 - Previous confirmed result before that was `101 passed` after Admin Control Center expansion from Step 23.2 through Step 23.6.
@@ -62,6 +65,7 @@ Completed backend steps:
 25. Productivity Insights Center.
 26. Push Notification Foundation.
 27. CORS / Frontend-Mobile Integration.
+28. Firebase Cloud Messaging real push sending.
 
 Latest completed feature groups:
 
@@ -69,6 +73,7 @@ Latest completed feature groups:
 - Step 25 — Productivity Insights Center.
 - Step 26 — Push Notification Foundation.
 - Step 27 — CORS / Frontend-Mobile Integration.
+- Step 28 — Firebase Cloud Messaging real push sending.
 - Codex backend security/cleanup pass after AI chat and productivity insights.
 
 ## Current Main Tables
@@ -100,8 +105,8 @@ Latest completed feature groups:
 
 Planned/polish tables:
 
+- Optional Firebase push delivery log table only if delivery auditing/history is needed later.
 - Optional report export history table only if saved/download history is needed.
-- Optional Firebase push send log table only if delivery auditing/history is needed later.
 
 ## Authentication and Admin Rules
 
@@ -132,6 +137,20 @@ SET role = 'admin',
     is_email_verified = true
 WHERE email = 'your_email@example.com';
 ```
+
+## Role Management Decision
+
+There are separate role systems:
+
+- Global user role: `users.role`: `user`, `admin`.
+- Team membership role: `team_members.role`: `owner`, `admin`, `member`.
+- Project membership role: `project_members.role`: `owner`, `manager`, `member`.
+
+Important behavior:
+
+- Changing a user to global `admin` gives access to admin dashboard routes.
+- It does not automatically change team or project membership roles.
+- Team role and project role updates remain separate features.
 
 ## Admin Control Center Current Powers
 
@@ -231,31 +250,14 @@ Supported filters:
 - `limit`
 - `offset`
 
-## Admin Expansion Files
-
-Task oversight:
+Admin expansion files:
 
 - `app/schemas/admin_task_oversight_schema.py`
 - `app/services/admin_task_oversight_service.py`
 - `app/routers/admin_task_oversight_routes.py`
-
-Risk/reports:
-
 - `app/schemas/admin_risk_report_schema.py`
 - `app/services/admin_risk_report_service.py`
 - `app/routers/admin_risk_report_routes.py`
-
-Updated files:
-
-- `app/main.py`
-- `app/services/admin_dashboard_service.py`
-- `app/routers/admin_dashboard_routes.py`
-- `app/services/admin_user_management_service.py`
-- `app/routers/admin_user_management_routes.py`
-
-Tests:
-
-- `tests/test_15_admin_control_center_expansion_api.py`
 
 ## AI / Intelligence Features
 
@@ -270,6 +272,7 @@ Risk Analysis / Delay Prediction MVP:
 - Saves generated risk snapshots in `risk_analysis`.
 - Calculates risk using project deadline, task completion, overdue tasks, blocked tasks, and remaining estimated hours.
 - Saved high-risk analyses create in-app `risk` notifications.
+- With Step 28, push sending can also be triggered when a notification is created and Firebase/prefs/tokens allow it.
 - Uses local deterministic/rule-based logic.
 
 Smart Scheduling MVP:
@@ -326,11 +329,11 @@ Endpoint:
 
 Files added/updated:
 
-- Added `app/schemas/productivity_insight_schema.py`.
-- Added `app/services/productivity_insight_service.py`.
-- Added `app/routers/productivity_insight_routes.py`.
-- Updated `app/main.py` to include `productivity_insight_router`.
-- Added `tests/test_16_productivity_insights_api.py`.
+- `app/schemas/productivity_insight_schema.py`
+- `app/services/productivity_insight_service.py`
+- `app/routers/productivity_insight_routes.py`
+- `app/main.py`
+- `tests/test_16_productivity_insights_api.py`
 
 Tables used:
 
@@ -360,10 +363,9 @@ Testing:
 
 Purpose:
 
-- Prepare Planora for future Firebase Cloud Messaging push notifications.
+- Prepare Planora for Firebase Cloud Messaging push notifications.
 - Store user device tokens from Android, iOS, or web clients.
 - Store per-user notification preferences.
-- Do not send real Firebase notifications yet; real sending belongs to the next Firebase/FCM integration step.
 
 Endpoints:
 
@@ -376,15 +378,15 @@ Endpoints:
 
 Files added/updated:
 
-- Added `app/models/device_token.py`.
-- Added `app/models/notification_preference.py`.
-- Added `app/schemas/push_notification_schema.py`.
-- Added `app/services/push_notification_service.py`.
-- Added `app/routers/push_notification_routes.py`.
-- Added `tests/test_18_push_notifications_api.py`.
-- Updated `app/main.py` to include `push_notification_router`.
-- Updated `app/models/user.py` with `device_tokens` and `notification_preferences` relationships.
-- Updated `app/models/__init__.py` to import `DeviceToken` and `NotificationPreference` so SQLAlchemy test table creation includes them.
+- `app/models/device_token.py`
+- `app/models/notification_preference.py`
+- `app/schemas/push_notification_schema.py`
+- `app/services/push_notification_service.py`
+- `app/routers/push_notification_routes.py`
+- `tests/test_18_push_notifications_api.py`
+- `app/main.py`
+- `app/models/user.py`
+- `app/models/__init__.py`
 
 Tables added:
 
@@ -400,7 +402,6 @@ Current behavior:
 - Users can get default notification preferences.
 - Users can update notification preferences such as `push_enabled`, `deadline_notifications`, and `risk_notifications`.
 - Missing/invalid token returns `401 Unauthorized`.
-- Real Firebase sending is intentionally not implemented yet.
 
 Testing:
 
@@ -412,16 +413,15 @@ Testing:
 Purpose:
 
 - Allow trusted frontend/admin/mobile-web origins to call the FastAPI backend.
-- Prepare Planora for the web admin dashboard and future frontend/mobile integration.
+- Prepare Planora for the web admin dashboard and frontend/mobile integration.
 - Keep route authentication and authorization rules unchanged.
-- Do not send Firebase Cloud Messaging notifications yet.
 
 Files added/updated:
 
-- Updated `app/core/config.py` with `backend_cors_origins`, `cors_allow_credentials`, and `cors_origins`.
-- Updated `app/main.py` with FastAPI `CORSMiddleware`.
-- Updated `.env.example` with CORS environment variables.
-- Added `tests/test_19_cors_api.py`.
+- `app/core/config.py` with `backend_cors_origins`, `cors_allow_credentials`, and `cors_origins`.
+- `app/main.py` with FastAPI `CORSMiddleware`.
+- `.env.example` with CORS environment variables.
+- `tests/test_19_cors_api.py`.
 
 Tables added:
 
@@ -441,36 +441,99 @@ Testing:
 - User confirmed Step 27 isolated result: `5 passed`.
 - User confirmed full regression result after Step 27: `124 passed`.
 
-## Recommended Next Step — Step 28
+## Step 28 — Firebase Cloud Messaging Real Push Sending
 
-Decision:
+Purpose:
 
-- Step 28 should be Firebase Cloud Messaging real push sending.
-
-Reason:
-
-- Step 26 already stores device tokens and notification preferences.
-- Step 27 prepared the backend for trusted frontend/mobile-web communication.
-- The next logical step is to connect the existing push-notification foundation to Firebase Admin SDK and send real push notifications.
-
-Step 28 recommended scope:
-
-- Add Firebase Admin SDK dependency and configuration.
-- Add Firebase credentials through environment/config without committing secret JSON files.
-- Add a Firebase push sender service.
-- Use `device_tokens` to find active tokens for a target user.
-- Use `notification_preferences` to skip users who disabled push or disabled a notification type.
+- Connect the existing push-notification foundation to Firebase Cloud Messaging.
+- Send real push notifications to active registered device tokens.
+- Respect user notification preferences.
 - Deactivate invalid/unregistered FCM tokens after Firebase send errors.
-- Add safe tests using mocks; do not call real Firebase during pytest.
+- Keep Firebase credentials out of GitHub.
 
-Recommended Step 28 test file:
+Endpoints:
 
-- `tests/test_20_firebase_push_api.py` or `tests/test_20_firebase_push_service.py`.
+- `GET /push-notifications/status`
+- `POST /push-notifications/test`
+- Existing Step 26 endpoints remain active for device tokens and preferences.
 
-After Step 28:
+Files added/updated:
 
-- Firebase Storage for attachments can be a later separate step.
-- Alembic migrations should also be considered soon to stop manual schema drift.
+- `app/services/firebase_push_service.py`
+- `app/routers/push_notification_routes.py`
+- `app/schemas/push_notification_schema.py`
+- `app/services/notification_service.py`
+- `app/core/config.py`
+- `.env.example`
+- `.gitignore`
+- `requirements.txt`
+- `tests/test_20_firebase_push_service.py`
+- `tools/firebase-web-test/firebase_token_test.html`
+- `tools/firebase-web-test/firebase-messaging-sw.js`
+- `docs/STEP_28_FIREBASE_PUSH.md`
+
+Tables added:
+
+- None.
+
+Tables used:
+
+- `users`
+- `device_tokens`
+- `notification_preferences`
+- `notifications`
+
+Configuration:
+
+```env
+FIREBASE_ENABLED=true
+FIREBASE_CREDENTIALS_PATH=firebase-service-account-local.json
+FIREBASE_CREDENTIALS_JSON=
+```
+
+Important security rule:
+
+- `firebase-service-account-local.json` is a secret Firebase Admin SDK service-account file and must never be committed.
+- Web Firebase config and VAPID public key are used for browser testing; they are not the same as the backend private service-account JSON.
+- Do not log or commit Firebase private keys, JWTs, access tokens, Google tokens, or real user tokens.
+
+Current behavior:
+
+- Firebase status endpoint reports whether sending is enabled and configured.
+- Test push endpoint sends a push to the authenticated current user.
+- Push sender reads active `device_tokens` for the target user.
+- Push sender checks `notification_preferences`, including `push_enabled` and notification-type-specific fields.
+- Push sender skips cleanly when Firebase is disabled, credentials are missing, no token exists, or user preferences disable push.
+- Push sender uses Firebase Admin SDK when enabled and configured.
+- Invalid/unregistered tokens are deactivated when Firebase returns invalid-token errors.
+- In-app notifications remain the primary record; push is best-effort.
+
+Testing:
+
+- Step 28 test file: `tests/test_20_firebase_push_service.py`.
+- User confirmed isolated Step 28 result: `5 passed`.
+- User confirmed full regression result: `129 passed`.
+- User confirmed manual Swagger Firebase result:
+
+```json
+{
+  "status": "sent",
+  "detail": "Push notification sent successfully.",
+  "sent_count": 1,
+  "skipped_count": 0,
+  "failed_count": 0,
+  "deactivated_tokens": 0
+}
+```
+
+Manual web test helper:
+
+- Serve `tools/firebase-web-test` locally, usually on port `5500`.
+- Open `http://127.0.0.1:5500/firebase_token_test.html`.
+- Paste Firebase web app config and VAPID public key.
+- Generate a real browser FCM token.
+- Register the token in Planora.
+- Send `/push-notifications/test` from Swagger or from the page.
 
 ## Codex Backend Security/Cleanup Pass — 2026-05-17
 
@@ -520,20 +583,6 @@ FROM pg_constraint
 WHERE conname = 'chk_password_reset_codes_expiry';
 ```
 
-## Role Management Decision
-
-There are separate role systems:
-
-- Global user role: `users.role`: `user`, `admin`.
-- Team membership role: `team_members.role`: `owner`, `admin`, `member`.
-- Project membership role: `project_members.role`: `owner`, `manager`, `member`.
-
-Important behavior:
-
-- Changing a user to global `admin` gives access to admin dashboard routes.
-- It does not automatically change team or project membership roles.
-- Team role and project role updates remain separate features.
-
 ## Regression Testing
 
 Standard local pytest command pattern:
@@ -552,6 +601,7 @@ python -m pytest tests/test_16_productivity_insights_api.py -v
 python -m pytest tests/test_17_ai_chat_assistant_api.py -v
 python -m pytest tests/test_18_push_notifications_api.py -v
 python -m pytest tests/test_19_cors_api.py -v
+python -m pytest tests/test_20_firebase_push_service.py -v
 python -m pytest --collect-only -q
 python -m pytest --cov=app --cov-report=term-missing
 python -m compileall app tests
@@ -570,16 +620,19 @@ Future testing rule:
 
 Immediate next actions:
 
-1. Start Step 28 — Firebase Cloud Messaging real push sending.
-2. Keep Firebase Storage for attachments as a later separate step unless attachment storage becomes urgent.
-3. Keep Alembic migrations as an important structure improvement soon, because the backend is growing and manual schema drift is becoming risky.
-4. Keep Docker as final polish after the core system is stable.
+1. Consider Alembic migrations soon to stop manual schema drift.
+2. Firebase Storage for attachments can be a later separate step if file storage becomes urgent.
+3. Continue frontend/admin dashboard/mobile integration using the completed backend APIs.
+4. Real AI API integration hardening can be improved later without changing API contracts.
+5. Add Ruff/linting cleanup when ready.
+6. Keep Docker as final polish after the core system is stable.
 
 Next feature/polish candidates:
 
-- Step 28 — Firebase Cloud Messaging real push sending.
+- Alembic migration setup.
 - Firebase Storage for attachments.
-- Alembic migration setup to stop manual schema drift.
+- Admin/notification polish.
+- Frontend/mobile integration.
 - Real AI API integration hardening.
 - Tests/security cleanup/Ruff.
 - Docker and deployment polish after the core system is stable.
