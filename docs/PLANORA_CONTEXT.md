@@ -659,29 +659,37 @@ python -m pip check
 Future testing rule:
 
 - Every backend feature step should include pytest tests before the step is considered done.
-- Test files should be created through CMD/PowerShell commands by default, not only pasted as manual file content.
+- Test files should be created through CMD/PowerShell commands by default.
+- Do not rely on pasted-only test content when a command-created test file is expected.
 - Prefer API-level tests with `TestClient`, isolated PostgreSQL test database, disabled outbound email, and clear assertions.
 - Keep using `python -m pytest -x -v` as the first full regression check.
 - After `-x` passes, run `python -m pytest -v` for the final full result.
 
 ## Roadmap From Here
 
-Immediate next actions:
+Recommended next order after Step 29:
 
-1. Firebase Storage for attachments can be a later separate step if file storage becomes urgent.
-2. Continue frontend/admin dashboard/mobile integration using the completed backend APIs.
-3. Real AI API integration hardening can be improved later without changing API contracts.
-4. Add Ruff/linting cleanup when ready.
-5. Keep Docker as final polish after the core system is stable.
+1. Step 30 — Admin Dashboard Integration Foundation.
+2. Step 31 — Mobile/User Frontend Integration Foundation.
+3. Step 32 — Firebase Storage for Attachments.
+4. Real AI API integration hardening.
+5. Tests/security cleanup/Ruff.
+6. Docker and deployment polish after the core system is stable.
 
-Next feature/polish candidates:
+Step 30 should be Admin Dashboard Integration Foundation instead of Firebase Storage because it gives stronger FYP/demo value: the backend already has many completed APIs, admin routes, AI features, notifications, Firebase push, and migrations, so the project will look stronger when the system can be shown visually rather than only through Swagger/API tests.
 
-- Firebase Storage for attachments.
-- Admin/notification polish.
-- Frontend/mobile integration.
-- Real AI API integration hardening.
-- Tests/security cleanup/Ruff.
-- Docker and deployment polish after the core system is stable.
+Suggested Step 30 scope:
+
+- Create/connect the admin dashboard frontend project.
+- Implement login using `POST /auth/login`.
+- Store and attach the Planora JWT for protected admin requests.
+- Add admin route protection.
+- Build dashboard overview page using existing admin overview APIs.
+- Build users list page.
+- Build projects overview page.
+- Add a clean frontend API client/service structure.
+
+Firebase Storage for attachments remains useful, but it is lower priority unless attachment hosting becomes urgent. It should come after frontend/admin/mobile integration because it is more of an infrastructure polish step than a demo-critical feature.
 
 ## User Preference
 
