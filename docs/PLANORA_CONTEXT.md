@@ -12,15 +12,16 @@ Planora is an AI-powered project planning and collaboration system with:
 - Personal Project Mode.
 - Team Collaboration Mode.
 
-Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, local rule-based AI with optional Gemini provider configuration, and push-notification groundwork for future Firebase Cloud Messaging integration.
+Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, local rule-based AI with optional Gemini provider configuration, explicit CORS/frontend-mobile integration, and push-notification groundwork for future Firebase Cloud Messaging integration.
 
 ## Current Verified Status
 
 Latest confirmed clean full regression result:
 
-- `119 passed`
-- Confirmed after Step 26 Push Notification Foundation.
-- Previous confirmed clean result was `105 passed` after Step 25 Productivity Insights Center.
+- `124 passed`
+- Confirmed after Step 27 CORS / Frontend-Mobile Integration.
+- Previous confirmed clean result was `119 passed` after Step 26 Push Notification Foundation.
+- Previous confirmed clean result before that was `105 passed` after Step 25 Productivity Insights Center.
 - Previous confirmed result before that was `101 passed` after Admin Control Center expansion from Step 23.2 through Step 23.6.
 - Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
 
@@ -60,12 +61,14 @@ Completed backend steps:
 24. AI Chat Assistant MVP.
 25. Productivity Insights Center.
 26. Push Notification Foundation.
+27. CORS / Frontend-Mobile Integration.
 
 Latest completed feature groups:
 
 - Step 24 — AI Chat Assistant MVP.
 - Step 25 — Productivity Insights Center.
 - Step 26 — Push Notification Foundation.
+- Step 27 — CORS / Frontend-Mobile Integration.
 - Codex backend security/cleanup pass after AI chat and productivity insights.
 
 ## Current Main Tables
@@ -404,34 +407,68 @@ Testing:
 - Step 26 added API tests in `tests/test_18_push_notifications_api.py`.
 - User confirmed full regression result after Step 26: `119 passed`.
 
-## Recommended Next Step — Step 27
+## Step 27 — CORS / Frontend-Mobile Integration
+
+Purpose:
+
+- Allow trusted frontend/admin/mobile-web origins to call the FastAPI backend.
+- Prepare Planora for the web admin dashboard and future frontend/mobile integration.
+- Keep route authentication and authorization rules unchanged.
+- Do not send Firebase Cloud Messaging notifications yet.
+
+Files added/updated:
+
+- Updated `app/core/config.py` with `backend_cors_origins`, `cors_allow_credentials`, and `cors_origins`.
+- Updated `app/main.py` with FastAPI `CORSMiddleware`.
+- Updated `.env.example` with CORS environment variables.
+- Added `tests/test_19_cors_api.py`.
+
+Tables added:
+
+- None.
+
+Current behavior:
+
+- Allowed frontend origins receive CORS headers.
+- Disallowed origins do not receive `access-control-allow-origin`.
+- Bearer-token Authorization headers are allowed from trusted origins.
+- Normal requests without an `Origin` header still work.
+- Existing authentication and protected routes remain unchanged.
+
+Testing:
+
+- Step 27 added 5 API tests in `tests/test_19_cors_api.py`.
+- User confirmed Step 27 isolated result: `5 passed`.
+- User confirmed full regression result after Step 27: `124 passed`.
+
+## Recommended Next Step — Step 28
 
 Decision:
 
-- Step 27 should be CORS/frontend-mobile integration, not Firebase FCM yet.
+- Step 28 should be Firebase Cloud Messaging real push sending.
 
 Reason:
 
-- Before real mobile/frontend integration, the FastAPI backend should explicitly allow trusted frontend origins instead of relying on default browser behavior.
-- This prepares the backend for the web admin dashboard and mobile/browser-based development clients.
-- Firebase Cloud Messaging should come after CORS/frontend-mobile integration because Step 26 already stores device tokens, but real clients must be able to communicate cleanly with the backend first.
+- Step 26 already stores device tokens and notification preferences.
+- Step 27 prepared the backend for trusted frontend/mobile-web communication.
+- The next logical step is to connect the existing push-notification foundation to Firebase Admin SDK and send real push notifications.
 
-Step 27 recommended scope:
+Step 28 recommended scope:
 
-- Add explicit CORS settings in `app/main.py` using `CORSMiddleware`.
-- Add configuration fields in `app/core/config.py`, for example `backend_cors_origins`.
-- Add `.env.example` entries for local frontend/admin/mobile development origins.
-- Add tests verifying allowed origins receive CORS headers and disallowed origins do not.
-- Keep route authentication unchanged.
-- Do not add Firebase sending in Step 27.
+- Add Firebase Admin SDK dependency and configuration.
+- Add Firebase credentials through environment/config without committing secret JSON files.
+- Add a Firebase push sender service.
+- Use `device_tokens` to find active tokens for a target user.
+- Use `notification_preferences` to skip users who disabled push or disabled a notification type.
+- Deactivate invalid/unregistered FCM tokens after Firebase send errors.
+- Add safe tests using mocks; do not call real Firebase during pytest.
 
-Recommended Step 27 test file:
+Recommended Step 28 test file:
 
-- `tests/test_19_cors_api.py`
+- `tests/test_20_firebase_push_api.py` or `tests/test_20_firebase_push_service.py`.
 
-After Step 27:
+After Step 28:
 
-- Step 28 should be Firebase Cloud Messaging real push sending.
 - Firebase Storage for attachments can be a later separate step.
 - Alembic migrations should also be considered soon to stop manual schema drift.
 
@@ -524,6 +561,7 @@ python -m pip check
 Future testing rule:
 
 - Every backend feature step should include pytest tests before the step is considered done.
+- Test files should be created through CMD/PowerShell commands by default, not only pasted as manual file content.
 - Prefer API-level tests with `TestClient`, isolated PostgreSQL test database, disabled outbound email, and clear assertions.
 - Keep using `python -m pytest -x -v` as the first full regression check.
 - After `-x` passes, run `python -m pytest -v` for the final full result.
@@ -532,15 +570,13 @@ Future testing rule:
 
 Immediate next actions:
 
-1. Start Step 27 — CORS/frontend-mobile integration.
-2. After Step 27, start Step 28 — Firebase Cloud Messaging real push sending.
-3. Keep Firebase Storage for attachments as a later separate step unless attachment storage becomes urgent.
-4. Keep Alembic migrations as an important structure improvement soon, because the backend is growing and manual schema drift is becoming risky.
-5. Keep Docker as final polish after the core system is stable.
+1. Start Step 28 — Firebase Cloud Messaging real push sending.
+2. Keep Firebase Storage for attachments as a later separate step unless attachment storage becomes urgent.
+3. Keep Alembic migrations as an important structure improvement soon, because the backend is growing and manual schema drift is becoming risky.
+4. Keep Docker as final polish after the core system is stable.
 
 Next feature/polish candidates:
 
-- Step 27 — CORS/frontend-mobile integration.
 - Step 28 — Firebase Cloud Messaging real push sending.
 - Firebase Storage for attachments.
 - Alembic migration setup to stop manual schema drift.
@@ -551,7 +587,8 @@ Next feature/polish candidates:
 ## User Preference
 
 - When the user says `done` or gives a test result after a backend step, update `docs/PLANORA_CONTEXT.md`.
-- Do not provide long PowerShell test scripts by default.
+- Always create new test files using CMD/PowerShell file-creation commands by default.
+- Do not provide long PowerShell test scripts by default unless they are needed for creating files or the user explicitly requests them.
 - Prefer Swagger, Thunder Client, or short manual API testing instructions unless PowerShell is explicitly requested.
 - For backend feature steps, always include pytest tests and run/verify them.
 - Keep Docker as final polish after core system features are stable.
