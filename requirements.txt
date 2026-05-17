@@ -9,6 +9,7 @@ colorama==0.4.6
 dnspython==2.8.0
 email-validator==2.3.0
 fastapi==0.136.1
+firebase-admin
 google-auth==2.52.0
 greenlet==3.5.0
 h11==0.16.0
