@@ -35,6 +35,8 @@ if TYPE_CHECKING:
     from app.models.smart_schedule import SmartSchedule
     from app.models.admin_log import AdminLog
     from app.models.chat_message import ChatMessage
+    from app.models.device_token import DeviceToken
+    from app.models.notification_preference import NotificationPreference
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -193,4 +195,15 @@ class User(Base):
 
     chat_messages: Mapped[list["ChatMessage"]] = relationship(
         back_populates="sender",
+    )
+
+    device_tokens: Mapped[list["DeviceToken"]] = relationship(
+        back_populates="user",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
+    )
+
+    notification_preferences: Mapped["NotificationPreference"] = relationship(
+        back_populates="user",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
+        uselist=False,
     )
