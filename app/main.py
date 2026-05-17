@@ -1,5 +1,7 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import settings
 from app.db.session import test_database_connection
 from app.routers.auth import router as auth_router
 from app.routers.project_routes import router as project_router
@@ -33,6 +35,20 @@ app = FastAPI(
     title="Planora API",
     description="Backend API for the Planora AI project planning and collaboration system",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=settings.cors_allow_credentials,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Origin",
+        "X-Requested-With",
+    ],
 )
 
 @app.middleware("http")
