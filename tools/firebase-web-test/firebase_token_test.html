@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Planora Firebase Web Push Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 980px;
+      margin: 32px auto;
+      padding: 0 16px;
+      line-height: 1.5;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    h1, h2 { color: #111827; }
+    section {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 18px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+    }
+    label {
+      display: block;
+      font-weight: 700;
+      margin-top: 12px;
+      margin-bottom: 6px;
+    }
+    input, textarea, select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    textarea { min-height: 90px; font-family: Consolas, monospace; }
+    button {
+      margin-top: 14px;
+      padding: 10px 14px;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 700;
+      background: #2563eb;
+      color: white;
+    }
+    button.secondary { background: #475569; }
+    button.danger { background: #dc2626; }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 14px;
+      border-radius: 10px;
+      min-height: 80px;
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .note { color: #475569; font-size: 14px; }
+    .ok { color: #15803d; font-weight: 700; }
+    .bad { color: #b91c1c; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Planora Firebase Web Push Test</h1>
+  <p class="note">
+    Use this temporary page only for local testing. It gets a real Firebase Cloud Messaging web token,
+    registers it in Planora, and calls the Step 28 test push endpoint.
+  </p>
+
+  <section>
+    <h2>1. Backend settings</h2>
+    <label for="backendBaseUrl">Backend base URL</label>
+    <input id="backendBaseUrl" value="http://127.0.0.1:8000" />
+
+    <label for="planoraJwt">Planora JWT access token</label>
+    <textarea id="planoraJwt" placeholder="Paste the access_token returned from /auth/login"></textarea>
+
+    <button class="secondary" id="checkStatusBtn">Check /push-notifications/status</button>
+  </section>
+
+  <section>
+    <h2>2. Firebase web app config</h2>
+    <p class="note">
+      Copy this from Firebase Console → Project settings → General → Your apps → Web app config.
+      Also update <code>firebase-messaging-sw.js</code> with the same config for background notifications.
+    </p>
+
+    <label for="firebaseConfigJson">firebaseConfig JSON</label>
+    <textarea id="firebaseConfigJson" spellcheck="false">{
+  "apiKey": "PASTE_API_KEY",
+  "authDomain": "PASTE_PROJECT.firebaseapp.com",
+  "projectId": "PASTE_PROJECT_ID",
+  "storageBucket": "PASTE_PROJECT.appspot.com",
+  "messagingSenderId": "PASTE_SENDER_ID",
+  "appId": "PASTE_APP_ID"
+}</textarea>
+
+    <label for="vapidKey">Web Push certificate key pair / VAPID public key</label>
+    <input id="vapidKey" placeholder="Paste Firebase Web Push certificate public key" />
+
+    <button id="getTokenBtn">Allow notifications and get FCM token</button>
+  </section>
+
+  <section>
+    <h2>3. Register token in Planora</h2>
+    <label for="fcmToken">FCM token</label>
+    <textarea id="fcmToken" spellcheck="false" placeholder="Generated FCM token appears here"></textarea>
+
+    <div class="row">
+      <div>
+        <label for="platform">Platform</label>
+        <select id="platform">
+          <option value="web" selected>web</option>
+          <option value="android">android</option>
+          <option value="ios">ios</option>
+        </select>
+      </div>
+    </div>
+
+    <button id="registerTokenBtn">Register token in backend</button>
+  </section>
+
+  <section>
+    <h2>4. Send test push</h2>
+    <label for="testTitle">Title</label>
+    <input id="testTitle" value="Planora Test" />
+
+    <label for="testMessage">Message</label>
+    <input id="testMessage" value="Firebase web push is working!" />
+
+    <button id="sendTestBtn">Send /push-notifications/test</button>
+    <button class="danger" id="clearOutputBtn">Clear output</button>
+  </section>
+
+  <section>
+    <h2>Output</h2>
+    <pre id="output">Ready.</pre>
+  </section>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+    import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js";
+
+    const output = document.getElementById("output");
+
+    const log = (message, data = null) => {
+      const time = new Date().toLocaleTimeString();
+      const renderedData = data ? `\n${JSON.stringify(data, null, 2)}` : "";
+      output.textContent = `[${time}] ${message}${renderedData}\n\n${output.textContent}`;
+    };
+
+    const getBackendBaseUrl = () => document.getElementById("backendBaseUrl").value.trim().replace(/\/$/, "");
+    const getJwt = () => document.getElementById("planoraJwt").value.trim();
+
+    const requireJwt = () => {
+      const token = getJwt();
+      if (!token) {
+        throw new Error("Paste a Planora JWT access token first.");
+      }
+      return token;
+    };
+
+    const authFetch = async (path, options = {}) => {
+      const token = requireJwt();
+      const response = await fetch(`${getBackendBaseUrl()}${path}`, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          ...(options.headers || {}),
+        },
+      });
+
+      const contentType = response.headers.get("content-type") || "";
+      const body = contentType.includes("application/json") ? await response.json() : await response.text();
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${JSON.stringify(body)}`);
+      }
+
+      return body;
+    };
+
+    const initializeFirebaseMessaging = async () => {
+      const firebaseConfig = JSON.parse(document.getElementById("firebaseConfigJson").value);
+      const vapidKey = document.getElementById("vapidKey").value.trim();
+
+      if (!vapidKey) {
+        throw new Error("Paste your Firebase VAPID public key first.");
+      }
+
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        throw new Error(`Notification permission is ${permission}. Browser notifications must be allowed.`);
+      }
+
+      const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js");
+      log("Service worker registered.", { scope: registration.scope });
+
+      const app = initializeApp(firebaseConfig);
+      const messaging = getMessaging(app);
+
+      onMessage(messaging, (payload) => {
+        log("Foreground FCM message received.", payload);
+        const notification = payload.notification || {};
+        if (notification.title && Notification.permission === "granted") {
+          new Notification(notification.title, {
+            body: notification.body || "",
+          });
+        }
+      });
+
+      return { messaging, vapidKey, registration };
+    };
+
+    document.getElementById("checkStatusBtn").addEventListener("click", async () => {
+      try {
+        const response = await fetch(`${getBackendBaseUrl()}/push-notifications/status`);
+        const body = await response.json();
+        log("Backend push status response.", body);
+      } catch (error) {
+        log(`Status check failed: ${error.message}`);
+      }
+    });
+
+    document.getElementById("getTokenBtn").addEventListener("click", async () => {
+      try {
+        const { messaging, vapidKey, registration } = await initializeFirebaseMessaging();
+        const token = await getToken(messaging, {
+          vapidKey,
+          serviceWorkerRegistration: registration,
+        });
+
+        if (!token) {
+          throw new Error("Firebase returned no token. Check browser permission, VAPID key, and Firebase config.");
+        }
+
+        document.getElementById("fcmToken").value = token;
+        log("FCM token generated successfully.", { token });
+      } catch (error) {
+        log(`Get token failed: ${error.message}`);
+      }
+    });
+
+    document.getElementById("registerTokenBtn").addEventListener("click", async () => {
+      try {
+        const fcmToken = document.getElementById("fcmToken").value.trim();
+        const platform = document.getElementById("platform").value;
+
+        if (!fcmToken) {
+          throw new Error("Generate or paste an FCM token first.");
+        }
+
+        const body = await authFetch("/push-notifications/device-tokens", {
+          method: "POST",
+          body: JSON.stringify({
+            token: fcmToken,
+            platform,
+          }),
+        });
+
+        log("Device token registered in Planora.", body);
+      } catch (error) {
+        log(`Register token failed: ${error.message}`);
+      }
+    });
+
+    document.getElementById("sendTestBtn").addEventListener("click", async () => {
+      try {
+        const title = document.getElementById("testTitle").value.trim();
+        const message = document.getElementById("testMessage").value.trim();
+
+        const body = await authFetch("/push-notifications/test", {
+          method: "POST",
+          body: JSON.stringify({
+            title,
+            message,
+            notification_type: "system",
+          }),
+        });
+
+        log("Test push endpoint response.", body);
+      } catch (error) {
+        log(`Send test push failed: ${error.message}`);
+      }
+    });
+
+    document.getElementById("clearOutputBtn").addEventListener("click", () => {
+      output.textContent = "Ready.";
+    });
+  </script>
+</body>
+</html>
