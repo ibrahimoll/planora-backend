@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
-
+from app.schemas.notification_schema import NotificationType
 
 class DevicePlatform(StrEnum):
     ANDROID = "android"
@@ -67,3 +67,24 @@ class NotificationPreferenceUpdate(BaseModel):
 
 class PushNotificationMessageResponse(BaseModel):
     message: str
+
+
+class FirebasePushStatusResponse(BaseModel):
+    firebase_enabled: bool
+    firebase_configured: bool
+    message: str
+
+
+class PushNotificationTestCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=150)
+    message: str = Field(..., min_length=1, max_length=500)
+    notification_type: NotificationType = NotificationType.SYSTEM
+
+
+class PushSendResultResponse(BaseModel):
+    status: str
+    detail: str
+    sent_count: int = 0
+    skipped_count: int = 0
+    failed_count: int = 0
+    deactivated_tokens: int = 0

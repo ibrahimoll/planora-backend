@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     )
     cors_allow_credentials: bool = True
 
+    firebase_enabled: bool = False
+    firebase_credentials_path: str | None = None
+    firebase_credentials_json: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

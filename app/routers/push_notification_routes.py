@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from typing import Annotated
-
+from app.core.config import settings
+from app.services.firebase_push_service import send_push_to_user
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
 from sqlalchemy.orm import Session
@@ -12,9 +13,12 @@ from app.models.user import User
 from app.schemas.push_notification_schema import (
     DeviceTokenCreate,
     DeviceTokenResponse,
+    FirebasePushStatusResponse,
     NotificationPreferenceResponse,
     NotificationPreferenceUpdate,
     PushNotificationMessageResponse,
+    PushNotificationTestCreate,
+    PushSendResultResponse,
 )
 from app.services.push_notification_service import (
     deactivate_my_device_token,
@@ -120,9 +124,46 @@ def update_my_push_preferences(
 
 @router.get(
     "/status",
-    response_model=PushNotificationMessageResponse,
+    response_model=FirebasePushStatusResponse,
 )
 def push_notification_status():
-    return PushNotificationMessageResponse(
-        message="Push notification foundation is ready. Firebase sending is not enabled yet.",
+    firebase_configured = bool(
+        settings.firebase_credentials_path
+        or settings.firebase_credentials_json
     )
+
+    if settings.firebase_enabled and firebase_configured:
+        message = "Firebase push notification sending is enabled and configured."
+    elif settings.firebase_enabled:
+        message = "Firebase push notification sending is enabled but credentials are missing."
+    else:
+        message = "Firebase push notification sending is disabled."
+
+    return FirebasePushStatusResponse(
+        firebase_enabled=settings.firebase_enabled,
+        firebase_configured=firebase_configured,
+        message=message,
+    )
+
+
+@router.post(
+    "/test",
+    response_model=PushSendResultResponse,
+)
+def send_test_push_notification(
+    push_data: PushNotificationTestCreate,
+    db: DBSession,
+    current_user: CurrentUser,
+):
+    result = send_push_to_user(
+        db=db,
+        user_id=current_user.user_id,
+        title=push_data.title,
+        message=push_data.message,
+        notification_type=str(push_data.notification_type),
+        data={
+            "source": "manual_test",
+        },
+    )
+
+    return PushSendResultResponse(**result.__dict__)

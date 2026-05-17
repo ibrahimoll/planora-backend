@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.notification import Notification
 from app.models.user import User
 from app.schemas.notification_schema import NotificationCreate, NotificationType
-
+from app.services.firebase_push_service import send_push_to_user
 
 def create_notification(
     db: Session,
@@ -15,6 +15,7 @@ def create_notification(
     message: str,
     notification_type: NotificationType | str,
     commit: bool = True,
+    send_push: bool = True,
 ) -> Notification:
     notification = Notification(
         user_id=user_id,
@@ -28,6 +29,18 @@ def create_notification(
     if commit:
         db.commit()
         db.refresh(notification)
+
+        if send_push:
+            send_push_to_user(
+                db=db,
+                user_id=user_id,
+                title=title,
+                message=message,
+                notification_type=str(notification_type),
+                data={
+                    "notification_id": notification.notification_id,
+                },
+            )
 
     return notification
 

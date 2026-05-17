@@ -38,3 +38,8 @@ htmlcov/
 
 # Generated files
 uploads/
+
+# Firebase secrets
+firebase-service-account*.json
+firebase-credentials*.json
+serviceAccountKey*.json
