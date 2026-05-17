@@ -25,6 +25,8 @@ def _extract_gemini_text(response_data: dict[str, Any]) -> str | None:
     candidates = response_data.get("candidates", [])
 
     if not candidates:
+        print("[GEMINI PARSE ERROR] No candidates found.")
+        print("[GEMINI RAW RESPONSE]", response_data)
         logger.warning("Gemini response did not include candidates: %s", response_data)
         return None
 
@@ -37,12 +39,16 @@ def _extract_gemini_text(response_data: dict[str, Any]) -> str | None:
         if isinstance(text, str) and text.strip():
             return _clean_ai_text(text)
 
+    print("[GEMINI PARSE ERROR] No text parts found.")
+    print("[GEMINI RAW RESPONSE]", response_data)
     logger.warning("Gemini response did not include text parts: %s", response_data)
+
     return None
 
 
 def _generate_with_gemini(prompt: str) -> str | None:
     if not settings.gemini_api_key:
+        print("[GEMINI CONFIG ERROR] GEMINI_API_KEY is missing.")
         logger.warning("Gemini API key is missing. Falling back to local AI.")
         return None
 
@@ -73,12 +79,19 @@ def _generate_with_gemini(prompt: str) -> str | None:
     }
 
     try:
+        print("[GEMINI REQUEST] Sending request to Gemini...")
+        print("[GEMINI MODEL]", settings.gemini_model)
+        print("[GEMINI TIMEOUT]", settings.gemini_timeout_seconds)
+
         with httpx.Client(timeout=settings.gemini_timeout_seconds) as client:
             response = client.post(
                 url,
                 params=params,
                 json=payload,
             )
+
+        print("[GEMINI STATUS]", response.status_code)
+        print("[GEMINI BODY]", response.text[:1500])
 
         if response.status_code >= 400:
             logger.warning(
@@ -91,14 +104,17 @@ def _generate_with_gemini(prompt: str) -> str | None:
         return _extract_gemini_text(response.json())
 
     except httpx.TimeoutException as exc:
+        print(f"[GEMINI TIMEOUT ERROR] {type(exc).__name__}: {exc}")
         logger.warning("Gemini API timeout: %s", exc)
         return None
 
     except httpx.HTTPError as exc:
+        print(f"[GEMINI HTTP ERROR] {type(exc).__name__}: {exc}")
         logger.warning("Gemini HTTP error: %s", exc)
         return None
 
     except (KeyError, IndexError, TypeError, ValueError) as exc:
+        print(f"[GEMINI PARSING ERROR] {type(exc).__name__}: {exc}")
         logger.warning("Gemini response parsing error: %s", exc)
         return None
 
@@ -106,15 +122,16 @@ def _generate_with_gemini(prompt: str) -> str | None:
 def generate_ai_reply_from_provider(prompt: str) -> str | None:
     provider = settings.ai_provider.strip().lower()
 
-    logger.info(
-        "AI provider check: provider=%s has_gemini_key=%s model=%s",
-        provider,
-        bool(settings.gemini_api_key),
-        settings.gemini_model,
+    print(
+        "[AI DEBUG]",
+        "provider=", provider,
+        "has_key=", bool(settings.gemini_api_key),
+        "model=", settings.gemini_model,
+        "timeout=", settings.gemini_timeout_seconds,
     )
 
     if provider == "gemini":
         return _generate_with_gemini(prompt)
 
-    logger.info("AI provider is not gemini. Falling back to local AI.")
+    print("[AI DEBUG] Provider is not gemini. Falling back to local rule-based AI.")
     return None
