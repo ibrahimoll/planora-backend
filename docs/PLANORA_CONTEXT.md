@@ -404,6 +404,37 @@ Testing:
 - Step 26 added API tests in `tests/test_18_push_notifications_api.py`.
 - User confirmed full regression result after Step 26: `119 passed`.
 
+## Recommended Next Step — Step 27
+
+Decision:
+
+- Step 27 should be CORS/frontend-mobile integration, not Firebase FCM yet.
+
+Reason:
+
+- Before real mobile/frontend integration, the FastAPI backend should explicitly allow trusted frontend origins instead of relying on default browser behavior.
+- This prepares the backend for the web admin dashboard and mobile/browser-based development clients.
+- Firebase Cloud Messaging should come after CORS/frontend-mobile integration because Step 26 already stores device tokens, but real clients must be able to communicate cleanly with the backend first.
+
+Step 27 recommended scope:
+
+- Add explicit CORS settings in `app/main.py` using `CORSMiddleware`.
+- Add configuration fields in `app/core/config.py`, for example `backend_cors_origins`.
+- Add `.env.example` entries for local frontend/admin/mobile development origins.
+- Add tests verifying allowed origins receive CORS headers and disallowed origins do not.
+- Keep route authentication unchanged.
+- Do not add Firebase sending in Step 27.
+
+Recommended Step 27 test file:
+
+- `tests/test_19_cors_api.py`
+
+After Step 27:
+
+- Step 28 should be Firebase Cloud Messaging real push sending.
+- Firebase Storage for attachments can be a later separate step.
+- Alembic migrations should also be considered soon to stop manual schema drift.
+
 ## Codex Backend Security/Cleanup Pass — 2026-05-17
 
 Codex latest pushed cleanup changed these files:
@@ -430,7 +461,6 @@ Confirmed cleanup results:
 Important remaining items after Codex cleanup:
 
 - Add the live PostgreSQL migration for `chk_password_reset_codes_expiry`; model changes do not update existing tables automatically.
-- CORS is still not configured in `app/main.py`; add explicit allowlist CORS when frontend/mobile browser integration starts.
 - If `database/database_schema.sql` exists locally, align it with SQLAlchemy models or replace manual schema drift with migrations/Alembic.
 - Ruff is not installed yet; lint cleanup remains manual unless the project adds Ruff later.
 
@@ -484,6 +514,7 @@ Useful local commands:
 python -m pytest tests/test_16_productivity_insights_api.py -v
 python -m pytest tests/test_17_ai_chat_assistant_api.py -v
 python -m pytest tests/test_18_push_notifications_api.py -v
+python -m pytest tests/test_19_cors_api.py -v
 python -m pytest --collect-only -q
 python -m pytest --cov=app --cov-report=term-missing
 python -m compileall app tests
@@ -501,17 +532,19 @@ Future testing rule:
 
 Immediate next actions:
 
-1. Commit and push the Step 26 memo update if it was changed locally.
-2. Start Step 27 only after deciding whether the next priority is Firebase Cloud Messaging sending, Firebase Storage for attachments, CORS/frontend integration, or Alembic migrations.
-3. Keep Docker as final polish after the core system is stable.
+1. Start Step 27 — CORS/frontend-mobile integration.
+2. After Step 27, start Step 28 — Firebase Cloud Messaging real push sending.
+3. Keep Firebase Storage for attachments as a later separate step unless attachment storage becomes urgent.
+4. Keep Alembic migrations as an important structure improvement soon, because the backend is growing and manual schema drift is becoming risky.
+5. Keep Docker as final polish after the core system is stable.
 
 Next feature/polish candidates:
 
-- Step 27 Firebase Cloud Messaging integration for real push sending.
+- Step 27 — CORS/frontend-mobile integration.
+- Step 28 — Firebase Cloud Messaging real push sending.
 - Firebase Storage for attachments.
-- CORS/frontend/mobile integration.
-- Real AI API integration hardening.
 - Alembic migration setup to stop manual schema drift.
+- Real AI API integration hardening.
 - Tests/security cleanup/Ruff.
 - Docker and deployment polish after the core system is stable.
 
