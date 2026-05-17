@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     email_from: str
 
     google_client_id: str
+
+    ai_provider: str = "local"
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_timeout_seconds: int = 15
+    
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

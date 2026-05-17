@@ -12,6 +12,7 @@ from app.models.risk_analysis import RiskAnalysis
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.ai_chat_schema import AIChatRequest
+from app.services.ai_provider_service import generate_ai_reply_from_provider
 
 
 def _to_utc(value: datetime) -> datetime:
@@ -45,6 +46,23 @@ def _get_latest_risk_analysis(
     )
 
     return db.execute(stmt).scalars().first()
+
+
+def _get_recent_chat_history(
+    db: Session,
+    project_id: int,
+    limit: int = 10,
+) -> list[ChatMessage]:
+    stmt = (
+        select(ChatMessage)
+        .where(ChatMessage.project_id == project_id)
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.message_id.desc())
+        .limit(limit)
+    )
+
+    messages = list(db.execute(stmt).scalars().all())
+
+    return list(reversed(messages))
 
 
 def _calculate_task_summary(tasks: list[Task]) -> dict[str, Any]:
@@ -105,7 +123,9 @@ def _get_next_tasks(tasks: list[Task], limit: int = 3) -> list[Task]:
         incomplete_tasks,
         key=lambda task: (
             priority_rank.get(task.priority, 3),
-            _to_utc(task.due_date) if task.due_date else datetime.max.replace(tzinfo=timezone.utc),
+            _to_utc(task.due_date)
+            if task.due_date
+            else datetime.max.replace(tzinfo=timezone.utc),
             task.task_id,
         ),
     )[:limit]
@@ -128,7 +148,121 @@ def _build_next_task_lines(tasks: list[Task]) -> list[str]:
     return lines
 
 
-def _build_ai_reply(
+def _format_task_for_prompt(task: Task) -> str:
+    due_text = (
+        _to_utc(task.due_date).date().isoformat()
+        if task.due_date is not None
+        else "no due date"
+    )
+
+    return (
+        f"- title: {task.title}\n"
+        f"  status: {task.status}\n"
+        f"  priority: {task.priority}\n"
+        f"  due_date: {due_text}\n"
+        f"  estimated_hours: {float(task.estimated_hours or 0)}"
+    )
+
+
+def _format_chat_history_for_prompt(messages: list[ChatMessage]) -> str:
+    if not messages:
+        return "No previous chat messages."
+
+    lines: list[str] = []
+
+    for message in messages:
+        role = "User" if message.sender_type == "user" else "Assistant"
+        lines.append(f"{role}: {message.message}")
+
+    return "\n".join(lines)
+
+
+def _build_llm_prompt(
+    project: Project,
+    current_user: User,
+    user_message: str,
+    tasks: list[Task],
+    latest_risk: RiskAnalysis | None,
+    recent_messages: list[ChatMessage],
+) -> str:
+    task_summary = _calculate_task_summary(tasks)
+
+    deadline_text = _to_utc(project.deadline).date().isoformat()
+
+    task_lines = "\n".join(
+        _format_task_for_prompt(task)
+        for task in tasks[:25]
+    )
+
+    if not task_lines:
+        task_lines = "No tasks found for this project."
+
+    if latest_risk is None:
+        risk_context = "No saved risk analysis exists for this project."
+    else:
+        risk_context = (
+            f"risk_level: {latest_risk.risk_level}\n"
+            f"predicted_delay_days: {latest_risk.predicted_delay_days}\n"
+            f"reason: {latest_risk.reason}\n"
+            f"recommendation: {latest_risk.recommendation}"
+        )
+
+    chat_history = _format_chat_history_for_prompt(recent_messages)
+
+    return f"""
+You are Planora AI, a project planning and productivity assistant inside the Planora app.
+
+Your job:
+- Answer naturally like a helpful assistant.
+- Use the project context below.
+- Give practical next steps.
+- Be clear and concise.
+- If the user greets you, greet them back and explain what you can help with.
+- If the user asks about progress, risk, deadline, or next tasks, use the project data.
+- Do not invent database records.
+- Do not mention hidden implementation details.
+- Do not expose secrets, tokens, passwords, hashes, or unrelated users.
+- If information is missing, say what is missing and suggest the next action.
+
+Current user:
+- user_id: {current_user.user_id}
+- full_name: {current_user.full_name}
+
+Project:
+- project_id: {project.project_id}
+- title: {project.title}
+- description: {project.description or "No description"}
+- project_type: {project.project_type}
+- status: {project.status}
+- deadline: {deadline_text}
+
+Task summary:
+- total_tasks: {task_summary["total_tasks"]}
+- completed_tasks: {task_summary["completed_tasks"]}
+- in_progress_tasks: {task_summary["in_progress_tasks"]}
+- todo_tasks: {task_summary["todo_tasks"]}
+- blocked_tasks: {task_summary["blocked_tasks"]}
+- overdue_tasks: {task_summary["overdue_tasks"]}
+- completion_percentage: {task_summary["completion_percentage"]}
+- remaining_estimated_hours: {task_summary["remaining_estimated_hours"]}
+
+Latest risk analysis:
+{risk_context}
+
+Tasks:
+{task_lines}
+
+Recent chat history:
+{chat_history}
+
+User message:
+{user_message}
+
+Reply as Planora AI:
+""".strip()
+
+
+def _build_local_rule_based_reply(
     project: Project,
     user_message: str,
     tasks: list[Task],
@@ -140,6 +274,7 @@ def _build_ai_reply(
 
     context: dict[str, Any] = {
         "source": "local_rule_based_chat_v1",
+        "fallback_used": True,
         "project_id": project.project_id,
         "project_title": project.title,
         "project_status": project.status,
@@ -158,7 +293,15 @@ def _build_ai_reply(
         }
 
     next_task_lines = _build_next_task_lines(next_tasks)
-    
+
+    if any(word in lowered_message for word in ["hello", "hi", "hey", "how are you"]):
+        reply = (
+            f"Hello! I am your Planora project assistant. "
+            f"I checked '{project.title}' and I can help with progress, next tasks, risks, deadlines, and scheduling."
+        )
+
+        return reply, context
+
     if any(word in lowered_message for word in ["risk", "delay", "late", "behind", "danger"]):
         if latest_risk is None:
             reply = (
@@ -241,12 +384,39 @@ def create_ai_chat_exchange(
         project_id=project.project_id,
     )
 
-    ai_reply, assistant_context = _build_ai_reply(
+    recent_messages = _get_recent_chat_history(
+        db=db,
+        project_id=project.project_id,
+    )
+
+    fallback_reply, assistant_context = _build_local_rule_based_reply(
         project=project,
         user_message=chat_data.message,
         tasks=tasks,
         latest_risk=latest_risk,
     )
+
+    llm_prompt = _build_llm_prompt(
+        project=project,
+        current_user=current_user,
+        user_message=chat_data.message,
+        tasks=tasks,
+        latest_risk=latest_risk,
+        recent_messages=recent_messages,
+    )
+
+    provider_reply = generate_ai_reply_from_provider(llm_prompt)
+
+    if provider_reply is not None:
+        ai_reply = provider_reply
+        assistant_context = {
+            **assistant_context,
+            "source": "gemini_llm_v1",
+            "fallback_used": False,
+            "provider": "gemini",
+        }
+    else:
+        ai_reply = fallback_reply
 
     user_message = ChatMessage(
         user_id=current_user.user_id,
