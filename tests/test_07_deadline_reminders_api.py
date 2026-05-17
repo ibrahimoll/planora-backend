@@ -50,7 +50,7 @@ def test_non_admin_cannot_run_deadline_scan(client: TestClient, db: Session) -> 
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "Only admins can run deadline reminder scans"
+    assert response.json()["detail"] == "Admin access required."
 
 
 def test_deadline_scan_creates_due_soon_and_overdue_reminders(
