@@ -158,7 +158,7 @@ def _build_ai_reply(
         }
 
     next_task_lines = _build_next_task_lines(next_tasks)
-
+    
     if any(word in lowered_message for word in ["risk", "delay", "late", "behind", "danger"]):
         if latest_risk is None:
             reply = (
