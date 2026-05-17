@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import httpx
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
 
 MAX_AI_REPLY_LENGTH = 4000
 
@@ -23,6 +25,7 @@ def _extract_gemini_text(response_data: dict[str, Any]) -> str | None:
     candidates = response_data.get("candidates", [])
 
     if not candidates:
+        logger.warning("Gemini response did not include candidates: %s", response_data)
         return None
 
     content = candidates[0].get("content", {})
@@ -34,11 +37,13 @@ def _extract_gemini_text(response_data: dict[str, Any]) -> str | None:
         if isinstance(text, str) and text.strip():
             return _clean_ai_text(text)
 
+    logger.warning("Gemini response did not include text parts: %s", response_data)
     return None
 
 
 def _generate_with_gemini(prompt: str) -> str | None:
     if not settings.gemini_api_key:
+        logger.warning("Gemini API key is missing. Falling back to local AI.")
         return None
 
     url = (
@@ -75,24 +80,41 @@ def _generate_with_gemini(prompt: str) -> str | None:
                 json=payload,
             )
 
-            response.raise_for_status()
+        if response.status_code >= 400:
+            logger.warning(
+                "Gemini API error. status=%s body=%s",
+                response.status_code,
+                response.text,
+            )
+            return None
 
         return _extract_gemini_text(response.json())
 
-    except (
-        httpx.HTTPError,
-        KeyError,
-        IndexError,
-        TypeError,
-        ValueError,
-    ):
+    except httpx.TimeoutException as exc:
+        logger.warning("Gemini API timeout: %s", exc)
+        return None
+
+    except httpx.HTTPError as exc:
+        logger.warning("Gemini HTTP error: %s", exc)
+        return None
+
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        logger.warning("Gemini response parsing error: %s", exc)
         return None
 
 
 def generate_ai_reply_from_provider(prompt: str) -> str | None:
     provider = settings.ai_provider.strip().lower()
 
+    logger.info(
+        "AI provider check: provider=%s has_gemini_key=%s model=%s",
+        provider,
+        bool(settings.gemini_api_key),
+        settings.gemini_model,
+    )
+
     if provider == "gemini":
         return _generate_with_gemini(prompt)
 
+    logger.info("AI provider is not gemini. Falling back to local AI.")
     return None
