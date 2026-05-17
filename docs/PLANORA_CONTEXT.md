@@ -1,6 +1,6 @@
 # Planora Backend Context
 
-Last updated: 2026-05-16
+Last updated: 2026-05-17
 
 ## Main Idea
 
@@ -12,16 +12,26 @@ Planora is an AI-powered project planning and collaboration system with:
 - Personal Project Mode.
 - Team Collaboration Mode.
 
-Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development.
+Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, and local rule-based AI with optional Gemini provider configuration.
 
 ## Current Verified Status
 
-Latest confirmed full regression result:
+Latest confirmed clean full regression result:
 
 - `105 passed`
 - Confirmed after Step 25 Productivity Insights Center.
 - Previous confirmed result was `101 passed` after Admin Control Center expansion from Step 23.2 through Step 23.6.
 - Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
+
+Latest in-progress regression attempt after Codex cleanup:
+
+- Command used: `python -m pytest -x -v`.
+- Pytest collected `113 items`.
+- Result before stopping with `-x`: `21 passed`, `1 failed`.
+- Failure is not a real API bug; it is a stale test assertion in `tests/test_07_deadline_reminders_api.py`.
+- The backend now correctly returns `403 Forbidden` with detail `Admin access required.` from the shared `get_current_admin_user` dependency.
+- The old test still expected `Only admins can run deadline reminder scans`.
+- Immediate fix: update the expected detail in `test_non_admin_cannot_run_deadline_scan` to `Admin access required.`, then rerun `python -m pytest -x -v` and finally `python -m pytest -v`.
 
 Completed backend steps:
 
@@ -56,14 +66,14 @@ Completed backend steps:
 23.4. Admin Reports Center.
 23.5. Admin Logs Filters and Audit Improvements.
 23.6. Admin User Search/Filters and User Activity View.
+24. AI Chat Assistant MVP.
 25. Productivity Insights Center.
 
-Latest completed feature group:
+Latest completed feature groups:
 
+- Step 24 — AI Chat Assistant MVP.
 - Step 25 — Productivity Insights Center.
-- Added `GET /insights/me`.
-- Added `tests/test_16_productivity_insights_api.py`.
-- Confirmed local pytest result: `105 passed`.
+- Codex backend security/cleanup pass after AI chat and productivity insights.
 
 ## Current Main Tables
 
@@ -114,6 +124,7 @@ Rules:
 - Unverified or inactive users are blocked by `get_current_active_verified_user`.
 - Normal users accessing admin routes receive `403 Forbidden` with `Admin access required.`.
 - Admin-only routes depend on `get_current_admin_user`.
+- Route-specific local admin guards should be avoided unless there is a strong reason. Prefer the shared dependency for consistency.
 
 Manual first-admin SQL:
 
@@ -256,7 +267,6 @@ AI Project Planning MVP:
 - Saves generated plans in `ai_plans`.
 - Can optionally create tasks from generated plans.
 - Uses local deterministic/rule-based logic named `local_rule_based_v1`.
-- Real OpenAI/Gemini integration is not connected yet.
 
 Risk Analysis / Delay Prediction MVP:
 
@@ -272,9 +282,44 @@ Smart Scheduling MVP:
 - Can optionally apply generated schedules by updating incomplete task due dates.
 - Uses local deterministic balanced scheduling strategy.
 
+AI provider status after Codex cleanup:
+
+- Default AI provider is `local`.
+- `.env.example` documents `AI_PROVIDER=local`, `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-2.5-flash`, and `GEMINI_TIMEOUT_SECONDS=15`.
+- Gemini provider code is optional and falls back to local AI if provider/API configuration fails.
+- Raw Gemini response/body logging and debug `print()` output were removed from `app/services/ai_provider_service.py`.
+- Do not log full prompt bodies, raw model responses, tokens, API keys, passwords, JWTs, or private user data.
+
 Future AI integration rule:
 
-- Replace only generator/analyzer/scheduler logic inside service files while keeping the same API contracts.
+- Replace only generator/analyzer/scheduler/chat-provider logic inside service files while keeping the same API contracts.
+
+## Step 24 — AI Chat Assistant MVP
+
+Endpoints:
+
+- `POST /projects/{project_id}/chat`
+- `GET /projects/{project_id}/chat`
+- `POST /teams/{team_id}/projects/{project_id}/chat`
+- `GET /teams/{team_id}/projects/{project_id}/chat`
+
+Files:
+
+- `app/routers/ai_chat_routes.py`
+- `app/services/ai_chat_service.py`
+- `app/services/ai_provider_service.py`
+- `app/schemas/ai_chat_schema.py`
+- `tests/test_17_ai_chat_assistant_api.py`
+
+Current behavior:
+
+- Active verified users can chat with AI for personal projects they own.
+- Team project members can chat with AI for team projects they belong to.
+- Non-members are blocked from team project chat.
+- The assistant builds context from project details, tasks, latest risk analysis, and recent chat history.
+- User messages are saved in `chat_messages` with `sender_type = 'user'` and `sender_id` set to the current user.
+- AI messages are saved in `chat_messages` with `sender_type = 'ai'` and `sender_id = NULL`.
+- Tests were corrected to assert `sender_id`, not stale `user_id`.
 
 ## Step 25 — Productivity Insights Center
 
@@ -314,6 +359,56 @@ Testing:
 - Step 25 added 4 API tests.
 - User confirmed Step 25 feature tests and full regression result: `105 passed`.
 
+## Codex Backend Security/Cleanup Pass — 2026-05-17
+
+Codex latest pushed cleanup changed these files:
+
+- `.env.example`
+- `app/models/password_reset_code.py`
+- `app/routers/deadline_reminder_routes.py`
+- `app/services/ai_provider_service.py`
+- `app/services/profile_service.py`
+- `tests/test_17_ai_chat_assistant_api.py`
+
+Confirmed cleanup results:
+
+- No critical issues found in the reviewed backend code.
+- `.env` is ignored and should not be tracked.
+- No obvious committed API/private-key patterns were found during the review.
+- Gemini raw response/body logging and debug prints were removed.
+- Deadline reminder admin scan now uses shared `get_current_admin_user`.
+- Duplicate imports were cleaned in profile service.
+- AI chat tests were updated to expect `sender_id`, not stale `user_id`.
+- `.env.example` now documents local AI and Gemini placeholders.
+- `password_reset_codes` SQLAlchemy model now includes `chk_password_reset_codes_expiry` with `expires_at > created_at`.
+
+Important remaining items after Codex cleanup:
+
+- Run the full DB-backed suite after fixing the stale deadline reminder test assertion.
+- Add the live PostgreSQL migration for `chk_password_reset_codes_expiry`; model changes do not update existing tables automatically.
+- CORS is still not configured in `app/main.py`; add explicit allowlist CORS when frontend/mobile browser integration starts.
+- If `database/database_schema.sql` exists locally, align it with SQLAlchemy models or replace manual schema drift with migrations/Alembic.
+- Ruff is not installed yet; lint cleanup remains manual unless the project adds Ruff later.
+
+Live DB migration still required:
+
+```sql
+ALTER TABLE password_reset_codes
+DROP CONSTRAINT IF EXISTS chk_password_reset_codes_expiry;
+
+ALTER TABLE password_reset_codes
+ADD CONSTRAINT chk_password_reset_codes_expiry
+CHECK (expires_at > created_at);
+```
+
+Verification SQL:
+
+```sql
+SELECT conname
+FROM pg_constraint
+WHERE conname = 'chk_password_reset_codes_expiry';
+```
+
 ## Role Management Decision
 
 There are separate role systems:
@@ -343,30 +438,46 @@ Useful local commands:
 
 ```powershell
 python -m pytest tests/test_16_productivity_insights_api.py -v
+python -m pytest tests/test_17_ai_chat_assistant_api.py -v
 python -m pytest --collect-only -q
 python -m pytest --cov=app --cov-report=term-missing
 python -m compileall app tests
 python -m pip check
 ```
 
+Current known test fix needed:
+
+```python
+assert response.json()["detail"] == "Admin access required."
+```
+
+This should replace the stale expected message in `tests/test_07_deadline_reminders_api.py::test_non_admin_cannot_run_deadline_scan`.
+
 Future testing rule:
 
 - Every backend feature step should include pytest tests before the step is considered done.
 - Prefer API-level tests with `TestClient`, isolated PostgreSQL test database, disabled outbound email, and clear assertions.
 - Keep using `python -m pytest -x -v` as the first full regression check.
+- After `-x` passes, run `python -m pytest -v` for the final full result.
 
 ## Roadmap From Here
 
-Next feature candidates:
+Immediate next actions:
 
-- Step 24 — AI Chat Assistant MVP, if not already completed locally.
-- Real AI API integration.
+1. Fix stale deadline reminder test expected detail.
+2. Rerun DB-backed full pytest suite until clean.
+3. Add live PostgreSQL migration for `chk_password_reset_codes_expiry`.
+4. Commit and push the test/memo updates.
+
+Next feature/polish candidates:
+
+- Real AI API integration hardening.
 - Productivity insights expansion.
 - CORS/frontend/mobile integration.
 - Firebase FCM for push notifications.
 - Firebase Storage for attachments.
 - Tests/security cleanup/Alembic.
-- Docker and deployment polish.
+- Docker and deployment polish after the core system is stable.
 
 ## User Preference
 
@@ -375,3 +486,4 @@ Next feature candidates:
 - Prefer Swagger, Thunder Client, or short manual API testing instructions unless PowerShell is explicitly requested.
 - For backend feature steps, always include pytest tests and run/verify them.
 - Keep Docker as final polish after core system features are stable.
+- Keep this file as the main Planora project memory inside VS Code/Codex so the chat memory does not become too large.
