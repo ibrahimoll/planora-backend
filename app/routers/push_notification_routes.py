@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Annotated
 from app.core.config import settings
 from app.services.firebase_push_service import send_push_to_user
@@ -166,4 +167,4 @@ def send_test_push_notification(
         },
     )
 
-    return PushSendResultResponse(**result.__dict__)
+    return PushSendResultResponse(**asdict(result))
