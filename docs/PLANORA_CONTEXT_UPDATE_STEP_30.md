@@ -8,6 +8,12 @@ Planora backend remains completed through Step 29 with the latest recorded backe
 
 Current project phase: Step 30 — Admin Dashboard Integration Foundation.
 
+Admin-dashboard development branch currently in use:
+
+- `feature/admin-projects-page`
+
+Do not assume newest admin-dashboard work is on `main` until it is merged.
+
 ## Completed admin dashboard work
 
 ### Step 30.8 — Admin Users Page — Completed
@@ -47,26 +53,39 @@ User confirmed completed.
 - List and detail refresh after updates.
 - Overview overdue/risk wording was adjusted so Overview stays general while Tasks page handles task detail.
 
+### Step 30.11 — Admin Risk Center Page — Completed
+
+User confirmed completed.
+
+- `/dashboard/risk` loads real backend risk data.
+- Sidebar Risk link is active.
+- Risk summary cards load from `GET /admin/risk/summary`.
+- High-risk project data loads from `GET /admin/risk/high-risk-projects`.
+- Empty state appears when there are no high-risk projects.
+- Refresh button works.
+- Reports link was kept disabled until the Reports page exists.
+
 ## Next step
 
-### Step 30.11 — Admin Risk Center Page
+### Step 30.12 — Admin Reports Page
 
 Backend APIs:
 
-- `GET /admin/risk/summary`
-- `GET /admin/risk/high-risk-projects`
+- `GET /admin/reports/system-summary`
+- `GET /admin/reports/projects-summary`
+- `GET /admin/reports/users-summary`
 
 Expected frontend route:
 
-- `/dashboard/risk`
+- `/dashboard/reports`
 
 Next work:
 
-- Add risk TypeScript types in `types/admin.ts`.
-- Activate Risk in `components/layout/AdminSidebar.tsx`.
-- Build `/dashboard/risk` using real backend data.
-- Show risk summary cards and high-risk project list.
-- Include loading, error, and empty states.
+- Add report TypeScript types in `types/admin.ts`.
+- Activate Reports in `components/layout/AdminSidebar.tsx` after the page exists.
+- Build `/dashboard/reports` using real backend data.
+- Show system, project, and user summary report sections.
+- Include loading, error, refresh, and generated-at states.
 
 ## Important working rule
 
