@@ -1,6 +1,8 @@
+from mimetypes import guess_type
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -16,9 +18,12 @@ from app.schemas.profile_schema import (
     ProfileUpdateResponse,
 )
 from app.services.profile_service import (
+    PROFILE_PICTURE_URL_PREFIX,
     change_my_password,
-    update_my_profile,
     delete_my_account,
+    get_profile_picture_local_path,
+    update_my_profile,
+    upload_my_profile_picture,
 )
 
 router = APIRouter(
@@ -28,6 +33,29 @@ router = APIRouter(
 
 DBSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_verified_user)]
+UploadedProfilePicture = Annotated[UploadFile, File(...)]
+
+PROFILE_PICTURE_NOT_FOUND = "Profile picture not found"
+
+
+@router.get("/picture/{stored_file_name}", include_in_schema=False)
+def get_profile_picture(stored_file_name: str):
+    file_url = f"{PROFILE_PICTURE_URL_PREFIX}{stored_file_name}"
+    file_path = get_profile_picture_local_path(file_url=file_url)
+
+    if file_path is None or not file_path.exists() or not file_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=PROFILE_PICTURE_NOT_FOUND,
+        )
+
+    media_type = guess_type(file_path.name)[0] or "application/octet-stream"
+
+    return FileResponse(
+        path=file_path,
+        media_type=media_type,
+        filename=file_path.name,
+    )
 
 
 @router.get("")
@@ -61,6 +89,24 @@ def update_profile(
     )
 
 
+@router.post("/picture")
+def upload_profile_picture(
+    db: DBSession,
+    current_user: CurrentUser,
+    file: UploadedProfilePicture,
+) -> ProfileUpdateResponse:
+    updated_user = upload_my_profile_picture(
+        db=db,
+        current_user=current_user,
+        file=file,
+    )
+
+    return ProfileUpdateResponse(
+        message="Profile picture updated successfully.",
+        user=ProfileResponse.model_validate(updated_user),
+    )
+
+
 @router.patch("/password")
 def update_password(
     password_data: ChangePasswordRequest,
@@ -82,6 +128,7 @@ def update_password(
     return ChangePasswordResponse(
         message="Password changed successfully.",
     )
+
 
 @router.delete("")
 def delete_account(
