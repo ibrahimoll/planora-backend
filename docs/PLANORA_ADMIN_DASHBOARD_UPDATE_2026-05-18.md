@@ -101,10 +101,109 @@ Backend routes used:
 - `GET /notifications`
 - `PATCH /notifications/read-all`
 
+## Frontend Feature Backlog From Backend Comparison
+
+These backend features exist but are missing or only partially integrated in the admin dashboard frontend. Use this list as the next work queue.
+
+### High-priority admin-facing missing pages/features
+
+1. Admin Logs page
+
+- Suggested route: `/dashboard/admin-logs`
+- Backend route: `GET /admin/logs`
+- Needed UI: log table/list, filters for admin, target user, action, created_from, created_to, limit, offset.
+- Purpose: audit admin actions such as role changes, activation/deactivation, project moderation, and task moderation.
+
+2. Full Notifications page
+
+- Suggested route: `/dashboard/notifications`
+- Backend routes: `GET /notifications`, `GET /notifications/unread-count`, `PATCH /notifications/{notification_id}/read`, `PATCH /notifications/read-all`, `DELETE /notifications/{notification_id}`.
+- Current status: topbar notification dropdown exists only.
+- Needed UI: full notification center, unread filter, type filter, mark one read, mark all read, delete notification, empty/loading/error states.
+
+3. Admin Reports expansion
+
+- Existing route: `/dashboard/reports`
+- Admin backend routes: `GET /admin/reports/system-summary`, `GET /admin/reports/projects-summary`, `GET /admin/reports/users-summary`.
+- Current status: page focuses mostly on project report generation using `/reports/projects/{project_id}`.
+- Needed UI: admin system summary, projects summary, users summary, printable/exportable sections, and clear separation between system reports and single-project reports.
+
+4. Push Notification management
+
+- Suggested location: `/dashboard/settings` section or `/dashboard/push-notifications`.
+- Backend routes: `GET /push-notifications/status`, `GET /push-notifications/preferences`, `PATCH /push-notifications/preferences`, `GET /push-notifications/device-tokens`, `PATCH /push-notifications/device-tokens/{device_token_id}/deactivate`, `POST /push-notifications/test`.
+- Needed UI: Firebase configured/enabled status, push preference toggles, registered device tokens list, deactivate token action, send test push form.
+
+5. Deadline Reminder admin scan panel
+
+- Suggested location: dashboard overview utility panel, reports page, or settings/admin tools section.
+- Backend routes: `POST /deadline-reminders/run`, `GET /deadline-reminders/me`.
+- Needed UI: hours-ahead input, include-overdue toggle, run scan button, result summary, and reminder list/preview.
+
+### Medium-priority project/admin integrations
+
+6. Project Activity Timeline
+
+- Suggested location: project detail panel/page.
+- Backend route: `GET /projects/{project_id}/activity`.
+- Current status: dashboard overview shows recent activity globally through `/admin/dashboard/recent-activity`, but individual project activity is not shown.
+- Needed UI: timeline list with event type filter, limit/offset, actor, event message, and created_at.
+
+7. AI Project Planning panel
+
+- Suggested location: project detail page/panel.
+- Backend routes: `POST /projects/{project_id}/ai-plans`, `GET /projects/{project_id}/ai-plans`, `POST /teams/{team_id}/projects/{project_id}/ai-plans`, `GET /teams/{team_id}/projects/{project_id}/ai-plans`.
+- Needed UI: generate AI plan form, option to create tasks if backend request supports it, AI plan history, generated milestones/tasks display.
+- Note: this may be better for user/mobile project workspace, but admin can inspect or trigger it if desired.
+
+8. AI Chat Assistant panel
+
+- Suggested location: project detail page or separate project workspace route.
+- Backend routes: `POST /projects/{project_id}/chat`, `GET /projects/{project_id}/chat`, `POST /teams/{team_id}/projects/{project_id}/chat`, `GET /teams/{team_id}/projects/{project_id}/chat`.
+- Needed UI: project-scoped chat history, message composer, assistant context summary.
+- Note: this is more user-facing than admin-facing, but it is a major Planora AI feature.
+
+9. Smart Scheduling panel
+
+- Suggested location: project detail page/panel.
+- Backend routes: `POST /projects/{project_id}/smart-schedules/preview`, `POST /projects/{project_id}/smart-schedules`, `GET /projects/{project_id}/smart-schedules`, plus team-project equivalents.
+- Needed UI: preview schedule, apply schedule, show schedule history, visualize task due-date changes.
+- Note: stronger fit for user/team project workspace but can be added to admin project oversight later.
+
+### Lower-priority or user/mobile-oriented features
+
+10. Invitations UI
+
+- Backend routes: `POST /teams/{team_id}/invitations`, `GET /invitations/me`, `POST /invitations/{invitation_id}/accept`, `POST /invitations/{invitation_id}/reject`.
+- Needed UI: pending invitations list, accept/reject buttons, invite user form inside team management.
+- Note: likely belongs in user/mobile/team workspace more than admin dashboard.
+
+11. Productivity Insights page
+
+- Backend route: `GET /insights/me`.
+- Needed UI: user productivity insight cards, workload status, project health, recommendations.
+- Note: mostly user-facing, not admin-facing, unless admin impersonation or per-user insights are added later.
+
+12. User-facing project/task/team CRUD pages
+
+- Backend has full non-admin project, task, team, team-project, team-task, comments, attachments, progress, risk-analysis, and report APIs.
+- Admin dashboard should not necessarily duplicate all user/mobile workflows.
+- Keep admin dashboard focused on oversight, moderation, reporting, logs, system health, notifications, and settings.
+
+## Recommended Next Build Order
+
+1. `/dashboard/admin-logs`
+2. `/dashboard/notifications`
+3. Expand `/dashboard/reports` with admin summary reports
+4. Push Notifications section in `/dashboard/settings`
+5. Deadline Reminder scan panel
+6. Project Activity Timeline inside `/dashboard/projects`
+7. AI Plan / AI Chat / Smart Scheduling panels if admin demo needs AI visibility
+
 ## Current Next Step
 
 Continue admin-dashboard polish and remaining Step 30 pages:
 
 - Confirm auth pages visually after removing the marketing section.
 - Run `npm run lint` and `npm run build` in `admin-dashboard`.
-- Continue with Admin Tasks Page, Risk Center Page, Reports Page, Activity/Notifications page, and Admin Settings page.
+- Start next with `/dashboard/admin-logs`, then `/dashboard/notifications`.
