@@ -693,25 +693,24 @@ Firebase Storage for attachments remains useful, but it is lower priority unless
 
 ## Future Landing Page Design Rules
 
-Planora does not currently have a public landing page in the admin-dashboard repo. These rules are saved for the future public website/landing page only.
+Prompt1:
+Remove every gradient, glassmorphism effect, and purple-to-blue background from my landing page. Replace with one flat background color and a single accent color.
 
-Important:
+Prompt2:
+Rewrite all copy on my landing page in plain human English.
+No "empower," "unleash," "revolutionize," "supercharge," or emoji.
+Write like a real person explaining the product to a friend.
 
-- These rules apply ONLY to the future public landing page or marketing website.
-- They do NOT apply to the admin dashboard.
-- The admin dashboard should keep the dark futuristic AI operations-center style from the Stitch references.
+Prompt3:
+Replace the three-feature-cards-in-a-row section with something that proves the product is real: an actual product screenshot, a short demo clip, or a concrete number/result. No generic icons.
 
-1. Remove every gradient, glassmorphism effect, and purple-to-blue background from the landing page. Replace with one flat background color and a single accent color.
+Prompt4:
+Pick one real font, not the default, set line-height to 1.5-1.6 for body text, and fix all spacing so sections have consistent vertical rhythm. Remove cramped or uneven padding.
 
-2. Rewrite all landing page copy in plain human English. Do not use words like “empower,” “unleash,” “revolutionize,” or “supercharge.” Do not use emoji. Write like a real person explaining the product to a friend.
+Prompt5:
+Audit my entire landing page and remove anything that exists only because it looked cool in a Tailwind demo: floating orbs, fake dashboard mockups, fake testimonials, decorative blurs, and unused animations.
 
-3. Replace any generic three-feature-cards-in-a-row section with something that proves the product is real: an actual product screenshot, a short demo clip, or a concrete number/result. Do not use generic icons as proof.
-
-4. Pick one real font, not the default. Set body text line-height to 1.5–1.6. Fix spacing so sections have consistent vertical rhythm. Remove cramped or uneven padding.
-
-5. Audit the whole landing page and remove anything that exists only because it looked cool in a Tailwind demo: floating orbs, fake dashboard mockups, fake testimonials, decorative blurs, and unused animations.
-
-When a public Planora landing page is created later, apply these rules before styling polish. The landing page should be simple, credible, and human. The admin dashboard should remain a separate dark AI command-center product interface.
+These prompts are mandatory for the future public Planora landing page. When a landing page or public website is created, Codex must apply these rules before styling polish. Do not skip these rules just because the landing page does not exist yet. Save them as future design requirements. The landing page should be simple, credible, and human. The admin dashboard remains a separate dark AI command-center interface.
 
 ## User Preference
 
