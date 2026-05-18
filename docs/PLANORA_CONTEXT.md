@@ -691,6 +691,28 @@ Suggested Step 30 scope:
 
 Firebase Storage for attachments remains useful, but it is lower priority unless attachment hosting becomes urgent. It should come after frontend/admin/mobile integration because it is more of an infrastructure polish step than a demo-critical feature.
 
+## Future Landing Page Design Rules
+
+Planora does not currently have a public landing page in the admin-dashboard repo. These rules are saved for the future public website/landing page only.
+
+Important:
+
+- These rules apply ONLY to the future public landing page or marketing website.
+- They do NOT apply to the admin dashboard.
+- The admin dashboard should keep the dark futuristic AI operations-center style from the Stitch references.
+
+1. Remove every gradient, glassmorphism effect, and purple-to-blue background from the landing page. Replace with one flat background color and a single accent color.
+
+2. Rewrite all landing page copy in plain human English. Do not use words like “empower,” “unleash,” “revolutionize,” or “supercharge.” Do not use emoji. Write like a real person explaining the product to a friend.
+
+3. Replace any generic three-feature-cards-in-a-row section with something that proves the product is real: an actual product screenshot, a short demo clip, or a concrete number/result. Do not use generic icons as proof.
+
+4. Pick one real font, not the default. Set body text line-height to 1.5–1.6. Fix spacing so sections have consistent vertical rhythm. Remove cramped or uneven padding.
+
+5. Audit the whole landing page and remove anything that exists only because it looked cool in a Tailwind demo: floating orbs, fake dashboard mockups, fake testimonials, decorative blurs, and unused animations.
+
+When a public Planora landing page is created later, apply these rules before styling polish. The landing page should be simple, credible, and human. The admin dashboard should remain a separate dark AI command-center product interface.
+
 ## User Preference
 
 - When the user says `done` or gives a test result after a backend step, update `docs/PLANORA_CONTEXT.md`.
