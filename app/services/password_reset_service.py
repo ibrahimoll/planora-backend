@@ -61,7 +61,11 @@ def get_latest_active_password_reset_code(
             PasswordResetCode.used_at.is_(None),
             PasswordResetCode.expires_at > datetime.now(timezone.utc),
         )
-        .order_by(PasswordResetCode.created_at.desc())
+        .order_by(
+            PasswordResetCode.created_at.desc(),
+            PasswordResetCode.reset_code_id.desc(),
+        )
+        .limit(1)
     )
 
 

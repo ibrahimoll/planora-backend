@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from statistics import mean
 
-from sqlalchemy import distinct, func, select
+from sqlalchemy import case, distinct, func, select
 from sqlalchemy.orm import Session
 
 from app.models.project import Project
@@ -130,25 +129,55 @@ def get_admin_system_summary_report(db: Session) -> AdminSystemSummaryReportResp
 
 def get_admin_projects_summary_report(db: Session) -> AdminProjectSummaryReportResponse:
     now = _now_utc()
-    projects = list(db.execute(select(Project)).scalars().all())
-    completion_values: list[float] = []
+    projects_total = _count_where(db, Project)
 
-    for project in projects:
-        total_tasks = _count_where(db, Task, Task.project_id == project.project_id)
-        completed_tasks = _count_where(db, Task, Task.project_id == project.project_id, Task.status == "completed")
-        if total_tasks > 0:
-            completion_values.append(round((completed_tasks / total_tasks) * 100, 2))
-        else:
-            completion_values.append(0.0)
+    task_completion_by_project = (
+        select(
+            Task.project_id.label("project_id"),
+            func.count(Task.task_id).label("total_tasks"),
+            func.sum(
+                case((Task.status == "completed", 1), else_=0)
+            ).label("completed_tasks"),
+        )
+        .group_by(Task.project_id)
+        .subquery()
+    )
+
+    completion_total = db.scalar(
+        select(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            task_completion_by_project.c.total_tasks > 0,
+                            (task_completion_by_project.c.completed_tasks * 100.0)
+                            / task_completion_by_project.c.total_tasks,
+                        ),
+                        else_=0.0,
+                    )
+                ),
+                0.0,
+            )
+        )
+        .select_from(Project)
+        .outerjoin(
+            task_completion_by_project,
+            Project.project_id == task_completion_by_project.c.project_id,
+        )
+    )
 
     return AdminProjectSummaryReportResponse(
-        projects_total=len(projects),
+        projects_total=projects_total,
         not_started=_count_where(db, Project, Project.status == "not_started"),
         in_progress=_count_where(db, Project, Project.status == "in_progress"),
         completed=_count_where(db, Project, Project.status == "completed"),
         on_hold=_count_where(db, Project, Project.status == "on_hold"),
         cancelled=_count_where(db, Project, Project.status == "cancelled"),
-        average_completion_percentage=round(mean(completion_values), 2) if completion_values else 0.0,
+        average_completion_percentage=(
+            round(float(completion_total or 0.0) / projects_total, 2)
+            if projects_total
+            else 0.0
+        ),
         generated_at=now,
     )
 
