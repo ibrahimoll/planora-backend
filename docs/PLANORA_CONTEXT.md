@@ -423,14 +423,14 @@ Completed:
 Current admin-dashboard routes/pages:
 
 - `/dashboard` — overview dashboard using real admin overview and recent activity APIs.
-- `/dashboard/users` — user management with search, filters, detail, activity, activate/deactivate, promote/demote, and self-action protections.
-- `/dashboard/projects` — project oversight with grouped vertical portfolio view, filters, detail panel, and status update.
-- `/dashboard/tasks` — task oversight with filters, grouped workload, detail, status update, assignment/unassignment.
+- `/dashboard/users` — user management with search, filters, limit/offset pagination, detail, activity load-more, activate/deactivate, promote/demote, and self-action protections.
+- `/dashboard/projects` — project oversight with grouped vertical portfolio view, backend filters, limit/offset pagination, detail panel, and status update.
+- `/dashboard/tasks` — task oversight with backend filters, limit/offset pagination, grouped workload, detail, status update, assignment/unassignment.
 - `/dashboard/risk` — risk center using risk summary and high-risk project APIs.
 - `/dashboard/reports` — reports center with System Summary, Projects Summary, Users Summary, and Project Report tabs.
 - `/dashboard/notifications` — notification center with list, unread count, filters/search, mark one read, mark all read, and delete.
 - `/dashboard/admin-logs` — audit log page with filters, user labels, limit/offset pagination.
-- `/dashboard/settings` — profile, profile picture, password change, Firebase push status, notification preferences, saved device tokens, and token deactivation.
+- `/dashboard/settings` — profile, profile picture, password change, Firebase push status, notification preferences, saved device tokens, token deactivation, and safe test push sending.
 
 Sidebar currently includes:
 
@@ -452,26 +452,33 @@ Covered:
 
 - Admin dashboard overview.
 - Recent activity.
-- Users list/filter/detail/activity/actions.
-- Projects list/filter/detail/status update.
-- Tasks list/filter/detail/status update/assignment update.
+- Users list/filter/detail/activity/actions, including `limit`, `offset`, `role`, `is_active`, `is_email_verified`, and `search`.
+- Selected user activity, including `limit`, `offset`, and load-more behavior.
+- Projects list/filter/detail/status update, including `limit`, `offset`, `project_type`, `status`, `owner_id`, `team_id`, and `search`.
+- Tasks list/filter/detail/status update/assignment update, including `limit`, `offset`, `status`, `priority`, `project_id`, `assigned_to`, `created_by`, `overdue`, `unassigned`, and `search`.
 - Risk summary and high-risk projects.
 - Admin reports summaries.
 - Project reports.
 - Notifications list/read/delete.
 - Admin logs with filters and pagination.
 - Settings/profile/password/profile picture.
-- Push notification status/preferences/device tokens.
+- Push notification status/preferences/device tokens and test push sending.
 
-Known polish or partial-parity items:
+Marked completed from frontend verification:
 
-- Projects page may still need full visible UI for every backend filter, especially `owner_id` and `team_id`, if not already added after the latest parity pass.
-- Tasks page may still need full visible UI for every backend filter, especially `project_id`, `assigned_to`, and `created_by`, if not already added after the latest parity pass.
-- Users page should keep limit/offset pagination if recently added; verify in frontend before future edits.
-- User activity preview can be expanded with pagination or “load more” if needed.
-- Push notification test endpoint can be exposed in Settings if not already added.
+- Step 30.10 - Admin Tasks Page.
+- Step 30.11 - Risk Center Page.
+- Step 30.12 - Reports Page.
+- Activity / Notifications page.
+- Admin Logs page.
+- Admin settings page with push notification settings.
+
+### Remaining Admin Dashboard Polish
+
 - Real browser FCM token registration should remain a TODO unless safe public Firebase config and VAPID handling are added.
-- Do not expose destructive profile account deletion in admin dashboard by default.
+- Do not expose destructive `DELETE /profile` account deletion in admin dashboard by default; it needs a dedicated safe design and confirmation flow first.
+- Backend list endpoints return arrays without total counts, so frontend pagination uses `limit`, `offset`, and "next disabled when returned rows are fewer than the page size."
+- Optional future polish: saved report export history, richer audit-log actor/target labels from backend joins, broader browser smoke tests with seeded admin data, and total-count metadata if better pagination UX is needed.
 - Replace the settings profile `<img>` with Next Image/custom loader later only if worth the complexity.
 
 ## Cleanup / Optimization Pass — 2026-05-19
@@ -486,7 +493,7 @@ Files changed in that pass:
 - `lib/adminProfileSync.ts`
 - `app/dashboard/settings/page.tsx`
 - `app/globals.css`
-- `components/Topbar.tsx`
+- `src/components/dashboard/Topbar.tsx`
 
 Changes:
 
