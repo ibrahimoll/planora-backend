@@ -14,7 +14,7 @@ Planora is an AI-powered project planning and collaboration system with:
 
 Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, local rule-based AI with optional Gemini provider configuration, explicit CORS/frontend-mobile integration, Firebase Cloud Messaging push sending, and Alembic migrations.
 
-Admin dashboard stack: separate Next.js repository using the FastAPI backend, protected admin auth, shared API client, dark SaaS admin UI, real backend data, and no fake telemetry.
+Admin dashboard stack: separate Next.js repository using the FastAPI backend, protected admin auth, shared API client, dark SaaS admin UI, real backend data, browser Firebase Cloud Messaging token registration, and no fake telemetry.
 
 Repositories:
 
@@ -29,7 +29,8 @@ Latest confirmed status:
 - Backend `python -m compileall app tests`: passed in the latest cleanup pass.
 - Backend Alembic head remains `7562179d6e8d`; migration history is valid.
 - Admin dashboard final polish pass is complete.
-- Admin dashboard latest local verification: `npm run lint` reported `0 errors`; `npm run build` passed.
+- Admin dashboard latest local verification after browser FCM work: `npm run lint` reported `0 errors`; `npm run build` passed.
+- Browser FCM token registration was implemented and tested successfully on the web/laptop: browser permission prompt, real Firebase token registration, saved `web` device token, and test push notification received.
 - Temporary admin-dashboard patch scripts were removed from the frontend repo.
 
 Important backend verification commands:
@@ -137,7 +138,7 @@ There is no separate admin login endpoint. Admins login normally, then admin rou
 
 Rules:
 
-- Public registration always creates normal users with `role = 'user'`.
+- Public registration always creates normal users with `role = 'user`.
 - Public registration must never accept `role = 'admin'`.
 - First admin should be promoted manually in PostgreSQL.
 - After the first admin exists, admins can promote/demote users through `PATCH /admin/users/{user_id}/role`.
@@ -234,6 +235,48 @@ Push notifications:
 
 Firebase private service-account credentials must never be committed or exposed in the frontend.
 
+## Browser FCM Registration — 2026-05-19
+
+Status: complete and tested on the web/laptop.
+
+Implemented in `ibrahimoll/planora-admin-dashboard`:
+
+- Installed the frontend `firebase` package.
+- Added public Firebase web config environment variables in `.env.local`:
+  - `NEXT_PUBLIC_FIREBASE_API_KEY`
+  - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+  - `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+  - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+  - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+  - `NEXT_PUBLIC_FIREBASE_APP_ID`
+  - `NEXT_PUBLIC_FIREBASE_VAPID_KEY`
+- Added `lib/firebaseClient.ts` to initialize Firebase Messaging in the browser, request notification permission, register `/firebase-messaging-sw.js`, and return the FCM token.
+- Added `public/firebase-messaging-sw.js` for background push notification handling and notification click navigation to `/dashboard/notifications`.
+- Updated `app/dashboard/settings/page.tsx` with a `Register this browser` card/button inside `PushNotificationSection()`.
+- The button calls `registerBrowserFcmToken()` and sends the token to the backend with:
+
+```ts
+await api.post("/push-notifications/device-tokens", {
+  token,
+  platform: "web",
+});
+```
+
+Verified behavior:
+
+- `npm run lint` passed with `0 errors` after removing the unused service-worker eslint-disable line.
+- `npm run build` passed.
+- The browser asked for notification permission.
+- The backend saved a `web` device token.
+- Manual `Send test push` worked and a real browser notification was received.
+
+Notes:
+
+- Use `http://localhost:3000` for local web push testing on the same computer.
+- Phone/tunneled-device testing was paused/ignored for now.
+- Duplicate device tokens can appear after old registrations, VAPID/service-worker changes, or different browser profiles. For demo scope, deactivate older stale tokens manually.
+- Frontend public Firebase config is safe to expose, but backend Firebase service-account credentials must stay private and must never be committed.
+
 ## AI / Intelligence Features
 
 AI Project Planning MVP:
@@ -308,7 +351,7 @@ Future schema rule:
 
 ## Admin Dashboard Final Status
 
-Status: complete for the main FYP admin-dashboard pass.
+Status: complete for the main FYP admin-dashboard pass, plus browser FCM token registration.
 
 Completed pages:
 
@@ -320,7 +363,7 @@ Completed pages:
 - `/dashboard/reports` — System Summary, Projects Summary, Users Summary, and Project Report tabs, shared loading/empty states.
 - `/dashboard/notifications` — list, unread count, filters/search, mark one read, mark all read, delete, shared loading/empty states, confirmation dialog for delete.
 - `/dashboard/admin-logs` — audit log filters, user labels, pagination, shared loading/empty states.
-- `/dashboard/settings` — profile, profile picture, password change, Firebase push status, notification preferences, saved device tokens, token deactivation, and safe test push sending.
+- `/dashboard/settings` — profile, profile picture, password change, Firebase push status, notification preferences, saved device tokens, browser FCM token registration, token deactivation, and safe test push sending.
 
 Admin dashboard shell/style status:
 
@@ -328,14 +371,48 @@ Admin dashboard shell/style status:
 - Sidebar/topbar/logo/loading screen polish completed.
 - Sidebar uses fixed/full-height dashboard layout behavior.
 - Topbar remains visible while dashboard content scrolls.
+- Browser FCM registration is complete and tested on web/laptop.
 - Temporary patch scripts were removed.
 - Latest local admin-dashboard verification reported `npm run lint` with `0 errors` and `npm run build` passing.
 
 Known intentional TODOs:
 
-- Real browser FCM token registration remains future work unless safe public Firebase config and VAPID handling are added.
+- Automatic scheduled notification triggering remains future work: due-soon/overdue task scanning should run automatically instead of needing manual `POST /deadline-reminders/run`.
+- Automatic push delivery should be reviewed for notification flows that currently create notifications with `commit=False`, such as deadline reminder and high-risk risk analysis flows.
 - Backend list endpoints still return arrays without total counts; frontend pagination uses `limit`, `offset`, and next disabled when returned rows are fewer than page size.
 - Optional future polish: saved report export history, richer audit-log actor/target labels from backend joins, seeded browser smoke tests, and total-count metadata.
+
+## Next Step — Automatic Notification Scheduler
+
+Recommended next backend feature: automatic due-soon and overdue task notifications.
+
+Goal:
+
+```text
+Backend running
+→ every 15 or 30 minutes
+→ scan due-soon / overdue tasks
+→ create in-app notifications
+→ send browser push notifications automatically
+```
+
+Current state:
+
+- Manual/test push works through `/push-notifications/test`.
+- Real browser FCM token registration works and device tokens are saved.
+- Deadline reminder scan logic already exists in `run_deadline_reminder_scan()`.
+- Admin-only manual scan route already exists at `POST /deadline-reminders/run`.
+- The missing part is an automatic scheduler and push-safe handling for notification flows that use `commit=False`.
+
+Implementation plan:
+
+1. Update `app/services/notification_service.py` so notification creation can safely send push for automatic flows even when notifications are created inside larger transactions.
+2. Add scheduler settings in `app/core/config.py`, such as enabled flag and interval minutes.
+3. Add a backend scheduler service that periodically opens a DB session and calls `run_deadline_reminder_scan()`.
+4. Start/stop the scheduler from FastAPI lifespan/startup without running duplicate scanner loops in tests.
+5. Add pytest coverage for deadline scan behavior and automatic push dispatch boundaries.
+6. Run `python -m pytest -x -v`, then `python -m pytest -v`, then `python -m compileall app tests`.
+7. Update this memo file again after the backend scheduler step is verified.
 
 ## Backend Security / Cleanup Review — 2026-05-19
 
@@ -403,11 +480,14 @@ Future testing rule:
 
 Recommended next order:
 
-1. Backend final hardening items that are safe for FYP/demo scope.
-2. Step 31 — Mobile/User Frontend Integration Foundation.
-3. Step 32 — Firebase Storage for Attachments.
-4. Real AI API integration hardening.
-5. CI, Ruff, Docker, and deployment polish after the core system is stable.
+1. Step 31 — Automatic Notification Scheduler for due-soon/overdue tasks and automatic push delivery.
+2. Better total-count pagination for users/projects/tasks/admin logs/risk lists.
+3. Saved report export history.
+4. Browser QA with seeded data and a manual verification checklist.
+5. Mobile/User Frontend Integration Foundation.
+6. Firebase Storage for Attachments.
+7. Real AI API integration hardening.
+8. CI, Ruff, Docker, and deployment polish after the core system is stable.
 
 Firebase Storage for attachments remains useful, but it is lower priority unless attachment hosting becomes urgent.
 
