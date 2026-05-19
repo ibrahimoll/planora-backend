@@ -1,4 +1,4 @@
-# Planora Backend Context
+# Planora Project Context
 
 Last updated: 2026-05-19
 
@@ -6,15 +6,15 @@ Last updated: 2026-05-19
 
 Planora is an AI-powered project planning and collaboration system with:
 
-- Mobile app for users/team members.
-- Web admin dashboard for administrators.
+- A mobile app for users/team members.
+- A separate web admin dashboard for administrators.
 - No guest access past authentication.
 - Personal Project Mode.
 - Team Collaboration Mode.
 
-Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, local rule-based AI with optional Gemini provider configuration, explicit CORS/frontend-mobile integration, Firebase Cloud Messaging real push sending, manual Firebase web-push testing helpers, and Alembic migrations.
+Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, local rule-based AI with optional Gemini provider configuration, explicit CORS/frontend-mobile integration, Firebase Cloud Messaging push sending, and Alembic migrations.
 
-Frontend/admin stack: separate Next.js admin dashboard repository using the existing FastAPI backend, protected admin auth, shared API client, dark SaaS dashboard UI, real backend data, and no fake admin telemetry.
+Admin dashboard stack: separate Next.js repository using the FastAPI backend, protected admin auth, shared API client, dark SaaS admin UI, real backend data, and no fake telemetry.
 
 Repositories:
 
@@ -23,20 +23,16 @@ Repositories:
 
 ## Current Verified Status
 
-Latest confirmed clean full regression result:
+Latest confirmed status:
 
-- `129 passed`
-- Confirmed on 2026-05-19 after the small scoped security/optimization/cleanup pass across backend and admin dashboard.
-- Backend `python -m compileall app tests`: passed.
-- Backend Alembic head remains `7562179d6e8d`; history is valid.
-- Frontend `npm run lint`: passed with one existing `img` performance warning in `settings/page.tsx`.
-- Frontend `npm run build`: passed.
-- Browser smoke: protected `/dashboard` redirects to `/login`; no console errors reported.
-- Previous confirmed clean full regression result was `129 passed` after Step 29 Alembic Migration Setup.
-- Previous confirmed clean full regression result was `129 passed` after Step 28 Firebase Cloud Messaging real push sending.
-- Test database requirement: `TEST_DATABASE_URL` must point to `planora_test_db`, not the normal development database.
+- Backend full regression previously confirmed: `129 passed` with `TEST_DATABASE_URL` configured.
+- Backend `python -m compileall app tests`: passed in the latest cleanup pass.
+- Backend Alembic head remains `7562179d6e8d`; migration history is valid.
+- Admin dashboard final polish pass is complete.
+- Admin dashboard latest local verification: `npm run lint` reported `0 errors`; `npm run build` passed.
+- Temporary admin-dashboard patch scripts were removed from the frontend repo.
 
-Important verification commands:
+Important backend verification commands:
 
 ```powershell
 $pgPassword = Read-Host "Enter your PostgreSQL postgres password"
@@ -44,6 +40,18 @@ $encodedPassword = [uri]::EscapeDataString($pgPassword)
 $env:TEST_DATABASE_URL = "postgresql+psycopg://postgres:$encodedPassword@localhost:5432/planora_test_db"
 python -m pytest -x -v
 python -m pytest -v
+python -m compileall app tests
+python -m alembic current
+python -m alembic history
+```
+
+Important admin dashboard verification commands:
+
+```powershell
+cd C:\Users\mahdi\OneDrive\Documents\Planora\admin-dashboard
+git pull origin main
+npm run lint
+npm run build
 ```
 
 ## Completed Backend Steps
@@ -85,6 +93,7 @@ python -m pytest -v
 27. CORS / Frontend-Mobile Integration.
 28. Firebase Cloud Messaging real push sending.
 29. Alembic Migration Setup.
+30. Admin Dashboard Integration and Final Polish.
 
 ## Current Main Tables
 
@@ -113,10 +122,10 @@ python -m pytest -v
 - `device_tokens`
 - `notification_preferences`
 
-Planned/polish tables:
+Optional future tables:
 
-- Optional Firebase push delivery log table only if delivery auditing/history is needed later.
-- Optional report export history table only if saved/download history is needed.
+- Firebase push delivery log table if delivery audit/history is needed.
+- Report export history table if saved/download history is needed.
 
 ## Authentication and Admin Rules
 
@@ -133,7 +142,7 @@ Rules:
 - First admin should be promoted manually in PostgreSQL.
 - After the first admin exists, admins can promote/demote users through `PATCH /admin/users/{user_id}/role`.
 - Missing/invalid bearer token returns `401 Unauthorized`.
-- Unverified or inactive users are blocked by `get_current_active_verified_user`.
+- Inactive or unverified users are blocked by `get_current_active_verified_user`.
 - Normal users accessing admin routes receive `403 Forbidden` with `Admin access required.`.
 - Admin-only routes depend on `get_current_admin_user`.
 - Route-specific local admin guards should be avoided unless there is a strong reason. Prefer the shared dependency for consistency.
@@ -148,37 +157,25 @@ SET role = 'admin',
 WHERE email = 'your_email@example.com';
 ```
 
-## Role Management Decision
-
-There are separate role systems:
+Role systems are separate:
 
 - Global user role: `users.role`: `user`, `admin`.
 - Team membership role: `team_members.role`: `owner`, `admin`, `member`.
 - Project membership role: `project_members.role`: `owner`, `manager`, `member`.
 
-Important behavior:
-
-- Changing a user to global `admin` gives access to admin dashboard routes.
-- It does not automatically change team or project membership roles.
-- Team role and project role updates remain separate features.
+Changing a user to global admin gives access to admin dashboard routes but does not automatically modify team/project roles.
 
 ## Admin Backend Capabilities
 
 Critical admin actions create `admin_logs` rows.
 
-### Dashboard Overview
-
-Endpoints:
+Dashboard overview:
 
 - `GET /admin/dashboard/overview`
 - `GET /admin/dashboard/recent-activity`
 - `GET /admin/logs`
 
-Admin can view system statistics, recent activity, and audit logs.
-
-### Admin User Management
-
-Endpoints:
+User management:
 
 - `GET /admin/users`
 - `GET /admin/users/{user_id}`
@@ -187,90 +184,37 @@ Endpoints:
 - `PATCH /admin/users/{user_id}/activate`
 - `PATCH /admin/users/{user_id}/role`
 
-Supported `/admin/users` filters:
-
-- `role`
-- `is_active`
-- `is_email_verified`
-- `search`
-- `limit`
-- `offset`
-
-Protections:
+User management protections:
 
 - Admin cannot deactivate self.
 - Admin cannot remove own admin role.
 - Admin cannot remove/deactivate the last active verified admin.
 
-### Admin Project Oversight
-
-Endpoints:
+Project oversight:
 
 - `GET /admin/projects`
 - `GET /admin/projects/{project_id}`
 - `PATCH /admin/projects/{project_id}/status`
 
-Supported filters:
-
-- `limit`
-- `offset`
-- `project_type`
-- `status`
-- `owner_id`
-- `team_id`
-- `search`
-
-Important contract:
-
-- Status filter query parameter is `status`.
-- Project type query parameter is `project_type`.
-- Status update body is `{ "status": "in_progress" }` using one of `not_started`, `in_progress`, `completed`, `on_hold`, or `cancelled`.
-- Search currently matches project `title` and `description`.
-
-### Admin Task Oversight
-
-Endpoints:
+Task oversight:
 
 - `GET /admin/tasks`
 - `GET /admin/tasks/{task_id}`
 - `PATCH /admin/tasks/{task_id}/status`
 - `PATCH /admin/tasks/{task_id}/assignment`
 
-Supported filters:
-
-- `limit`
-- `offset`
-- `status`
-- `priority`
-- `project_id`
-- `assigned_to`
-- `created_by`
-- `overdue`
-- `unassigned`
-- `search`
-
-### Admin Risk Center
-
-Endpoints:
+Risk center:
 
 - `GET /admin/risk/summary`
 - `GET /admin/risk/high-risk-projects`
 
-Admin can view system-level risk summary and list high-risk projects using latest risk records.
-
-### Admin Reports Center
-
-Endpoints:
+Reports center:
 
 - `GET /admin/reports/system-summary`
 - `GET /admin/reports/projects-summary`
 - `GET /admin/reports/users-summary`
 
-Admin can generate JSON summary reports for system, projects, and users.
-
-### Notifications and Push Notifications
-
-Notification endpoints:
+Notifications:
 
 - `GET /notifications`
 - `GET /notifications/unread-count`
@@ -278,7 +222,7 @@ Notification endpoints:
 - `PATCH /notifications/read-all`
 - `DELETE /notifications/{notification_id}`
 
-Push endpoints:
+Push notifications:
 
 - `POST /push-notifications/device-tokens`
 - `GET /push-notifications/device-tokens`
@@ -320,14 +264,6 @@ AI Chat Assistant MVP:
 - `POST /teams/{team_id}/projects/{project_id}/chat`
 - `GET /teams/{team_id}/projects/{project_id}/chat`
 
-Current behavior:
-
-- Active verified users can chat with AI for personal projects they own.
-- Team project members can chat with AI for team projects they belong to.
-- Non-members are blocked from team project chat.
-- User messages are saved in `chat_messages` with `sender_type = 'user'` and `sender_id` set to the current user.
-- AI messages are saved in `chat_messages` with `sender_type = 'ai'` and `sender_id = NULL`.
-
 AI provider status:
 
 - Default AI provider is `local`.
@@ -339,7 +275,7 @@ Future AI integration rule:
 
 - Replace only generator/analyzer/scheduler/chat-provider logic inside service files while keeping the same API contracts.
 
-## Step 29 — Alembic Migration Setup
+## Alembic Migration Setup
 
 Purpose:
 
@@ -351,13 +287,6 @@ Current migration chain:
 
 - `2bf54f983173` — empty baseline for the existing Planora schema.
 - `7562179d6e8d` — adds `chk_password_reset_codes_expiry` on `password_reset_codes` with `CHECK (expires_at > created_at)`.
-
-Configuration:
-
-- `alembic/env.py` reads `settings.database_url` from `app.core.config`.
-- `alembic/env.py` imports `app.models` so all SQLAlchemy models are registered.
-- `target_metadata = Base.metadata` from `app.db.base`.
-- `alembic.ini` leaves `sqlalchemy.url` blank because runtime config comes from `settings.database_url`.
 
 Existing live database rule:
 
@@ -375,147 +304,68 @@ Future schema rule:
 
 - New schema changes should be represented as Alembic revisions.
 - Avoid editing PostgreSQL schema manually except for emergency repair with a matching follow-up migration.
-- Review every Alembic autogenerated migration manually before running it.
+- Review every autogenerated migration manually before running it.
 
-## Step 30 — Admin Dashboard Integration Foundation
+## Admin Dashboard Final Status
 
-Status: largely complete and verified, with remaining polish items only.
+Status: complete for the main FYP admin-dashboard pass.
 
-### Admin Authentication Foundation — Completed
-
-Completed:
-
-- Separate Next.js admin dashboard frontend repository exists.
-- `/` redirects to `/login`.
-- `/login`, `/forgot-password`, and `/reset-password` exist.
-- Admin login uses existing `POST /auth/login` with `application/x-www-form-urlencoded` fields `username` and `password`.
-- Frontend stores the Planora JWT in `planora_admin_token`.
-- Frontend attaches the token through `lib/api.ts` on protected requests.
-- Login calls `/auth/me` and requires `role = admin` before allowing dashboard access.
-- Non-admin users are blocked and token is cleared.
-- Protected `401`/`403` responses clear token and redirect to `/login` outside public auth pages.
-- Logout clears token and redirects to `/login`.
-- Forgot/reset password pages are connected to backend auth flow.
-
-### Approved Admin Dashboard Style
-
-- Clean dark SaaS admin dashboard.
-- Planora/AI-aware, but not cyber-template or overdone AI UI.
-- Use real backend data rather than fake charts or fake telemetry.
-- Use clear human admin labels.
-- Cyan/teal is the main accent color.
-- Purple is only a restrained secondary/status color.
-- Avoid excessive glow, glassmorphism, floating orbs, fake dashboard mockups, meaningless AI/cyber wording, fake testimonials, or decorative animations.
-- Keep useful motion only: page transitions, subtle reveal sections, hover states, active sidebar state, dropdown animation, and clean loading states.
-- Do not change the logo style unless explicitly requested.
-
-### Current Dashboard Shell Rules
-
-- Sidebar is fixed/full-height by layout, not dependent on sticky behavior.
-- Topbar remains visible while scrolling.
-- The browser/page itself should not scroll for dashboard routes; only the right dashboard content area scrolls.
-- `ProtectedAdminLayout` uses an `h-screen overflow-hidden` root and a scrollable content region.
-- `dashboard-scale` should be applied to the dashboard content region only, not around the topbar.
-- Avoid custom inner scrollbars inside cards unless absolutely necessary.
-
-### Completed Admin Dashboard Pages
-
-Current admin-dashboard routes/pages:
+Completed pages:
 
 - `/dashboard` — overview dashboard using real admin overview and recent activity APIs.
-- `/dashboard/users` — user management with search, filters, limit/offset pagination, detail, activity load-more, activate/deactivate, promote/demote, and self-action protections.
-- `/dashboard/projects` — project oversight with grouped vertical portfolio view, backend filters, limit/offset pagination, detail panel, and status update.
-- `/dashboard/tasks` — task oversight with backend filters, limit/offset pagination, grouped workload, detail, status update, assignment/unassignment.
-- `/dashboard/risk` — risk center using risk summary and high-risk project APIs.
-- `/dashboard/reports` — reports center with System Summary, Projects Summary, Users Summary, and Project Report tabs.
-- `/dashboard/notifications` — notification center with list, unread count, filters/search, mark one read, mark all read, and delete.
-- `/dashboard/admin-logs` — audit log page with filters, user labels, limit/offset pagination.
+- `/dashboard/users` — user management with search, filters, pagination, detail, activity load-more, activate/deactivate, promote/demote, shared loading/empty states, and confirmation dialog for role/status actions.
+- `/dashboard/projects` — project oversight with grouped portfolio view, filters, pagination, detail panel, status update, shared loading/empty states.
+- `/dashboard/tasks` — task oversight with filters, pagination, grouped workload, detail, status update, assignment/unassignment, shared loading/empty states.
+- `/dashboard/risk` — risk center using risk summary and high-risk project APIs, shared loading/empty states.
+- `/dashboard/reports` — System Summary, Projects Summary, Users Summary, and Project Report tabs, shared loading/empty states.
+- `/dashboard/notifications` — list, unread count, filters/search, mark one read, mark all read, delete, shared loading/empty states, confirmation dialog for delete.
+- `/dashboard/admin-logs` — audit log filters, user labels, pagination, shared loading/empty states.
 - `/dashboard/settings` — profile, profile picture, password change, Firebase push status, notification preferences, saved device tokens, token deactivation, and safe test push sending.
 
-Sidebar currently includes:
+Admin dashboard shell/style status:
 
-- Overview
-- Users
-- Projects
-- Tasks
-- Risk
-- Reports
-- Notifications
-- Admin Logs
-- Settings
+- Dark SaaS admin dashboard style is approved.
+- Sidebar/topbar/logo/loading screen polish completed.
+- Sidebar uses fixed/full-height dashboard layout behavior.
+- Topbar remains visible while dashboard content scrolls.
+- Temporary patch scripts were removed.
+- Latest local admin-dashboard verification reported `npm run lint` with `0 errors` and `npm run build` passing.
 
-### Admin Dashboard Parity Status
+Known intentional TODOs:
 
-Main backend admin capabilities are covered in the frontend.
+- Real browser FCM token registration remains future work unless safe public Firebase config and VAPID handling are added.
+- Backend list endpoints still return arrays without total counts; frontend pagination uses `limit`, `offset`, and next disabled when returned rows are fewer than page size.
+- Optional future polish: saved report export history, richer audit-log actor/target labels from backend joins, seeded browser smoke tests, and total-count metadata.
 
-Covered:
+## Backend Security / Cleanup Review — 2026-05-19
 
-- Admin dashboard overview.
-- Recent activity.
-- Users list/filter/detail/activity/actions, including `limit`, `offset`, `role`, `is_active`, `is_email_verified`, and `search`.
-- Selected user activity, including `limit`, `offset`, and load-more behavior.
-- Projects list/filter/detail/status update, including `limit`, `offset`, `project_type`, `status`, `owner_id`, `team_id`, and `search`.
-- Tasks list/filter/detail/status update/assignment update, including `limit`, `offset`, `status`, `priority`, `project_id`, `assigned_to`, `created_by`, `overdue`, `unassigned`, and `search`.
-- Risk summary and high-risk projects.
-- Admin reports summaries.
-- Project reports.
-- Notifications list/read/delete.
-- Admin logs with filters and pagination.
-- Settings/profile/password/profile picture.
-- Push notification status/preferences/device tokens and test push sending.
+Reviewed areas:
 
-Marked completed from frontend verification:
+- FastAPI app setup and CORS/security headers.
+- Pydantic settings and `.env.example` secret handling.
+- JWT current-user and admin-user dependencies.
+- Profile picture upload path handling and file validation.
+- Admin user-management self/last-admin protections.
+- Public DB health endpoint behavior.
 
-- Step 30.10 - Admin Tasks Page.
-- Step 30.11 - Risk Center Page.
-- Step 30.12 - Reports Page.
-- Activity / Notifications page.
-- Admin Logs page.
-- Admin settings page with push notification settings.
+Current assessment:
 
-### Remaining Admin Dashboard Polish
+- No committed real secrets were found in the inspected config/example files.
+- CORS origins are explicit and `.env.example` warns not to use `*` with credentialed auth headers.
+- Protected routes use current active verified user and admin dependencies.
+- Admin user-management protects self-deactivation, self-demotion, and last active verified admin removal.
+- Profile picture upload uses extension/content-type allowlists, UUID stored names, a size limit, and path traversal checks.
+- Security headers currently include `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy`.
 
-- Real browser FCM token registration should remain a TODO unless safe public Firebase config and VAPID handling are added.
-- Do not expose destructive `DELETE /profile` account deletion in admin dashboard by default; it needs a dedicated safe design and confirmation flow first.
-- Backend list endpoints return arrays without total counts, so frontend pagination uses `limit`, `offset`, and "next disabled when returned rows are fewer than the page size."
-- Optional future polish: saved report export history, richer audit-log actor/target labels from backend joins, broader browser smoke tests with seeded admin data, and total-count metadata if better pagination UX is needed.
-- Replace the settings profile `<img>` with Next Image/custom loader later only if worth the complexity.
+Recommended next backend hardening items:
 
-## Cleanup / Optimization Pass — 2026-05-19
+1. Run full backend regression again with `TEST_DATABASE_URL` after any future code changes.
+2. Consider adding a production-only `Strict-Transport-Security` header when deployed behind HTTPS.
+3. Consider rate limiting for login, resend verification, forgot password, reset password, and test push endpoints before public deployment.
+4. Consider making `/health/db` production-safe by returning only a generic status and not exposing DB details beyond success/failure.
+5. Consider adding CI for backend tests and frontend lint/build so GitHub can verify future pushes automatically.
 
-A small scoped cleanup pass was completed across backend and admin dashboard.
-
-Files changed in that pass:
-
-- `app/services/admin_risk_report_service.py`
-- `app/services/password_reset_service.py`
-- `lib/api.ts`
-- `lib/adminProfileSync.ts`
-- `app/dashboard/settings/page.tsx`
-- `app/globals.css`
-- `src/components/dashboard/Topbar.tsx`
-
-Changes:
-
-- Backend admin projects summary avoids per-project task count queries and calculates completion with one aggregate query.
-- Backend password reset lookup deterministically selects the latest active code with a tie-breaker and `limit(1)`.
-- Frontend API base URL resolution is centralized through `lib/api.ts`.
-- Old dashboard topbar logout now clears the real admin token key through the shared auth helper.
-- Removed global smooth-scroll CSS that caused a Next.js console warning.
-- No endpoint mismatches found for admin logs, notifications, push notification settings, or admin reports.
-
-Verification:
-
-- Backend `python -m compileall app tests`: passed.
-- Backend global pytest was blocked because global Python lacked pytest.
-- Backend venv pytest without `TEST_DATABASE_URL`: `4 passed, 125 skipped`.
-- Backend venv pytest with `TEST_DATABASE_URL` configured: `129 passed`.
-- Backend Alembic via project venv: head is `7562179d6e8d`; history is valid.
-- Frontend `npm run lint`: passed with one existing `<img>` performance warning in settings.
-- Frontend `npm run build`: passed.
-- Browser smoke: protected `/dashboard` redirects to `/login`; no console errors.
-
-## Regression Testing
+## Regression Testing Rules
 
 Standard local pytest command pattern:
 
@@ -524,6 +374,7 @@ $pgPassword = Read-Host "Enter your PostgreSQL postgres password"
 $encodedPassword = [uri]::EscapeDataString($pgPassword)
 $env:TEST_DATABASE_URL = "postgresql+psycopg://postgres:$encodedPassword@localhost:5432/planora_test_db"
 python -m pytest -x -v
+python -m pytest -v
 ```
 
 Useful local commands:
@@ -544,7 +395,6 @@ Future testing rule:
 
 - Every backend feature step should include pytest tests before the step is considered done.
 - Test files should be created through CMD/PowerShell commands by default.
-- Do not rely on pasted-only test content when a command-created test file is expected.
 - Prefer API-level tests with `TestClient`, isolated PostgreSQL test database, disabled outbound email, and clear assertions.
 - Keep using `python -m pytest -x -v` as the first full regression check.
 - After `-x` passes, run `python -m pytest -v` for the final full result.
@@ -553,14 +403,13 @@ Future testing rule:
 
 Recommended next order:
 
-1. Final admin dashboard polish and manual demo testing.
+1. Backend final hardening items that are safe for FYP/demo scope.
 2. Step 31 — Mobile/User Frontend Integration Foundation.
 3. Step 32 — Firebase Storage for Attachments.
 4. Real AI API integration hardening.
-5. Tests/security cleanup/Ruff.
-6. Docker and deployment polish after the core system is stable.
+5. CI, Ruff, Docker, and deployment polish after the core system is stable.
 
-Firebase Storage for attachments remains useful, but it is lower priority unless attachment hosting becomes urgent. It should come after frontend/admin/mobile integration because it is more of an infrastructure polish step than a demo-critical feature.
+Firebase Storage for attachments remains useful, but it is lower priority unless attachment hosting becomes urgent.
 
 ## Future Landing Page Design Rules
 
@@ -579,7 +428,7 @@ Pick one real font, not the default, set line-height to 1.5-1.6 for body text, a
 Prompt5:
 Audit my entire landing page and remove anything that exists only because it looked cool in a Tailwind demo: floating orbs, fake dashboard mockups, fake testimonials, decorative blurs, and unused animations.
 
-These prompts are mandatory for the future public Planora landing page. When a landing page or public website is created, Codex must apply these rules before styling polish. Do not skip these rules just because the landing page does not exist yet. The landing page should be simple, credible, and human. The admin dashboard remains a separate dark SaaS/admin interface.
+These prompts are mandatory for the future public Planora landing page. The admin dashboard remains a separate dark SaaS/admin interface.
 
 ## User Preference
 
