@@ -93,6 +93,12 @@ def delete_my_account(
     current_user: User,
     delete_data: DeleteAccountRequest,
 ) -> None:
+    if not verify_password(
+        delete_data.current_password,
+        current_user.password_hash,
+    ):
+        raise ValueError("Current password is incorrect.")
+
     if delete_data.confirmation_text != DELETE_ACCOUNT_CONFIRMATION_TEXT:
         raise ValueError("Invalid account deletion confirmation text.")
 
