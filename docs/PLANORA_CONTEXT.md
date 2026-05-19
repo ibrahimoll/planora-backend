@@ -12,7 +12,7 @@ Planora is an AI-powered project planning and collaboration system with:
 - Personal Project Mode.
 - Team Collaboration Mode.
 
-Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, local rule-based AI with optional Gemini provider configuration, explicit CORS/frontend-mobile integration, Firebase Cloud Messaging push sending, and Alembic migrations.
+Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, local rule-based AI with optional Gemini provider configuration, explicit CORS/frontend-mobile integration, Firebase Cloud Messaging push sending, automatic deadline reminder scheduling, and Alembic migrations.
 
 Admin dashboard stack: separate Next.js repository using the FastAPI backend, protected admin auth, shared API client, dark SaaS admin UI, real backend data, browser Firebase Cloud Messaging token registration, and no fake telemetry.
 
@@ -25,9 +25,11 @@ Repositories:
 
 Latest confirmed status:
 
-- Backend full regression previously confirmed: `129 passed` with `TEST_DATABASE_URL` configured.
-- Backend `python -m compileall app tests`: passed in the latest cleanup pass.
-- Backend Alembic head remains `7562179d6e8d`; migration history is valid.
+- Backend Step 31 Automatic Notification Scheduler is complete.
+- Backend full regression was run after Step 31 and the user reported all tests passed.
+- Backend `python -m compileall app tests` was run after Step 31 and the user reported it passed.
+- Focused Step 31 test file `tests/test_21_deadline_reminder_scheduler.py` was added and locally verified earlier with `2 passed`.
+- Backend Alembic head remains `7562179d6e8d`; migration history was previously valid.
 - Admin dashboard final polish pass is complete.
 - Admin dashboard latest local verification after browser FCM work: `npm run lint` reported `0 errors`; `npm run build` passed.
 - Browser FCM token registration was implemented and tested successfully on the web/laptop: browser permission prompt, real Firebase token registration, saved `web` device token, and test push notification received.
@@ -95,6 +97,7 @@ npm run build
 28. Firebase Cloud Messaging real push sending.
 29. Alembic Migration Setup.
 30. Admin Dashboard Integration and Final Polish.
+31. Automatic Notification Scheduler for due-soon/overdue task reminders and automatic push delivery.
 
 ## Current Main Tables
 
@@ -138,7 +141,7 @@ There is no separate admin login endpoint. Admins login normally, then admin rou
 
 Rules:
 
-- Public registration always creates normal users with `role = 'user`.
+- Public registration always creates normal users with `role = 'user'`.
 - Public registration must never accept `role = 'admin'`.
 - First admin should be promoted manually in PostgreSQL.
 - After the first admin exists, admins can promote/demote users through `PATCH /admin/users/{user_id}/role`.
@@ -184,12 +187,6 @@ User management:
 - `PATCH /admin/users/{user_id}/deactivate`
 - `PATCH /admin/users/{user_id}/activate`
 - `PATCH /admin/users/{user_id}/role`
-
-User management protections:
-
-- Admin cannot deactivate self.
-- Admin cannot remove own admin role.
-- Admin cannot remove/deactivate the last active verified admin.
 
 Project oversight:
 
@@ -242,14 +239,7 @@ Status: complete and tested on the web/laptop.
 Implemented in `ibrahimoll/planora-admin-dashboard`:
 
 - Installed the frontend `firebase` package.
-- Added public Firebase web config environment variables in `.env.local`:
-  - `NEXT_PUBLIC_FIREBASE_API_KEY`
-  - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
-  - `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
-  - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
-  - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
-  - `NEXT_PUBLIC_FIREBASE_APP_ID`
-  - `NEXT_PUBLIC_FIREBASE_VAPID_KEY`
+- Added public Firebase web config environment variables in `.env.local`.
 - Added `lib/firebaseClient.ts` to initialize Firebase Messaging in the browser, request notification permission, register `/firebase-messaging-sw.js`, and return the FCM token.
 - Added `public/firebase-messaging-sw.js` for background push notification handling and notification click navigation to `/dashboard/notifications`.
 - Updated `app/dashboard/settings/page.tsx` with a `Register this browser` card/button inside `PushNotificationSection()`.
@@ -277,6 +267,52 @@ Notes:
 - Duplicate device tokens can appear after old registrations, VAPID/service-worker changes, or different browser profiles. For demo scope, deactivate older stale tokens manually.
 - Frontend public Firebase config is safe to expose, but backend Firebase service-account credentials must stay private and must never be committed.
 
+## Step 31 — Automatic Notification Scheduler
+
+Status: complete and verified by the user after full backend checks.
+
+Goal achieved:
+
+```text
+Backend running
+→ scheduled scan interval
+→ scan due-soon / overdue tasks
+→ create in-app notifications
+→ send browser push notifications automatically when Firebase/prefs/tokens allow it
+```
+
+Implemented backend pieces:
+
+- `app/core/config.py` includes scheduler settings:
+  - `deadline_reminder_scheduler_enabled`
+  - `deadline_reminder_scheduler_interval_minutes`
+  - `deadline_reminder_hours_ahead`
+  - `deadline_reminder_include_overdue`
+- `.env.example` documents scheduler environment variables.
+- `app/services/deadline_reminder_scheduler.py` runs the automatic scan loop using its own database session.
+- `app/main.py` starts and stops the scheduler through FastAPI lifespan.
+- `app/services/notification_service.py` includes `send_push_for_notification()` for safe post-commit push sending.
+- `app/services/deadline_reminder_service.py` creates reminders and notifications in one transaction, commits, then sends push after commit.
+- `app/services/risk_analysis_service.py` also uses post-commit push sending for high-risk notifications.
+- `tests/test_21_deadline_reminder_scheduler.py` verifies post-commit push behavior for deadline reminder notifications.
+
+Verification status:
+
+- Focused scheduler tests: passed.
+- Full backend pytest regression: passed according to the user's latest report.
+- Backend compileall: passed according to the user's latest report.
+
+Manual local scheduler demo settings:
+
+```env
+DEADLINE_REMINDER_SCHEDULER_ENABLED=true
+DEADLINE_REMINDER_SCHEDULER_INTERVAL_MINUTES=1
+DEADLINE_REMINDER_HOURS_AHEAD=24
+DEADLINE_REMINDER_INCLUDE_OVERDUE=true
+```
+
+Keep scheduler disabled in tests unless intentionally testing startup behavior.
+
 ## AI / Intelligence Features
 
 AI Project Planning MVP:
@@ -289,8 +325,7 @@ Risk Analysis / Delay Prediction MVP:
 
 - Saves generated risk snapshots in `risk_analysis`.
 - Calculates risk using project deadline, task completion, overdue tasks, blocked tasks, and remaining estimated hours.
-- Saved high-risk analyses create in-app `risk` notifications.
-- Push sending can also be triggered when a notification is created and Firebase/prefs/tokens allow it.
+- Saved high-risk analyses create in-app `risk` notifications and can send push after commit when Firebase/prefs/tokens allow it.
 - Uses local deterministic/rule-based logic.
 
 Smart Scheduling MVP:
@@ -377,70 +412,54 @@ Admin dashboard shell/style status:
 
 Known intentional TODOs:
 
-- Automatic scheduled notification triggering remains future work: due-soon/overdue task scanning should run automatically instead of needing manual `POST /deadline-reminders/run`.
-- Automatic push delivery should be reviewed for notification flows that currently create notifications with `commit=False`, such as deadline reminder and high-risk risk analysis flows.
 - Backend list endpoints still return arrays without total counts; frontend pagination uses `limit`, `offset`, and next disabled when returned rows are fewer than page size.
 - Optional future polish: saved report export history, richer audit-log actor/target labels from backend joins, seeded browser smoke tests, and total-count metadata.
+- Optional backend hardening: production HSTS, login/reset rate limiting, production-safe `/health/db`, CI for backend tests and frontend lint/build.
 
-## Next Step — Automatic Notification Scheduler
+## Next Step — Step 32 Backend Total-Count Pagination
 
-Recommended next backend feature: automatic due-soon and overdue task notifications.
+Recommended next backend feature: better total-count pagination metadata for admin list endpoints and other large lists.
 
 Goal:
 
 ```text
-Backend running
-→ every 15 or 30 minutes
-→ scan due-soon / overdue tasks
-→ create in-app notifications
-→ send browser push notifications automatically
+List endpoints
+→ accept limit/offset/search/filter as they do now
+→ return items plus total/count/limit/offset metadata
+→ frontend can show accurate page count and disable next/previous correctly
 ```
 
-Current state:
+Recommended scope:
 
-- Manual/test push works through `/push-notifications/test`.
-- Real browser FCM token registration works and device tokens are saved.
-- Deadline reminder scan logic already exists in `run_deadline_reminder_scan()`.
-- Admin-only manual scan route already exists at `POST /deadline-reminders/run`.
-- The missing part is an automatic scheduler and push-safe handling for notification flows that use `commit=False`.
+1. Create shared pagination schemas, for example:
+   - `PaginationMeta`
+   - endpoint-specific paginated responses such as `AdminUserListResponse`, `AdminProjectListResponse`, `AdminTaskListResponse`, `AdminLogListResponse`.
+2. Update admin list service functions to run both:
+   - data query with `limit` and `offset`
+   - matching `COUNT(*)` query with the same filters
+3. Update admin list routes to return:
 
-Implementation plan:
+```json
+{
+  "items": [],
+  "total": 0,
+  "limit": 20,
+  "offset": 0
+}
+```
 
-1. Update `app/services/notification_service.py` so notification creation can safely send push for automatic flows even when notifications are created inside larger transactions.
-2. Add scheduler settings in `app/core/config.py`, such as enabled flag and interval minutes.
-3. Add a backend scheduler service that periodically opens a DB session and calls `run_deadline_reminder_scan()`.
-4. Start/stop the scheduler from FastAPI lifespan/startup without running duplicate scanner loops in tests.
-5. Add pytest coverage for deadline scan behavior and automatic push dispatch boundaries.
-6. Run `python -m pytest -x -v`, then `python -m pytest -v`, then `python -m compileall app tests`.
-7. Update this memo file again after the backend scheduler step is verified.
+4. Keep backwards impact in mind because the current admin frontend expects arrays.
+5. Update the admin dashboard API client/pages after backend responses change.
+6. Add pytest coverage for count metadata, filters, and pagination boundaries.
+7. Run full backend regression and frontend lint/build.
 
-## Backend Security / Cleanup Review — 2026-05-19
+Suggested endpoint order:
 
-Reviewed areas:
-
-- FastAPI app setup and CORS/security headers.
-- Pydantic settings and `.env.example` secret handling.
-- JWT current-user and admin-user dependencies.
-- Profile picture upload path handling and file validation.
-- Admin user-management self/last-admin protections.
-- Public DB health endpoint behavior.
-
-Current assessment:
-
-- No committed real secrets were found in the inspected config/example files.
-- CORS origins are explicit and `.env.example` warns not to use `*` with credentialed auth headers.
-- Protected routes use current active verified user and admin dependencies.
-- Admin user-management protects self-deactivation, self-demotion, and last active verified admin removal.
-- Profile picture upload uses extension/content-type allowlists, UUID stored names, a size limit, and path traversal checks.
-- Security headers currently include `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy`.
-
-Recommended next backend hardening items:
-
-1. Run full backend regression again with `TEST_DATABASE_URL` after any future code changes.
-2. Consider adding a production-only `Strict-Transport-Security` header when deployed behind HTTPS.
-3. Consider rate limiting for login, resend verification, forgot password, reset password, and test push endpoints before public deployment.
-4. Consider making `/health/db` production-safe by returning only a generic status and not exposing DB details beyond success/failure.
-5. Consider adding CI for backend tests and frontend lint/build so GitHub can verify future pushes automatically.
+1. `GET /admin/users`
+2. `GET /admin/projects`
+3. `GET /admin/tasks`
+4. `GET /admin/logs`
+5. Optional later: risk lists and notification lists.
 
 ## Regression Testing Rules
 
@@ -462,6 +481,7 @@ python -m pytest tests/test_17_ai_chat_assistant_api.py -v
 python -m pytest tests/test_18_push_notifications_api.py -v
 python -m pytest tests/test_19_cors_api.py -v
 python -m pytest tests/test_20_firebase_push_service.py -v
+python -m pytest tests/test_21_deadline_reminder_scheduler.py -v
 python -m pytest --collect-only -q
 python -m pytest --cov=app --cov-report=term-missing
 python -m compileall app tests
@@ -480,14 +500,13 @@ Future testing rule:
 
 Recommended next order:
 
-1. Step 31 — Automatic Notification Scheduler for due-soon/overdue tasks and automatic push delivery.
-2. Better total-count pagination for users/projects/tasks/admin logs/risk lists.
-3. Saved report export history.
-4. Browser QA with seeded data and a manual verification checklist.
-5. Mobile/User Frontend Integration Foundation.
-6. Firebase Storage for Attachments.
-7. Real AI API integration hardening.
-8. CI, Ruff, Docker, and deployment polish after the core system is stable.
+1. Step 32 — Better total-count pagination for users/projects/tasks/admin logs/risk lists.
+2. Saved report export history.
+3. Browser QA with seeded data and a manual verification checklist.
+4. Mobile/User Frontend Integration Foundation.
+5. Firebase Storage for Attachments.
+6. Real AI API integration hardening.
+7. CI, Ruff, Docker, and deployment polish after the core system is stable.
 
 Firebase Storage for attachments remains useful, but it is lower priority unless attachment hosting becomes urgent.
 
