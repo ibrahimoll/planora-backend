@@ -8,6 +8,21 @@ from app.models.user import User
 from app.schemas.notification_schema import NotificationCreate, NotificationType
 from app.services.firebase_push_service import send_push_to_user
 
+def send_push_for_notification(
+    db: Session,
+    notification: Notification,
+) -> None:
+    send_push_to_user(
+        db=db,
+        user_id=notification.user_id,
+        title=notification.title,
+        message=notification.message,
+        notification_type=str(notification.type),
+        data={
+            "notification_id": notification.notification_id,
+        },
+    )
+    
 def create_notification(
     db: Session,
     user_id: int,
@@ -31,15 +46,9 @@ def create_notification(
         db.refresh(notification)
 
         if send_push:
-            send_push_to_user(
+            send_push_for_notification(
                 db=db,
-                user_id=user_id,
-                title=title,
-                message=message,
-                notification_type=str(notification_type),
-                data={
-                    "notification_id": notification.notification_id,
-                },
+                notification=notification
             )
 
     return notification

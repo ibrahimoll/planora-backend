@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     firebase_credentials_path: str | None = None
     firebase_credentials_json: str | None = None
 
+    deadline_reminder_scheduler_enabled: bool = False
+    deadline_reminder_scheduler_interval_minutes: int = 30
+    deadline_reminder_hours_ahead: int = 24
+    deadline_reminder_include_overdue: bool = True
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

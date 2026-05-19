@@ -6,12 +6,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.deadline_reminder import DeadlineReminder
+from app.models.notification import Notification
 from app.models.project import Project
 from app.models.task import Task
 from app.models.user import User
 from app.schemas.deadline_reminder_schema import DeadlineReminderType
 from app.schemas.notification_schema import NotificationType
-from app.services.notification_service import create_notification
+from app.services.notification_service import (
+    create_notification,
+    send_push_for_notification,
+)
 
 
 def reminder_already_exists(
@@ -36,12 +40,12 @@ def create_deadline_reminder_if_needed(
     task: Task,
     project: Project,
     reminder_type: DeadlineReminderType,
-) -> bool:
+) -> Notification | None:
     if task.assigned_to is None:
-        return False
+        return None
 
     if task.due_date is None:
-        return False
+        return None
 
     if reminder_already_exists(
         db=db,
@@ -50,7 +54,7 @@ def create_deadline_reminder_if_needed(
         reminder_type=reminder_type,
         due_date_snapshot=task.due_date,
     ):
-        return False
+        return None
 
     reminder = DeadlineReminder(
         task_id=task.task_id,
@@ -75,16 +79,17 @@ def create_deadline_reminder_if_needed(
             f"is overdue. Deadline was: {task.due_date.isoformat()}."
         )
 
-    create_notification(
+    notification = create_notification(
         db=db,
         user_id=task.assigned_to,
         title=title,
         message=message,
         notification_type=NotificationType.DEADLINE,
         commit=False,
+        send_push=False,
     )
 
-    return True
+    return notification
 
 
 def run_deadline_reminder_scan(
@@ -97,6 +102,7 @@ def run_deadline_reminder_scan(
 
     due_soon_created = 0
     overdue_created = 0
+    notifications_to_push: list[Notification] = []
 
     due_soon_stmt = (
         select(Task, Project)
@@ -113,15 +119,16 @@ def run_deadline_reminder_scan(
     due_soon_rows = db.execute(due_soon_stmt).all()
 
     for task, project in due_soon_rows:
-        created = create_deadline_reminder_if_needed(
+        notification = create_deadline_reminder_if_needed(
             db=db,
             task=task,
             project=project,
             reminder_type=DeadlineReminderType.DUE_SOON,
         )
 
-        if created:
+        if notification is not None:
             due_soon_created += 1
+            notifications_to_push.append(notification)
 
     if include_overdue:
         overdue_stmt = (
@@ -138,17 +145,24 @@ def run_deadline_reminder_scan(
         overdue_rows = db.execute(overdue_stmt).all()
 
         for task, project in overdue_rows:
-            created = create_deadline_reminder_if_needed(
+            notification = create_deadline_reminder_if_needed(
                 db=db,
                 task=task,
                 project=project,
                 reminder_type=DeadlineReminderType.OVERDUE,
             )
 
-            if created:
+            if notification is not None:
                 overdue_created += 1
+                notifications_to_push.append(notification)
 
     db.commit()
+
+    for notification in notifications_to_push:
+        send_push_for_notification(
+            db=db,
+            notification=notification,
+        )
 
     return {
         "due_soon_created": due_soon_created,
