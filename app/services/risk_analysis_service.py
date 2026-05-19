@@ -7,15 +7,18 @@ from math import ceil
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.notification import Notification
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.risk_analysis import RiskAnalysis
 from app.models.task import Task
 from app.models.user import User
-from app.schemas.risk_analysis_schema import RiskAnalysisPreviewResponse, RiskLevel
 from app.schemas.notification_schema import NotificationType
-from app.services.notification_service import create_notification
-
+from app.schemas.risk_analysis_schema import RiskAnalysisPreviewResponse, RiskLevel
+from app.services.notification_service import (
+    create_notification,
+    send_push_for_notification,
+)
 
 DAILY_WORK_CAPACITY_HOURS = 4.0
 
@@ -68,6 +71,7 @@ def get_project_tasks_for_risk_analysis(
     project_id: int,
 ) -> list[Task]:
     stmt = select(Task).where(Task.project_id == project_id)
+
     return list(db.execute(stmt).scalars().all())
 
 
@@ -108,9 +112,11 @@ def calculate_risk_preview(
         ceil((deadline - now).total_seconds() / 86400),
     )
 
-    estimated_needed_days = ceil(
-        remaining_estimated_hours / DAILY_WORK_CAPACITY_HOURS
-    ) if remaining_estimated_hours > 0 else 0
+    estimated_needed_days = (
+        ceil(remaining_estimated_hours / DAILY_WORK_CAPACITY_HOURS)
+        if remaining_estimated_hours > 0
+        else 0
+    )
 
     predicted_delay_days = max(
         0,
@@ -125,31 +131,55 @@ def calculate_risk_preview(
 
     if total_tasks == 0:
         risk_level = RiskLevel.medium
-        reason = "The project has no tasks, so the system cannot confirm whether the work is on track."
-        recommendation = "Create tasks for the project, add due dates, and run the risk analysis again."
+        reason = (
+            "The project has no tasks, so the system cannot confirm whether "
+            "the work is on track."
+        )
+        recommendation = (
+            "Create tasks for the project, add due dates, and run the risk "
+            "analysis again."
+        )
     elif deadline < now and completed_tasks < total_tasks:
         risk_level = RiskLevel.high
         reason = "The project deadline has passed while some tasks are still incomplete."
-        recommendation = "Update the project deadline or immediately complete the remaining high-priority tasks."
+        recommendation = (
+            "Update the project deadline or immediately complete the remaining "
+            "high-priority tasks."
+        )
     elif overdue_tasks > 0 or blocked_tasks >= 2 or predicted_delay_days >= 3:
         risk_level = RiskLevel.high
         reason = (
-            "The project has overdue tasks, blocked work, or the remaining workload is too large "
-            "for the available time."
+            "The project has overdue tasks, blocked work, or the remaining workload "
+            "is too large for the available time."
         )
-        recommendation = "Focus on overdue and blocked tasks first, reduce scope, or extend the deadline."
+        recommendation = (
+            "Focus on overdue and blocked tasks first, reduce scope, or extend "
+            "the deadline."
+        )
     elif completion_percentage < 50 and days_until_deadline <= 3:
         risk_level = RiskLevel.high
         reason = "Less than half of the tasks are completed and the deadline is very close."
-        recommendation = "Complete high-priority tasks first and move non-essential work to a later phase."
+        recommendation = (
+            "Complete high-priority tasks first and move non-essential work to "
+            "a later phase."
+        )
     elif overdue_tasks == 0 and blocked_tasks == 0 and predicted_delay_days == 0:
         risk_level = RiskLevel.low
-        reason = "The project has no overdue or blocked tasks and the remaining work fits within the deadline."
+        reason = (
+            "The project has no overdue or blocked tasks and the remaining work "
+            "fits within the deadline."
+        )
         recommendation = "Keep monitoring progress and continue completing tasks as planned."
     else:
         risk_level = RiskLevel.medium
-        reason = "The project is mostly stable, but some progress or workload indicators need attention."
-        recommendation = "Review remaining tasks, adjust priorities, and keep the deadline under observation."
+        reason = (
+            "The project is mostly stable, but some progress or workload indicators "
+            "need attention."
+        )
+        recommendation = (
+            "Review remaining tasks, adjust priorities, and keep the deadline "
+            "under observation."
+        )
 
     return RiskAnalysisPreviewResponse(
         project_id=project.project_id,
@@ -184,7 +214,7 @@ def create_high_risk_notifications(
     db: Session,
     project: Project,
     risk_analysis: RiskAnalysis,
-) -> None:
+) -> list[Notification]:
     user_ids = get_risk_notification_user_ids(
         db=db,
         project=project,
@@ -197,15 +227,22 @@ def create_high_risk_notifications(
         f"Recommendation: {risk_analysis.recommendation}"
     )
 
+    notifications: list[Notification] = []
+
     for user_id in user_ids:
-        create_notification(
+        notification = create_notification(
             db=db,
             user_id=user_id,
             title=title,
             message=message,
             notification_type=NotificationType.RISK,
             commit=False,
+            send_push=False,
         )
+
+        notifications.append(notification)
+
+    return notifications
 
 
 def create_risk_analysis_for_project(
@@ -233,8 +270,10 @@ def create_risk_analysis_for_project(
     db.add(risk_analysis)
     db.flush()
 
+    notifications_to_push: list[Notification] = []
+
     if risk_analysis.risk_level == RiskLevel.high.value:
-        create_high_risk_notifications(
+        notifications_to_push = create_high_risk_notifications(
             db=db,
             project=project,
             risk_analysis=risk_analysis,
@@ -242,6 +281,12 @@ def create_risk_analysis_for_project(
 
     db.commit()
     db.refresh(risk_analysis)
+
+    for notification in notifications_to_push:
+        send_push_for_notification(
+            db=db,
+            notification=notification,
+        )
 
     return risk_analysis
 

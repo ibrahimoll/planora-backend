@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.db.session import test_database_connection
 from app.routers.auth import router as auth_router
@@ -29,12 +30,26 @@ from app.routers.admin_task_oversight_routes import router as admin_task_oversig
 from app.routers.admin_risk_report_routes import router as admin_risk_report_router
 from app.routers.ai_chat_routes import router as ai_chat_router
 from app.routers.push_notification_routes import router as push_notification_router
+from app.services.deadline_reminder_scheduler import (
+    start_deadline_reminder_scheduler,
+    stop_deadline_reminder_scheduler,
+)
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    start_deadline_reminder_scheduler()
+
+    try:
+        yield
+    finally:
+        await stop_deadline_reminder_scheduler()
 
 
 app = FastAPI(
     title="Planora API",
     description="Backend API for the Planora AI project planning and collaboration system",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
