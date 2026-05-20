@@ -12,7 +12,7 @@ Planora is an AI-powered project planning and collaboration system with:
 - Personal Project Mode.
 - Team Collaboration Mode.
 
-Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, local rule-based AI with optional Gemini provider configuration, explicit CORS/frontend-mobile integration, Firebase Cloud Messaging push sending, automatic deadline reminder scheduling, Alembic migrations, total-count pagination metadata, and saved report export history.
+Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, project-scoped AI chat with local deterministic fallbacks and optional Gemini LLM provider integration, explicit CORS/frontend-mobile integration, Firebase Cloud Messaging push sending, automatic deadline reminder scheduling, Alembic migrations, total-count pagination metadata, and saved report export history.
 
 Admin dashboard stack: separate Next.js repository using the FastAPI backend, protected admin auth, shared API client, dark SaaS admin UI, real backend data, browser Firebase Cloud Messaging token registration, and no fake telemetry.
 
@@ -28,9 +28,12 @@ Latest confirmed status:
 - Backend Step 31 Automatic Notification Scheduler is complete.
 - Backend Step 32 Backend Total-Count Pagination is complete.
 - Backend Step 33 Saved Report Export History is complete.
+- Backend AI Chat Assistant now has a project-only scope guard: project/greeting questions are allowed, unrelated questions such as weather are blocked before the LLM provider is called.
+- Gemini provider was configured locally through `.env` and verified manually by the user. The real `GEMINI_API_KEY` must stay local and must never be committed.
 - Backend Alembic head is now `8b2c6d9f0a11`.
 - Backend focused Step 33 test file `tests/test_22_report_export_history_api.py` passed with `3 passed`.
 - Backend full regression passed after Step 33 with `139 passed`.
+- Backend full regression passed after AI chat scope guard/Gemini verification with `140 passed`.
 - Backend `python -m compileall app tests` passed after Step 33.
 - Admin dashboard final polish pass is complete.
 - Admin dashboard latest local verification after browser FCM work: `npm run lint` reported `0 errors`; `npm run build` passed.
@@ -94,6 +97,7 @@ npm run build
 23.5. Admin Logs Filters and Audit Improvements.
 23.6. Admin User Search/Filters and User Activity View.
 24. AI Chat Assistant MVP.
+24.1. Project-scoped AI chat guard and local Gemini provider verification.
 25. Productivity Insights Center.
 26. Push Notification Foundation.
 27. CORS / Frontend-Mobile Integration.
@@ -428,17 +432,36 @@ AI Chat Assistant MVP:
 - `GET /projects/{project_id}/chat`
 - `POST /teams/{team_id}/projects/{project_id}/chat`
 - `GET /teams/{team_id}/projects/{project_id}/chat`
+- Loads project, task, risk, and recent chat context before generating a response.
+- Uses a backend scope guard before provider generation so Planora AI stays project-specific.
+- Allows normal greetings and project-related questions about progress, tasks, priorities, deadlines, scheduling, risk, workload, productivity, comments, attachments, notifications, reports, and next steps.
+- Blocks unrelated questions such as weather, news, sports, politics, entertainment, trivia, medical/legal/financial questions, homework, translation, and unrelated coding before calling Gemini/local provider.
+- Saves both the user's message and the AI response in `chat_messages`.
 
 AI provider status:
 
-- Default AI provider is `local`.
+- Default AI provider remains `local` in committed config/examples for safe development.
 - `.env.example` documents `AI_PROVIDER=local`, `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-2.5-flash`, and `GEMINI_TIMEOUT_SECONDS=15`.
+- Local development can enable Gemini only through the uncommitted backend `.env` file using `AI_PROVIDER=gemini` and a real `GEMINI_API_KEY`.
 - Gemini provider code is optional and falls back to local AI if provider/API configuration fails.
+- Gemini was configured locally by the user and manually verified to work after restarting the backend.
+- The real Gemini API key must never be committed, pasted into `.env.example`, placed in frontend/mobile/admin-dashboard code, or logged.
 - Do not log full prompt bodies, raw model responses, tokens, API keys, passwords, JWTs, or private user data.
+
+Important AI chat verification status:
+
+- `python -m pytest -x -v` initially skipped tests until `TEST_DATABASE_URL` was set.
+- After setting `TEST_DATABASE_URL` to the isolated PostgreSQL test database, tests ran normally.
+- A scope-guard bug blocked `hello how are you`; the greeting logic was fixed so greetings are allowed while off-topic questions remain blocked.
+- Full backend regression after the AI chat scope guard fix passed with `140 passed`.
+- Manual Gemini verification passed after adding the key locally and restarting the backend.
+- Demo behavior: project-related questions should call Gemini when configured; unrelated questions like `how's the weather?` should be blocked before Gemini.
 
 Future AI integration rule:
 
 - Replace only generator/analyzer/scheduler/chat-provider logic inside service files while keeping the same API contracts.
+- Keep the project-only AI chat scope guard before any LLM/provider call.
+- Keep local deterministic fallback behavior for demos and provider outages.
 
 ## Alembic Migration Setup
 
@@ -582,7 +605,7 @@ Recommended next order:
 1. Step 34 — Browser QA with seeded data and a manual verification checklist.
 2. Mobile/User Frontend Integration Foundation.
 3. Firebase Storage for Attachments.
-4. Real AI API integration hardening.
+4. Gemini/AI production hardening, including rate limits, safer failure messages, provider observability without sensitive logs, and optional usage controls.
 5. CI, Ruff, Docker, and deployment polish after the core system is stable.
 
 Firebase Storage for attachments remains useful, but it is lower priority unless attachment hosting becomes urgent.
