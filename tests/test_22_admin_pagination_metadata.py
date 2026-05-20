@@ -161,15 +161,15 @@ def test_admin_logs_include_total_count(
 ) -> None:
     admin_token = _create_admin_token(client=client, db=db)
 
-    user = register_user(
+    target_user_id, _ = create_verified_user_and_login(
         client=client,
+        db=db,
         username="pagination_log_target",
         email="pagination_log_target@example.com",
     )
-    verify_user_directly(db, "pagination_log_target@example.com")
 
     deactivate_response = client.patch(
-        f"/admin/users/{user['user_id']}/deactivate",
+        f"/admin/users/{target_user_id}/deactivate",
         headers=auth_headers(admin_token),
     )
 
