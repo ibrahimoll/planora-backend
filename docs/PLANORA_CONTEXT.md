@@ -1,6 +1,6 @@
 # Planora Project Context
 
-Last updated: 2026-05-19
+Last updated: 2026-05-20
 
 ## Main Idea
 
@@ -12,7 +12,7 @@ Planora is an AI-powered project planning and collaboration system with:
 - Personal Project Mode.
 - Team Collaboration Mode.
 
-Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, local rule-based AI with optional Gemini provider configuration, explicit CORS/frontend-mobile integration, Firebase Cloud Messaging push sending, automatic deadline reminder scheduling, and Alembic migrations.
+Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Google social login, SMTP email verification/reset, local file storage for development, local rule-based AI with optional Gemini provider configuration, explicit CORS/frontend-mobile integration, Firebase Cloud Messaging push sending, automatic deadline reminder scheduling, Alembic migrations, total-count pagination metadata, and saved report export history.
 
 Admin dashboard stack: separate Next.js repository using the FastAPI backend, protected admin auth, shared API client, dark SaaS admin UI, real backend data, browser Firebase Cloud Messaging token registration, and no fake telemetry.
 
@@ -26,10 +26,12 @@ Repositories:
 Latest confirmed status:
 
 - Backend Step 31 Automatic Notification Scheduler is complete.
-- Backend full regression was run after Step 31 and the user reported all tests passed.
-- Backend `python -m compileall app tests` was run after Step 31 and the user reported it passed.
-- Focused Step 31 test file `tests/test_21_deadline_reminder_scheduler.py` was added and locally verified earlier with `2 passed`.
-- Backend Alembic head remains `7562179d6e8d`; migration history was previously valid.
+- Backend Step 32 Backend Total-Count Pagination is complete.
+- Backend Step 33 Saved Report Export History is complete.
+- Backend Alembic head is now `8b2c6d9f0a11`.
+- Backend focused Step 33 test file `tests/test_22_report_export_history_api.py` passed with `3 passed`.
+- Backend full regression passed after Step 33 with `139 passed`.
+- Backend `python -m compileall app tests` passed after Step 33.
 - Admin dashboard final polish pass is complete.
 - Admin dashboard latest local verification after browser FCM work: `npm run lint` reported `0 errors`; `npm run build` passed.
 - Browser FCM token registration was implemented and tested successfully on the web/laptop: browser permission prompt, real Firebase token registration, saved `web` device token, and test push notification received.
@@ -41,11 +43,12 @@ Important backend verification commands:
 $pgPassword = Read-Host "Enter your PostgreSQL postgres password"
 $encodedPassword = [uri]::EscapeDataString($pgPassword)
 $env:TEST_DATABASE_URL = "postgresql+psycopg://postgres:$encodedPassword@localhost:5432/planora_test_db"
+alembic upgrade head
+alembic current
+alembic history
 python -m pytest -x -v
 python -m pytest -v
 python -m compileall app tests
-python -m alembic current
-python -m alembic history
 ```
 
 Important admin dashboard verification commands:
@@ -98,6 +101,8 @@ npm run build
 29. Alembic Migration Setup.
 30. Admin Dashboard Integration and Final Polish.
 31. Automatic Notification Scheduler for due-soon/overdue task reminders and automatic push delivery.
+32. Backend Total-Count Pagination for admin users/projects/tasks/admin logs.
+33. Saved Report Export History.
 
 ## Current Main Tables
 
@@ -125,11 +130,11 @@ npm run build
 - `oauth_accounts`
 - `device_tokens`
 - `notification_preferences`
+- `report_exports`
 
 Optional future tables:
 
 - Firebase push delivery log table if delivery audit/history is needed.
-- Report export history table if saved/download history is needed.
 
 ## Authentication and Admin Rules
 
@@ -230,6 +235,12 @@ Push notifications:
 - `GET /push-notifications/status`
 - `POST /push-notifications/test`
 
+Reports:
+
+- `GET /reports/projects/{project_id}` exports/generates the project report and creates a saved export history row.
+- `GET /reports/exports` lists the current user's saved report export history.
+- `GET /reports/projects/{project_id}/exports` lists saved report export history for an accessible project.
+
 Firebase private service-account credentials must never be committed or exposed in the frontend.
 
 ## Browser FCM Registration — 2026-05-19
@@ -313,6 +324,82 @@ DEADLINE_REMINDER_INCLUDE_OVERDUE=true
 
 Keep scheduler disabled in tests unless intentionally testing startup behavior.
 
+## Step 32 — Backend Total-Count Pagination
+
+Status: complete and verified by backend tests.
+
+Goal achieved:
+
+```text
+Admin list endpoints
+→ keep limit/offset/search/filter support
+→ return items plus total/limit/offset metadata
+→ frontend can show accurate pagination controls
+```
+
+Implemented endpoint response shape:
+
+```json
+{
+  "items": [],
+  "total": 0,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+Important compatibility note:
+
+- Older tests or frontend code that expected raw arrays must read `response.items` instead.
+- Do not revert these endpoints back to raw arrays.
+
+Verified test coverage:
+
+- `tests/test_22_admin_pagination_metadata.py`
+- Admin users include pagination metadata.
+- Admin user counts respect filters.
+- Admin projects include total count.
+- Admin tasks include total count.
+- Admin logs include total count.
+
+## Step 33 — Saved Report Export History
+
+Status: complete and verified by the user after full backend checks.
+
+Goal achieved:
+
+```text
+User exports project report
+→ backend generates report
+→ backend saves report export history row
+→ user can view own export history
+→ project members can view history for accessible projects
+```
+
+Implemented backend pieces:
+
+- Added `report_exports` table/model.
+- Added Alembic migration `8b2c6d9f0a11_add_report_export_history.py`.
+- Added `export_id` to project report response.
+- `GET /reports/projects/{project_id}` now creates a report export history row when a report is generated.
+- Added `GET /reports/exports` for the current user's export history.
+- Added `GET /reports/projects/{project_id}/exports` for project export history with project access checks.
+- Added pagination metadata to export history responses.
+- Added focused API tests in `tests/test_22_report_export_history_api.py`.
+
+Verification status:
+
+- `alembic upgrade head` succeeded.
+- `alembic current` returned `8b2c6d9f0a11 (head)`.
+- `python -m pytest tests/test_22_report_export_history_api.py -v` passed with `3 passed`.
+- `python -m pytest -v` passed with `139 passed`.
+- `python -m compileall app tests` passed.
+
+Important command note:
+
+- Use `alembic upgrade head`, `alembic current`, and `alembic history`.
+- Do not use `python -m alembic ...` in this environment because Alembic does not expose a `__main__` entrypoint there.
+
 ## AI / Intelligence Features
 
 AI Project Planning MVP:
@@ -365,17 +452,18 @@ Current migration chain:
 
 - `2bf54f983173` — empty baseline for the existing Planora schema.
 - `7562179d6e8d` — adds `chk_password_reset_codes_expiry` on `password_reset_codes` with `CHECK (expires_at > created_at)`.
+- `8b2c6d9f0a11` — adds `report_exports` for saved report export history.
 
 Existing live database rule:
 
 - Do not run migrations that create all existing tables.
 - For an existing database that already matches the current schema, use Alembic stamping instead of replaying table-creation history.
-- If the live DB already has `chk_password_reset_codes_expiry`, `python -m alembic stamp head` marks it current.
+- If the live DB already has `chk_password_reset_codes_expiry`, `alembic stamp head` marks it current.
 - If the live DB does not yet have `chk_password_reset_codes_expiry`, stamp the baseline revision first, then upgrade to head:
 
 ```powershell
-python -m alembic stamp 2bf54f983173
-python -m alembic upgrade head
+alembic stamp 2bf54f983173
+alembic upgrade head
 ```
 
 Future schema rule:
@@ -412,54 +500,41 @@ Admin dashboard shell/style status:
 
 Known intentional TODOs:
 
-- Backend list endpoints still return arrays without total counts; frontend pagination uses `limit`, `offset`, and next disabled when returned rows are fewer than page size.
-- Optional future polish: saved report export history, richer audit-log actor/target labels from backend joins, seeded browser smoke tests, and total-count metadata.
+- Admin list endpoints now return pagination metadata. Admin frontend/pages should continue reading `items`, `total`, `limit`, and `offset`.
+- Optional future polish: richer audit-log actor/target labels from backend joins, seeded browser smoke tests, saved report export history UI in the admin dashboard, and project report export/download UX polish.
 - Optional backend hardening: production HSTS, login/reset rate limiting, production-safe `/health/db`, CI for backend tests and frontend lint/build.
 
-## Next Step — Step 32 Backend Total-Count Pagination
+## Next Step — Step 34 Browser QA With Seeded Data
 
-Recommended next backend feature: better total-count pagination metadata for admin list endpoints and other large lists.
+Recommended next backend/frontend feature: browser QA with seeded demo data and a manual verification checklist.
 
 Goal:
 
 ```text
-List endpoints
-→ accept limit/offset/search/filter as they do now
-→ return items plus total/count/limit/offset metadata
-→ frontend can show accurate page count and disable next/previous correctly
+Seed realistic Planora data
+→ test admin dashboard flows in browser
+→ confirm pagination/filter/search/status actions
+→ document demo-ready checklist
 ```
 
 Recommended scope:
 
-1. Create shared pagination schemas, for example:
-   - `PaginationMeta`
-   - endpoint-specific paginated responses such as `AdminUserListResponse`, `AdminProjectListResponse`, `AdminTaskListResponse`, `AdminLogListResponse`.
-2. Update admin list service functions to run both:
-   - data query with `limit` and `offset`
-   - matching `COUNT(*)` query with the same filters
-3. Update admin list routes to return:
-
-```json
-{
-  "items": [],
-  "total": 0,
-  "limit": 20,
-  "offset": 0
-}
-```
-
-4. Keep backwards impact in mind because the current admin frontend expects arrays.
-5. Update the admin dashboard API client/pages after backend responses change.
-6. Add pytest coverage for count metadata, filters, and pagination boundaries.
-7. Run full backend regression and frontend lint/build.
-
-Suggested endpoint order:
-
-1. `GET /admin/users`
-2. `GET /admin/projects`
-3. `GET /admin/tasks`
-4. `GET /admin/logs`
-5. Optional later: risk lists and notification lists.
+1. Create or document a safe local demo seed process.
+2. Seed realistic users, projects, teams, tasks, notifications, risks, report exports, and admin logs.
+3. Verify dashboard pages in browser:
+   - dashboard overview
+   - users
+   - projects
+   - tasks
+   - risk
+   - reports
+   - notifications
+   - admin logs
+   - settings / push notifications
+4. Verify Step 32 pagination behavior in the admin dashboard.
+5. Verify Step 33 report export history behavior through API first, then decide if admin/frontend UI is needed.
+6. Save a manual QA checklist in `docs/`.
+7. Run backend regression and frontend lint/build after any code changes.
 
 ## Regression Testing Rules
 
@@ -482,10 +557,14 @@ python -m pytest tests/test_18_push_notifications_api.py -v
 python -m pytest tests/test_19_cors_api.py -v
 python -m pytest tests/test_20_firebase_push_service.py -v
 python -m pytest tests/test_21_deadline_reminder_scheduler.py -v
+python -m pytest tests/test_22_admin_pagination_metadata.py -v
+python -m pytest tests/test_22_report_export_history_api.py -v
 python -m pytest --collect-only -q
 python -m pytest --cov=app --cov-report=term-missing
 python -m compileall app tests
 python -m pip check
+alembic current
+alembic history
 ```
 
 Future testing rule:
@@ -500,13 +579,11 @@ Future testing rule:
 
 Recommended next order:
 
-1. Step 32 — Better total-count pagination for users/projects/tasks/admin logs/risk lists.
-2. Saved report export history.
-3. Browser QA with seeded data and a manual verification checklist.
-4. Mobile/User Frontend Integration Foundation.
-5. Firebase Storage for Attachments.
-6. Real AI API integration hardening.
-7. CI, Ruff, Docker, and deployment polish after the core system is stable.
+1. Step 34 — Browser QA with seeded data and a manual verification checklist.
+2. Mobile/User Frontend Integration Foundation.
+3. Firebase Storage for Attachments.
+4. Real AI API integration hardening.
+5. CI, Ruff, Docker, and deployment polish after the core system is stable.
 
 Firebase Storage for attachments remains useful, but it is lower priority unless attachment hosting becomes urgent.
 
