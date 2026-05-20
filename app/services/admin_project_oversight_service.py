@@ -21,6 +21,7 @@ from app.schemas.admin_project_oversight_schema import (
     AdminProjectSummaryResponse,
     AdminProjectTaskStatsResponse,
     AdminProjectTeamResponse,
+    AdminProjectListResponse,
 )
 
 
@@ -37,6 +38,10 @@ def _count_where(db: Session, model: type, *conditions) -> int:
 
     return _count_query(db, stmt)
 
+
+def _count_select(db: Session, stmt) -> int:
+    count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
+    return _count_query(db, count_stmt)
 
 def _get_project_or_404(db: Session, project_id: int) -> Project:
     project = db.get(Project, project_id)
@@ -223,8 +228,8 @@ def get_admin_projects(
     owner_id: int | None = None,
     team_id: int | None = None,
     search: str | None = None,
-) -> list[AdminProjectSummaryResponse]:
-    stmt = select(Project).order_by(Project.created_at.desc())
+) -> AdminProjectListResponse:
+    stmt = select(Project)
 
     if project_type is not None:
         stmt = stmt.where(Project.project_type == project_type)
@@ -247,14 +252,27 @@ def get_admin_projects(
             )
         )
 
-    stmt = stmt.offset(offset).limit(limit)
+    total = _count_select(db, stmt)
 
-    projects = list(db.execute(stmt).scalars().all())
+    projects = list(
+        db.execute(
+            stmt.order_by(Project.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
 
-    return [
-        _build_project_summary(db=db, project=project)
-        for project in projects
-    ]
+    return AdminProjectListResponse(
+        items=[
+            _build_project_summary(db=db, project=project)
+            for project in projects
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 def get_admin_project_detail(

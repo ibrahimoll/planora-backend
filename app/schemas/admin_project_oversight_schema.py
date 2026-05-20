@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
+from app.schemas.pagination_schema import PaginationMeta
 from pydantic import BaseModel
 
 
@@ -74,3 +75,7 @@ class AdminProjectStatusUpdateResponse(BaseModel):
     message: str
     project: AdminProjectDetailResponse
     admin_log_id: int
+
+
+class AdminProjectListResponse(PaginationMeta):
+    items: list[AdminProjectSummaryResponse]

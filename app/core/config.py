@@ -1,5 +1,6 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+#.\venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url: str

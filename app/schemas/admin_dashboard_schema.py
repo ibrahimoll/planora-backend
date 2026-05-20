@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
-
+from app.schemas.pagination_schema import PaginationMeta
 
 class AdminUserStats(BaseModel):
     total_users: int
@@ -90,3 +90,11 @@ class AdminLogResponse(BaseModel):
     target_user_id: int | None
     action: str
     created_at: datetime
+
+
+class AdminUserListResponse(PaginationMeta):
+    items: list[AdminUserSummaryResponse]
+
+
+class AdminLogListResponse(PaginationMeta):
+    items: list[AdminLogResponse]

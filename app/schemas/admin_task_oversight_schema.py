@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
-
+from app.schemas.pagination_schema import PaginationMeta
 
 TaskStatus = Literal["todo", "in_progress", "completed", "blocked"]
 TaskPriority = Literal["low", "medium", "high"]
@@ -60,3 +60,7 @@ class AdminTaskActionResponse(BaseModel):
     message: str
     task: AdminTaskDetailResponse
     admin_log_id: int
+
+
+class AdminTaskListResponse(PaginationMeta):
+    items: list[AdminTaskSummaryResponse]

@@ -19,6 +19,7 @@ from app.schemas.admin_task_oversight_schema import (
     AdminTaskProjectResponse,
     AdminTaskSummaryResponse,
     AdminTaskUserResponse,
+    
 )
 
 
@@ -32,6 +33,11 @@ def _count_where(db: Session, model: type, *conditions) -> int:
     if conditions:
         stmt = stmt.where(*conditions)
     return _count_query(db, stmt)
+
+
+def _count_select(db: Session, stmt) -> int:
+    count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
+    return _count_query(db, count_stmt)
 
 
 def _now_utc() -> datetime:
@@ -152,9 +158,9 @@ def get_admin_tasks(
     overdue: bool | None = None,
     unassigned: bool | None = None,
     search: str | None = None,
-) -> list[AdminTaskSummaryResponse]:
+) -> AdminTaskListResponse:
     now = _now_utc()
-    stmt = select(Task).order_by(Task.created_at.desc())
+    stmt = select(Task)
 
     if status_filter is not None:
         stmt = stmt.where(Task.status == status_filter)
@@ -167,19 +173,50 @@ def get_admin_tasks(
     if created_by is not None:
         stmt = stmt.where(Task.created_by == created_by)
     if overdue is True:
-        stmt = stmt.where(Task.status != "completed", Task.due_date.is_not(None), Task.due_date < now)
+        stmt = stmt.where(
+            Task.status != "completed",
+            Task.due_date.is_not(None),
+            Task.due_date < now,
+        )
     if overdue is False:
-        stmt = stmt.where(or_(Task.status == "completed", Task.due_date.is_(None), Task.due_date >= now))
+        stmt = stmt.where(
+            or_(
+                Task.status == "completed",
+                Task.due_date.is_(None),
+                Task.due_date >= now,
+            )
+        )
     if unassigned is True:
         stmt = stmt.where(Task.assigned_to.is_(None))
     if unassigned is False:
         stmt = stmt.where(Task.assigned_to.is_not(None))
     if search is not None and search.strip():
         pattern = f"%{search.strip()}%"
-        stmt = stmt.where(or_(Task.title.ilike(pattern), Task.description.ilike(pattern)))
+        stmt = stmt.where(
+            or_(
+                Task.title.ilike(pattern),
+                Task.description.ilike(pattern),
+            )
+        )
 
-    tasks = list(db.execute(stmt.offset(offset).limit(limit)).scalars().all())
-    return [_build_task_summary(db=db, task=task) for task in tasks]
+    total = _count_select(db, stmt)
+
+    tasks = list(
+        db.execute(
+            stmt.order_by(Task.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
+
+    return AdminTaskListResponse(
+        items=[_build_task_summary(db=db, task=task) for task in tasks],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 def get_admin_task_detail(db: Session, task_id: int) -> AdminTaskDetailResponse:

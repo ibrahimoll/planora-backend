@@ -20,6 +20,8 @@ from app.schemas.admin_dashboard_schema import (
     AdminRiskStats,
     AdminTaskStats,
     AdminUserStats,
+    AdminLogListResponse,
+    AdminUserListResponse,
 )
 
 
@@ -37,6 +39,11 @@ def count_where(db: Session, model: type, *conditions) -> int:
     if conditions:
         stmt = stmt.where(*conditions)
     return count_query(db, stmt)
+
+
+def count_select(db: Session, stmt) -> int:
+    count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
+    return count_query(db, count_stmt)
 
 
 def get_admin_dashboard_overview(db: Session) -> AdminDashboardOverviewResponse:
@@ -109,8 +116,8 @@ def get_admin_users(
     is_active: bool | None = None,
     is_email_verified: bool | None = None,
     search: str | None = None,
-) -> list[User]:
-    stmt = select(User).order_by(User.created_at.desc())
+) -> AdminUserListResponse:
+    stmt = select(User)
 
     if role is not None:
         stmt = stmt.where(User.role == role)
@@ -128,7 +135,24 @@ def get_admin_users(
             )
         )
 
-    return list(db.execute(stmt.offset(offset).limit(limit)).scalars().all())
+    total = count_select(db, stmt)
+
+    items = list(
+        db.execute(
+            stmt.order_by(User.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
+
+    return AdminUserListResponse(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 def get_recent_activity_logs(db: Session, limit: int) -> list[ActivityLog]:
@@ -145,8 +169,8 @@ def get_admin_logs(
     action: str | None = None,
     created_from: datetime | None = None,
     created_to: datetime | None = None,
-) -> list[AdminLog]:
-    stmt = select(AdminLog).order_by(AdminLog.created_at.desc())
+) -> AdminLogListResponse:
+    stmt = select(AdminLog)
 
     if admin_id is not None:
         stmt = stmt.where(AdminLog.admin_id == admin_id)
@@ -159,8 +183,24 @@ def get_admin_logs(
     if created_to is not None:
         stmt = stmt.where(AdminLog.created_at <= created_to)
 
-    return list(db.execute(stmt.offset(offset).limit(limit)).scalars().all())
+    total = count_select(db, stmt)
 
+    items = list(
+        db.execute(
+            stmt.order_by(AdminLog.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
+
+    return AdminLogListResponse(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 def create_admin_log(
     db: Session,
