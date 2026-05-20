@@ -174,7 +174,7 @@ def login(
     check_rate_limit(
         request,
         "auth:login",
-        limit=100000,
+        limit=10,
         window_seconds=60,
         identifier=form_data.username,
     )
