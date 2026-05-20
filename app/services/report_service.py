@@ -16,6 +16,8 @@ from app.models.user import User
 from app.schemas.report_schema import (
     ProjectReportResponse,
     ReportActivitySummary,
+    ReportExportHistoryItem,
+    ReportExportHistoryListResponse,
     ReportHoursSummary,
     ReportMemberItem,
     ReportProgressSummary,
@@ -25,10 +27,9 @@ from app.schemas.report_schema import (
     ReportTaskItem,
     ReportTaskPriorityCounts,
     ReportTaskStatusCounts,
-    ReportExportHistoryItem,
-    ReportExportHistoryListResponse,
 )
 from app.models.report_export import ReportExport
+
 
 def decimal_to_float(value: Decimal | float | int | None) -> float:
     if value is None:
@@ -53,6 +54,9 @@ def get_accessible_project_for_report(
 
     if project is None:
         return None
+
+    if current_user.role == "admin":
+        return project
 
     if project.project_type == "personal":
         if project.created_by != current_user.user_id:
@@ -160,6 +164,7 @@ def count_project_deadline_reminders(
     )
 
     return int(db.execute(stmt).scalar_one())
+
 
 def is_task_overdue(
     task: Task,
