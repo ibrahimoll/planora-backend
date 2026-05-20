@@ -12,8 +12,8 @@ from app.models.user import User
 from app.schemas.admin_dashboard_schema import (
     AdminActivityLogResponse,
     AdminDashboardOverviewResponse,
-    AdminLogResponse,
-    AdminUserSummaryResponse,
+    AdminLogListResponse,
+    AdminUserListResponse,
 )
 from app.services.admin_dashboard_service import (
     get_admin_dashboard_overview,
@@ -40,7 +40,7 @@ def read_admin_dashboard_overview(
     return get_admin_dashboard_overview(db=db)
 
 
-@router.get("/users", response_model=list[AdminUserSummaryResponse])
+@router.get("/users", response_model=AdminUserListResponse)
 def read_admin_users(
     db: DBSession,
     current_admin: CurrentAdmin,
@@ -71,7 +71,7 @@ def read_recent_activity_logs(
     return get_recent_activity_logs(db=db, limit=limit)
 
 
-@router.get("/logs", response_model=list[AdminLogResponse])
+@router.get("/logs", response_model=AdminLogListResponse)
 def read_admin_logs(
     db: DBSession,
     current_admin: CurrentAdmin,
