@@ -31,11 +31,24 @@ def env_int(name: str) -> int:
     return int(raw_value)
 
 
+def optional_env_int(name: str) -> int | None:
+    raw_value = os.getenv(name)
+    if raw_value is None or raw_value.strip() == "":
+        return None
+    return int(raw_value)
+
+
 def load_user(db: Session, user_id: int, label: str) -> User:
     user = db.get(User, user_id)
     if user is None:
         raise RuntimeError(f"{label} user does not exist: {user_id}")
     return user
+
+
+def load_optional_user(db: Session, user_id: int | None, label: str) -> User | None:
+    if user_id is None:
+        return None
+    return load_user(db, user_id, label)
 
 
 def ensure_team(db: Session, name: str, creator: User) -> Team:
@@ -248,13 +261,18 @@ def seed_browser_qa_data() -> None:
     try:
         admin = load_user(db, env_int("PLANORA_QA_ADMIN_ID"), "admin")
         owner = load_user(db, env_int("PLANORA_QA_OWNER_ID"), "owner")
-        manager = load_user(db, env_int("PLANORA_QA_MANAGER_ID"), "manager")
-        member = load_user(db, env_int("PLANORA_QA_MEMBER_ID"), "member")
+        manager = load_optional_user(db, optional_env_int("PLANORA_QA_MANAGER_ID"), "manager")
+        member = load_optional_user(db, optional_env_int("PLANORA_QA_MEMBER_ID"), "member")
 
         team = ensure_team(db, "Planora QA Demo Team", owner)
         ensure_team_member(db, team, owner, "owner")
-        ensure_team_member(db, team, manager, "admin")
-        ensure_team_member(db, team, member, "member")
+        ensure_team_member(db, team, admin, "admin")
+
+        if manager is not None and manager.user_id not in {owner.user_id, admin.user_id}:
+            ensure_team_member(db, team, manager, "admin")
+
+        if member is not None and member.user_id not in {owner.user_id, admin.user_id}:
+            ensure_team_member(db, team, member, "member")
 
         personal_project = ensure_project(
             db,
@@ -276,36 +294,48 @@ def seed_browser_qa_data() -> None:
             team,
         )
         ensure_project_member(db, team_project, owner, "owner")
-        ensure_project_member(db, team_project, manager, "manager")
-        ensure_project_member(db, team_project, member, "member")
+        ensure_project_member(db, team_project, admin, "manager")
+
+        if manager is not None and manager.user_id not in {owner.user_id, admin.user_id}:
+            ensure_project_member(db, team_project, manager, "manager")
+
+        if member is not None and member.user_id not in {owner.user_id, admin.user_id}:
+            ensure_project_member(db, team_project, member, "member")
+
+        team_second_assignee = manager or admin
+        team_third_assignee = member or owner
 
         personal_done = ensure_task(db, personal_project, owner, "QA personal completed task", "completed", "medium", -2, "2.00", owner, "2.50")
         ensure_task(db, personal_project, owner, "QA personal in-progress task", "in_progress", "high", 3, "3.00", owner)
         ensure_task(db, personal_project, owner, "QA personal blocked task", "blocked", "high", -1, "4.00", owner)
 
-        team_done = ensure_task(db, team_project, owner, "QA team completed task", "completed", "medium", -3, "3.00", manager, "3.50")
-        ensure_task(db, team_project, owner, "QA team mobile overview task", "in_progress", "high", 5, "6.00", member)
-        ensure_task(db, team_project, owner, "QA team blocked integration task", "blocked", "high", -2, "5.00", manager)
+        team_done = ensure_task(db, team_project, owner, "QA team completed task", "completed", "medium", -3, "3.00", team_second_assignee, "3.50")
+        ensure_task(db, team_project, owner, "QA team mobile overview task", "in_progress", "high", 5, "6.00", team_third_assignee)
+        ensure_task(db, team_project, owner, "QA team blocked integration task", "blocked", "high", -2, "5.00", team_second_assignee)
 
         ensure_risk(db, personal_project, "medium", 2)
         ensure_risk(db, team_project, "high", 5)
 
         ensure_notification(db, owner, "QA deadline reminder", "deadline")
-        ensure_notification(db, manager, "QA high-risk project", "risk")
-        ensure_notification(db, member, "QA task assignment", "task")
+        ensure_notification(db, admin, "QA high-risk project", "risk")
+        ensure_notification(db, team_third_assignee, "QA task assignment", "task")
 
         ensure_activity(db, personal_project, owner, None, "project_created")
         ensure_activity(db, personal_project, owner, personal_done, "task_completed")
-        ensure_activity(db, team_project, manager, team_done, "task_completed")
+        ensure_activity(db, team_project, team_second_assignee, team_done, "task_completed")
 
         ensure_report_export(db, personal_project, owner, 3)
-        ensure_report_export(db, team_project, manager, 3)
+        ensure_report_export(db, team_project, team_second_assignee, 3)
 
         ensure_admin_log(db, admin, owner, "Seeded Step 34 browser QA data")
-        ensure_admin_log(db, admin, manager, "Reviewed Step 34 browser QA workload")
+        ensure_admin_log(db, admin, team_second_assignee, "Reviewed Step 34 browser QA workload")
 
         db.commit()
         print("Step 34 browser QA data seeded successfully.")
+        print("Required users used:")
+        print(f"  Admin ID: {admin.user_id}")
+        print(f"  Owner ID: {owner.user_id}")
+        print("Optional manager/member IDs were used only if provided.")
     except Exception:
         db.rollback()
         raise
