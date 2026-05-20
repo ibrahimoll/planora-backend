@@ -22,6 +22,233 @@ def _to_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
+def _normalize_message(value: str) -> str:
+    return " ".join(value.lower().strip().split())
+
+
+def _contains_any(value: str, keywords: list[str]) -> bool:
+    return any(keyword in value for keyword in keywords)
+
+
+def _is_project_related_message(user_message: str) -> bool:
+    """
+    Keeps Planora AI scoped to the current project.
+
+    This guard blocks general chatbot behavior before the request reaches
+    Gemini or the local rule-based assistant.
+
+    Normal greetings are allowed, because the assistant should be able to
+    greet the user and explain what it can help with.
+    """
+    message = _normalize_message(user_message)
+
+    if not message:
+        return False
+
+    greeting_keywords = [
+        "hi",
+        "hello",
+        "hey",
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "how are you",
+        "thanks",
+        "thank you",
+    ]
+
+    off_topic_keywords = [
+        "weather",
+        "temperature",
+        "forecast",
+        "rain",
+        "snow",
+        "storm",
+        "news",
+        "politics",
+        "president",
+        "minister",
+        "election",
+        "sports",
+        "football",
+        "basketball",
+        "tennis",
+        "match",
+        "movie",
+        "movies",
+        "series",
+        "song",
+        "songs",
+        "lyrics",
+        "celebrity",
+        "recipe",
+        "cook",
+        "cooking",
+        "restaurant",
+        "stock",
+        "stocks",
+        "crypto",
+        "bitcoin",
+        "currency",
+        "exchange rate",
+        "medical",
+        "doctor",
+        "medicine",
+        "legal",
+        "lawyer",
+        "joke",
+        "poem",
+        "story",
+        "translate",
+        "history",
+        "geography",
+        "capital of",
+        "homework",
+        "essay",
+        "solve this math",
+    ]
+
+    project_keywords = [
+        "planora",
+        "project",
+        "task",
+        "tasks",
+        "todo",
+        "to do",
+        "priority",
+        "priorities",
+        "deadline",
+        "due date",
+        "due",
+        "overdue",
+        "schedule",
+        "scheduling",
+        "plan",
+        "planning",
+        "milestone",
+        "progress",
+        "status",
+        "summary",
+        "overview",
+        "risk",
+        "delay",
+        "delayed",
+        "late",
+        "behind",
+        "blocked",
+        "complete",
+        "completed",
+        "completion",
+        "finish",
+        "finished",
+        "workload",
+        "productivity",
+        "team",
+        "member",
+        "members",
+        "assign",
+        "assigned",
+        "assignee",
+        "comment",
+        "comments",
+        "attachment",
+        "attachments",
+        "file",
+        "files",
+        "notification",
+        "notifications",
+        "reminder",
+        "reminders",
+        "report",
+        "reports",
+        "export",
+        "timeline",
+        "smart schedule",
+        "risk analysis",
+    ]
+
+    project_question_patterns = [
+        "what should i do",
+        "what do i do",
+        "what now",
+        "where should i start",
+        "where do i start",
+        "what is next",
+        "what's next",
+        "next step",
+        "next steps",
+        "am i behind",
+        "are we behind",
+        "is this on track",
+        "are we on track",
+        "can i finish",
+        "can we finish",
+        "will i finish",
+        "will we finish",
+        "help me organize",
+        "help me prioritize",
+        "help me plan",
+        "what can you help",
+        "what can you do",
+    ]
+
+    generic_project_assistant_patterns = [
+        "help me",
+        "i need help",
+        "give me advice",
+        "suggest",
+        "recommend",
+        "explain",
+    ]
+
+    has_greeting = _contains_any(message, greeting_keywords)
+    has_off_topic_keyword = _contains_any(message, off_topic_keywords)
+    has_project_keyword = _contains_any(message, project_keywords)
+    has_project_question_pattern = _contains_any(message, project_question_patterns)
+    has_generic_project_assistant_pattern = _contains_any(
+        message,
+        generic_project_assistant_patterns,
+    )
+
+    if has_off_topic_keyword and not has_project_keyword and not has_project_question_pattern:
+        return False
+
+    if has_project_keyword:
+        return True
+
+    if has_project_question_pattern:
+        return True
+
+    if has_greeting and not has_off_topic_keyword:
+        return True
+
+    if has_generic_project_assistant_pattern and not has_off_topic_keyword:
+        return True
+
+    return False
+
+
+def _build_out_of_scope_reply(project: Project) -> tuple[str, dict[str, Any]]:
+    reply = (
+        f"I can only help with the Planora project '{project.title}'. "
+        "Ask me about project progress, tasks, priorities, deadlines, risks, "
+        "scheduling, team workload, or what to work on next."
+    )
+
+    context: dict[str, Any] = {
+        "source": "project_scope_guard_v1",
+        "fallback_used": True,
+        "provider_skipped": True,
+        "scope": "out_of_scope",
+        "project_id": project.project_id,
+        "project_title": project.title,
+        "project_status": project.status,
+        "project_type": project.project_type,
+    }
+
+    return reply, context
+
+
 def _get_project_tasks(
     db: Session,
     project_id: int,
@@ -214,11 +441,15 @@ You are Planora AI, a project planning and productivity assistant inside the Pla
 
 Your job:
 - Answer naturally like a helpful assistant.
+- Only answer questions related to the current Planora project.
 - Use the project context below.
 - Give practical next steps.
 - Be clear and concise.
 - If the user greets you, greet them back and explain what you can help with.
-- If the user asks about progress, risk, deadline, or next tasks, use the project data.
+- If the user asks about progress, risk, deadline, scheduling, workload, or next tasks, use the project data.
+- If the user asks about anything unrelated to this project, do not answer that topic.
+- For unrelated questions, say you can only help with this Planora project and suggest project-related topics.
+- Do not answer weather, news, sports, politics, entertainment, trivia, homework, medical, legal, financial, or unrelated coding questions.
 - Do not invent database records.
 - Do not mention hidden implementation details.
 - Do not expose secrets, tokens, passwords, hashes, or unrelated users.
@@ -368,6 +599,40 @@ def _build_local_rule_based_reply(
     return reply, context
 
 
+def _save_chat_exchange(
+    db: Session,
+    project: Project,
+    current_user: User,
+    user_message_text: str,
+    ai_reply: str,
+    assistant_context: dict[str, Any],
+) -> tuple[ChatMessage, ChatMessage, dict[str, Any]]:
+    user_message = ChatMessage(
+        sender_id=current_user.user_id,
+        project_id=project.project_id,
+        message=user_message_text,
+        sender_type="user",
+    )
+
+    db.add(user_message)
+    db.flush()
+
+    ai_message = ChatMessage(
+        sender_id=None,
+        project_id=project.project_id,
+        message=ai_reply,
+        sender_type="ai",
+    )
+
+    db.add(ai_message)
+    db.commit()
+
+    db.refresh(user_message)
+    db.refresh(ai_message)
+
+    return user_message, ai_message, assistant_context
+
+
 def create_ai_chat_exchange(
     db: Session,
     project: Project,
@@ -383,6 +648,18 @@ def create_ai_chat_exchange(
         db=db,
         project_id=project.project_id,
     )
+
+    if not _is_project_related_message(chat_data.message):
+        ai_reply, assistant_context = _build_out_of_scope_reply(project)
+
+        return _save_chat_exchange(
+            db=db,
+            project=project,
+            current_user=current_user,
+            user_message_text=chat_data.message,
+            ai_reply=ai_reply,
+            assistant_context=assistant_context,
+        )
 
     recent_messages = _get_recent_chat_history(
         db=db,
@@ -418,30 +695,14 @@ def create_ai_chat_exchange(
     else:
         ai_reply = fallback_reply
 
-    user_message = ChatMessage(
-        sender_id=current_user.user_id,
-        project_id=project.project_id,
-        message=chat_data.message,
-        sender_type="user",
+    return _save_chat_exchange(
+        db=db,
+        project=project,
+        current_user=current_user,
+        user_message_text=chat_data.message,
+        ai_reply=ai_reply,
+        assistant_context=assistant_context,
     )
-
-    db.add(user_message)
-    db.flush()
-
-    ai_message = ChatMessage(
-        sender_id=None,
-        project_id=project.project_id,
-        message=ai_reply,
-        sender_type="ai",
-    )
-
-    db.add(ai_message)
-    db.commit()
-
-    db.refresh(user_message)
-    db.refresh(ai_message)
-
-    return user_message, ai_message, assistant_context
 
 
 def get_project_chat_history(
