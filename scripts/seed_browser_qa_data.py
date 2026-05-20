@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-import app.models  # noqa: F401
+import app.models  # noqa: F401,E402
 from app.db.session import SessionLocal
 from app.models.activity_log import ActivityLog
 from app.models.admin_log import AdminLog
