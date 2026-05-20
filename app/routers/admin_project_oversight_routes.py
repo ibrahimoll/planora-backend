@@ -10,9 +10,9 @@ from app.dependencies.auth import get_current_admin_user
 from app.models.user import User
 from app.schemas.admin_project_oversight_schema import (
     AdminProjectDetailResponse,
+    AdminProjectListResponse,
     AdminProjectStatusUpdateRequest,
     AdminProjectStatusUpdateResponse,
-    AdminProjectSummaryResponse,
 )
 from app.services.admin_project_oversight_service import (
     get_admin_project_detail,
@@ -40,7 +40,7 @@ router = APIRouter(
 
 @router.get(
     "",
-    response_model=list[AdminProjectSummaryResponse],
+    response_model=AdminProjectListResponse,
 )
 def read_admin_projects(
     db: DBSession,
