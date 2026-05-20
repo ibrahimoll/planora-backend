@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from app.models.risk_analysis import RiskAnalysis
     from app.models.smart_schedule import SmartSchedule
     from app.models.chat_message import ChatMessage
+    from app.models.report_export import ReportExport
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -172,6 +173,11 @@ class Project(Base):
     )
 
     chat_messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="project",
+        cascade=CASCADE_ALL_DELETE_ORPHAN,
+    )
+
+    report_exports: Mapped[list["ReportExport"]] = relationship(
         back_populates="project",
         cascade=CASCADE_ALL_DELETE_ORPHAN,
     )

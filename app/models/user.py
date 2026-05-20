@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from app.models.chat_message import ChatMessage
     from app.models.device_token import DeviceToken
     from app.models.notification_preference import NotificationPreference
+    from app.models.report_export import ReportExport
 
 CASCADE_ALL_DELETE_ORPHAN = "all, delete-orphan"
 
@@ -206,4 +207,8 @@ class User(Base):
         back_populates="user",
         cascade=CASCADE_ALL_DELETE_ORPHAN,
         uselist=False,
+    )
+    
+    report_exports: Mapped[list["ReportExport"]] = relationship(
+        back_populates="exporter",
     )

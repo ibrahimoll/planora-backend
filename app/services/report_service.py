@@ -25,10 +25,19 @@ from app.schemas.report_schema import (
     ReportTaskItem,
     ReportTaskPriorityCounts,
     ReportTaskStatusCounts,
+    ReportExportHistoryItem,
+    ReportExportHistoryListResponse,
 )
-
+from app.models.report_export import ReportExport
 
 def decimal_to_float(value: Decimal | float | int | None) -> float:
+    if value is None:
+        return 0.0
+
+    return float(value)
+
+
+def decimal_snapshot_to_float(value: Decimal | float | int | None) -> float:
     if value is None:
         return 0.0
 
@@ -294,4 +303,120 @@ def generate_project_report(
             project=project,
         ),
         tasks=task_items,
+    )
+
+
+def create_report_export_history(
+    db: Session,
+    project: Project,
+    current_user: User,
+    report: ProjectReportResponse,
+) -> ReportExport:
+    export = ReportExport(
+        project_id=project.project_id,
+        exported_by=current_user.user_id,
+        report_type="project",
+        export_format="json",
+        project_title_snapshot=project.title,
+        project_status_snapshot=project.status,
+        project_type_snapshot=project.project_type,
+        task_count_snapshot=report.progress.total_tasks,
+        completion_percentage_snapshot=report.progress.completion_percentage,
+        exported_by_username_snapshot=current_user.username,
+        exported_by_full_name_snapshot=current_user.full_name,
+        metadata_json={
+            "completed_tasks": report.progress.completed_tasks,
+            "pending_tasks": report.progress.pending_tasks,
+            "overdue_tasks": report.progress.overdue_tasks,
+            "estimated_hours_total": report.hours.estimated_hours_total,
+            "actual_hours_total": report.hours.actual_hours_total,
+        },
+    )
+
+    db.add(export)
+    db.commit()
+    db.refresh(export)
+
+    return export
+
+
+def build_report_export_history_item(
+    export: ReportExport,
+) -> ReportExportHistoryItem:
+    return ReportExportHistoryItem(
+        report_export_id=export.report_export_id,
+        project_id=export.project_id,
+        exported_by=export.exported_by,
+        report_type=export.report_type,
+        export_format=export.export_format,
+        project_title_snapshot=export.project_title_snapshot,
+        project_status_snapshot=export.project_status_snapshot,
+        project_type_snapshot=export.project_type_snapshot,
+        task_count_snapshot=export.task_count_snapshot,
+        completion_percentage_snapshot=decimal_snapshot_to_float(
+            export.completion_percentage_snapshot
+        ),
+        exported_by_username_snapshot=export.exported_by_username_snapshot,
+        exported_by_full_name_snapshot=export.exported_by_full_name_snapshot,
+        created_at=export.created_at,
+    )
+
+
+def list_my_report_exports(
+    db: Session,
+    current_user: User,
+    limit: int,
+    offset: int,
+) -> ReportExportHistoryListResponse:
+    base_stmt = select(ReportExport).where(
+        ReportExport.exported_by == current_user.user_id,
+    )
+
+    total_stmt = select(func.count()).select_from(base_stmt.subquery())
+
+    data_stmt = (
+        base_stmt
+        .order_by(ReportExport.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+
+    total = int(db.execute(total_stmt).scalar_one())
+    exports = list(db.execute(data_stmt).scalars().all())
+
+    return ReportExportHistoryListResponse(
+        items=[build_report_export_history_item(export) for export in exports],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+def list_project_report_exports(
+    db: Session,
+    project: Project,
+    limit: int,
+    offset: int,
+) -> ReportExportHistoryListResponse:
+    base_stmt = select(ReportExport).where(
+        ReportExport.project_id == project.project_id,
+    )
+
+    total_stmt = select(func.count()).select_from(base_stmt.subquery())
+
+    data_stmt = (
+        base_stmt
+        .order_by(ReportExport.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+
+    total = int(db.execute(total_stmt).scalar_one())
+    exports = list(db.execute(data_stmt).scalars().all())
+
+    return ReportExportHistoryListResponse(
+        items=[build_report_export_history_item(export) for export in exports],
+        total=total,
+        limit=limit,
+        offset=offset,
     )

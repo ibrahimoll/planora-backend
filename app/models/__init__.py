@@ -22,3 +22,4 @@ from app.models.admin_log import AdminLog
 from app.models.chat_message import ChatMessage
 from app.models.device_token import DeviceToken
 from app.models.notification_preference import NotificationPreference
+from app.models.report_export import ReportExport

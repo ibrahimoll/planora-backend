@@ -129,7 +129,14 @@ def test_admin_can_list_personal_and_team_projects(
 
     assert response.status_code == 200, response.text
 
-    projects = response.json()
+    data = response.json()
+
+    assert data["total"] >= 2
+    assert data["limit"] == 20
+    assert data["offset"] == 0
+
+    projects = data["items"]
+
     project_ids = {project["project_id"] for project in projects}
 
     assert personal_project["project_id"] in project_ids
@@ -207,8 +214,14 @@ def test_admin_project_filters_work(
     assert personal_response.status_code == 200, personal_response.text
     assert team_response.status_code == 200, team_response.text
 
-    personal_projects = personal_response.json()
-    team_projects = team_response.json()
+    personal_data = personal_response.json()
+    team_data = team_response.json()
+
+    assert personal_data["total"] >= 1
+    assert team_data["total"] >= 1
+
+    personal_projects = personal_data["items"]
+    team_projects = team_data["items"]
 
     assert len(personal_projects) >= 1
     assert all(project["project_type"] == "personal" for project in personal_projects)

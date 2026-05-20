@@ -122,12 +122,15 @@ def test_admin_can_list_users(
 
     assert response.status_code == 200, response.text
 
-    users = response.json()
+    data = response.json()
+    users = data["items"]
 
     assert isinstance(users, list)
+    assert data["total"] >= 2
+    assert data["limit"] == 10
+    assert data["offset"] == 0
     assert any(user["username"] == "listed_user" for user in users)
     assert any(user["role"] == "admin" for user in users)
-
 
 def test_admin_can_read_recent_activity_and_admin_logs(
     client: TestClient,
@@ -153,5 +156,10 @@ def test_admin_can_read_recent_activity_and_admin_logs(
     assert activity_response.status_code == 200, activity_response.text
     assert admin_logs_response.status_code == 200, admin_logs_response.text
 
+    admin_logs_data = admin_logs_response.json()
+
     assert isinstance(activity_response.json(), list)
-    assert isinstance(admin_logs_response.json(), list)
+    assert isinstance(admin_logs_data["items"], list)
+    assert admin_logs_data["limit"] == 10
+    assert admin_logs_data["offset"] == 0
+    assert admin_logs_data["total"] >= 0

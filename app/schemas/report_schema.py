@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ReportProjectType(StrEnum):
@@ -96,3 +96,29 @@ class ProjectReportResponse(BaseModel):
     activity: ReportActivitySummary
     members: list[ReportMemberItem]
     tasks: list[ReportTaskItem]
+    export_id: int | None = None
+
+
+class ReportExportHistoryItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    report_export_id: int
+    project_id: int
+    exported_by: int | None
+    report_type: str
+    export_format: str
+    project_title_snapshot: str
+    project_status_snapshot: str
+    project_type_snapshot: str
+    task_count_snapshot: int
+    completion_percentage_snapshot: float
+    exported_by_username_snapshot: str | None
+    exported_by_full_name_snapshot: str | None
+    created_at: datetime
+
+
+class ReportExportHistoryListResponse(BaseModel):
+    items: list[ReportExportHistoryItem]
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1)
+    offset: int = Field(ge=0)

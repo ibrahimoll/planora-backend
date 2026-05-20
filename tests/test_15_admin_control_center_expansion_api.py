@@ -76,9 +76,14 @@ def test_admin_can_filter_users_and_logs(
     assert users_response.status_code == 200, users_response.text
     assert logs_response.status_code == 200, logs_response.text
 
-    assert any(user["user_id"] == target_user_id for user in users_response.json())
-    assert any(item["action"] == "pytest_filter_action" for item in logs_response.json())
+    users_data = users_response.json()
+    logs_data = logs_response.json()
 
+    assert users_data["total"] >= 1
+    assert logs_data["total"] >= 1
+
+    assert any(user["user_id"] == target_user_id for user in users_data["items"])
+    assert any(item["action"] == "pytest_filter_action" for item in logs_data["items"])
 
 def test_admin_can_view_user_activity(
     client: TestClient,
@@ -181,7 +186,10 @@ def test_admin_task_oversight_status_and_assignment(
     assert status_response.status_code == 200, status_response.text
     assert assignment_response.status_code == 200, assignment_response.text
 
-    assert any(item["task_id"] == task["task_id"] for item in list_response.json())
+    tasks_data = list_response.json()
+
+    assert tasks_data["total"] >= 1
+    assert any(item["task_id"] == task["task_id"] for item in tasks_data["items"])
     assert status_response.json()["task"]["status"] == "blocked"
     assert assignment_response.json()["task"]["assignee"]["user_id"] == new_assignee_id
 
