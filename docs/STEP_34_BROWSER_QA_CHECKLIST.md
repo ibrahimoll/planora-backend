@@ -1,6 +1,6 @@
 # Step 34 — Browser QA With Seeded Data
 
-Status: started.
+Status: in progress — seed data created successfully on 2026-05-20.
 
 ## Goal
 
@@ -53,6 +53,49 @@ Latest verified result before Step 34:
 139 passed
 ```
 
+## Seeded browser QA data
+
+Seed script:
+
+```powershell
+python scripts/seed_browser_qa_data.py
+```
+
+Latest local seed result reported by user:
+
+```text
+Step 34 browser QA data seeded successfully.
+Required users used:
+  Admin ID: 1
+  Owner ID: 2
+Optional manager/member IDs were used only if provided.
+```
+
+The script supports two required users only:
+
+```powershell
+$env:PLANORA_QA_ADMIN_ID = "1"
+$env:PLANORA_QA_OWNER_ID = "2"
+```
+
+Optional users can be added later if available:
+
+```powershell
+$env:PLANORA_QA_MANAGER_ID = "3"
+$env:PLANORA_QA_MEMBER_ID = "4"
+```
+
+Seeded data includes:
+
+- QA personal project.
+- QA team project.
+- completed, in-progress, and blocked tasks.
+- medium and high risk records.
+- notifications.
+- activity logs.
+- report export history rows.
+- admin logs.
+
 ## Admin dashboard preparation
 
 Run from the admin dashboard folder:
@@ -87,18 +130,16 @@ http://localhost:3000
 
 ## Demo login accounts
 
-Use the accounts created by the seed process.
+Use your existing seeded users.
 
-Recommended local demo accounts:
+Minimum accounts used for the latest local seed:
 
 ```text
-Admin:   demo.admin@planora.local
-Owner:   demo.owner@planora.local
-Manager: demo.manager@planora.local
-Member:  demo.member@planora.local
+Admin user ID: 1
+Owner user ID: 2
 ```
 
-Use a local-only password stored in your environment. Do not commit real passwords or secrets.
+Manager/member demo users are optional for this QA step.
 
 ## Page-by-page QA checklist
 
