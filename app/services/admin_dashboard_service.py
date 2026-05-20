@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
@@ -15,13 +16,15 @@ from app.models.team import Team
 from app.models.user import User
 from app.schemas.admin_dashboard_schema import (
     AdminDashboardOverviewResponse,
+    AdminLogListResponse,
+    AdminLogResponse,
     AdminNotificationStats,
     AdminProjectStats,
     AdminRiskStats,
     AdminTaskStats,
-    AdminUserStats,
-    AdminLogListResponse,
     AdminUserListResponse,
+    AdminUserStats,
+    AdminUserSummaryResponse,
 )
 
 
@@ -34,14 +37,14 @@ def count_all(db: Session, model: type) -> int:
     return count_query(db, select(func.count()).select_from(model))
 
 
-def count_where(db: Session, model: type, *conditions) -> int:
+def count_where(db: Session, model: type, *conditions: Any) -> int:
     stmt = select(func.count()).select_from(model)
     if conditions:
         stmt = stmt.where(*conditions)
     return count_query(db, stmt)
 
 
-def count_select(db: Session, stmt) -> int:
+def count_select(db: Session, stmt: Select[Any]) -> int:
     count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
     return count_query(db, count_stmt)
 
@@ -137,7 +140,7 @@ def get_admin_users(
 
     total = count_select(db, stmt)
 
-    items = list(
+    users = list(
         db.execute(
             stmt.order_by(User.created_at.desc())
             .offset(offset)
@@ -148,7 +151,7 @@ def get_admin_users(
     )
 
     return AdminUserListResponse(
-        items=items,
+        items=[AdminUserSummaryResponse.model_validate(user) for user in users],
         total=total,
         limit=limit,
         offset=offset,
@@ -185,7 +188,7 @@ def get_admin_logs(
 
     total = count_select(db, stmt)
 
-    items = list(
+    logs = list(
         db.execute(
             stmt.order_by(AdminLog.created_at.desc())
             .offset(offset)
@@ -196,11 +199,12 @@ def get_admin_logs(
     )
 
     return AdminLogListResponse(
-        items=items,
+        items=[AdminLogResponse.model_validate(log) for log in logs],
         total=total,
         limit=limit,
         offset=offset,
     )
+
 
 def create_admin_log(
     db: Session,
