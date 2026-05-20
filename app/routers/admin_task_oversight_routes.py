@@ -12,8 +12,8 @@ from app.schemas.admin_task_oversight_schema import (
     AdminTaskActionResponse,
     AdminTaskAssignmentUpdateRequest,
     AdminTaskDetailResponse,
+    AdminTaskListResponse,
     AdminTaskStatusUpdateRequest,
-    AdminTaskSummaryResponse,
 )
 from app.services.admin_task_oversight_service import (
     get_admin_task_detail,
@@ -34,7 +34,7 @@ router = APIRouter(
 )
 
 
-@router.get("", response_model=list[AdminTaskSummaryResponse])
+@router.get("", response_model=AdminTaskListResponse)
 def read_admin_tasks(
     db: DBSession,
     current_admin: CurrentAdmin,
