@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.admin_log import AdminLog
@@ -16,26 +17,26 @@ from app.models.user import User
 from app.schemas.admin_task_oversight_schema import (
     AdminTaskActionResponse,
     AdminTaskDetailResponse,
+    AdminTaskListResponse,
     AdminTaskProjectResponse,
     AdminTaskSummaryResponse,
     AdminTaskUserResponse,
-    
 )
 
 
-def _count_query(db: Session, stmt) -> int:
+def _count_query(db: Session, stmt: Select[tuple[int]]) -> int:
     value = db.scalar(stmt)
     return int(value or 0)
 
 
-def _count_where(db: Session, model: type, *conditions) -> int:
+def _count_where(db: Session, model: type, *conditions: Any) -> int:
     stmt = select(func.count()).select_from(model)
     if conditions:
         stmt = stmt.where(*conditions)
     return _count_query(db, stmt)
 
 
-def _count_select(db: Session, stmt) -> int:
+def _count_select(db: Session, stmt: Select[Any]) -> int:
     count_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
     return _count_query(db, count_stmt)
 
