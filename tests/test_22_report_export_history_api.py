@@ -8,6 +8,7 @@ from tests.conftest import (
     create_personal_project,
     create_personal_task,
     create_verified_user_and_login,
+    make_admin_directly,
 )
 
 
@@ -70,6 +71,44 @@ def test_export_project_report_creates_history_row(
     assert item["task_count_snapshot"] == 1
     assert item["export_format"] == "json"
     assert item["report_type"] == "project"
+
+
+def test_admin_can_export_any_personal_project_report(
+    client: TestClient,
+    db: Session,
+) -> None:
+    _owner_id, owner_token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="report_admin_owner",
+        email="report_admin_owner@example.com",
+    )
+    _admin_id, admin_token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="report_admin_user",
+        email="report_admin_user@example.com",
+    )
+    make_admin_directly(db, "report_admin_user@example.com")
+
+    project = create_personal_project(
+        client=client,
+        token=owner_token,
+        title="Admin Export Personal Report Project",
+    )
+
+    export_response = client.get(
+        f"/reports/projects/{project['project_id']}",
+        headers=auth_headers(admin_token),
+    )
+
+    assert export_response.status_code == 200, export_response.text
+
+    export_data = export_response.json()
+
+    assert export_data["export_id"] is not None
+    assert export_data["project"]["project_id"] == project["project_id"]
+    assert export_data["project"]["title"] == "Admin Export Personal Report Project"
 
 
 def test_project_report_export_history_requires_project_access(
