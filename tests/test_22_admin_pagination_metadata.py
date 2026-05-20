@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from conftest import (
+from tests.conftest import (
     auth_headers,
     create_personal_project,
     create_personal_task,
