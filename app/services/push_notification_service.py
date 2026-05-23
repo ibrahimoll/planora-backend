@@ -17,12 +17,29 @@ def register_device_token(
     current_user: User,
     token_data: DeviceTokenCreate,
 ) -> DeviceToken:
+    if token_data.device_key:
+        stmt = select(DeviceToken).where(
+            DeviceToken.user_id == current_user.user_id,
+            DeviceToken.device_key == token_data.device_key,
+        )
+        existing_device = db.execute(stmt).scalars().first()
+
+        if existing_device is not None:
+            existing_device.token = token_data.token
+            existing_device.platform = str(token_data.platform)
+            existing_device.is_active = True
+
+            db.commit()
+            db.refresh(existing_device)
+            return existing_device
+
     stmt = select(DeviceToken).where(DeviceToken.token == token_data.token)
     existing_token = db.execute(stmt).scalars().first()
 
     if existing_token is not None:
         existing_token.user_id = current_user.user_id
         existing_token.platform = str(token_data.platform)
+        existing_token.device_key = token_data.device_key
         existing_token.is_active = True
 
         db.commit()
@@ -33,6 +50,7 @@ def register_device_token(
         user_id=current_user.user_id,
         token=token_data.token,
         platform=str(token_data.platform),
+        device_key=token_data.device_key,
         is_active=True,
     )
 
@@ -41,7 +59,6 @@ def register_device_token(
     db.refresh(device_token)
 
     return device_token
-
 
 def get_my_device_tokens(
     db: Session,

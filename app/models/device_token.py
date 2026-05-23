@@ -32,6 +32,7 @@ class DeviceToken(Base):
             name="chk_device_tokens_platform",
         ),
         UniqueConstraint("token", name="uq_device_tokens_token"),
+        UniqueConstraint("user_id", "device_key", name="uq_device_tokens_user_device_key"),
     )
 
     device_token_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -46,6 +47,12 @@ class DeviceToken(Base):
     token: Mapped[str] = mapped_column(Text, nullable=False)
 
     platform: Mapped[str] = mapped_column(String(20), nullable=False)
+
+    device_key: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True,
+    )
 
     is_active: Mapped[bool] = mapped_column(
         Boolean,
@@ -66,6 +73,3 @@ class DeviceToken(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="device_tokens")
-
-    device_key: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
-    UniqueConstraint("user_id", "device_key", name="uq_device_tokens_user_device_key"),

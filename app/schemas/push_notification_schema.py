@@ -24,6 +24,7 @@ class DeviceTokenResponse(BaseModel):
     user_id: int
     token: str
     platform: DevicePlatform
+    device_key: str | None = None
     is_active: bool
     last_used_at: datetime
     created_at: datetime
