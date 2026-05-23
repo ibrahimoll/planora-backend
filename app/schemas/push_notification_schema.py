@@ -15,7 +15,7 @@ class DevicePlatform(StrEnum):
 class DeviceTokenCreate(BaseModel):
     token: str = Field(..., min_length=10, max_length=5000)
     platform: DevicePlatform
-
+    device_key: str | None = Field(default=None, min_length=8, max_length=100)
 
 class DeviceTokenResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

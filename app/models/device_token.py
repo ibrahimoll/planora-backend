@@ -66,3 +66,6 @@ class DeviceToken(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="device_tokens")
+
+    device_key: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    UniqueConstraint("user_id", "device_key", name="uq_device_tokens_user_device_key"),
