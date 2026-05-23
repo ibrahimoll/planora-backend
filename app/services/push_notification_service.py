@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
+from sqlalchemy import or_
 from app.models.device_token import DeviceToken
 from app.models.notification_preference import NotificationPreference
 from app.models.user import User
@@ -137,3 +137,39 @@ def update_notification_preferences(
     db.refresh(preferences)
 
     return preferences
+
+
+def deactivate_current_device_tokens(
+    db: Session,
+    current_user: User,
+    device_key: str | None = None,
+    token: str | None = None,
+    device_token_id: int | None = None,
+) -> int:
+    filters = []
+
+    if device_key:
+        filters.append(DeviceToken.device_key == device_key)
+
+    if token:
+        filters.append(DeviceToken.token == token)
+
+    if device_token_id:
+        filters.append(DeviceToken.device_token_id == device_token_id)
+
+    if not filters:
+        return 0
+
+    stmt = select(DeviceToken).where(
+        DeviceToken.user_id == current_user.user_id,
+        or_(*filters),
+    )
+
+    tokens = list(db.execute(stmt).scalars().all())
+
+    for device_token in tokens:
+        device_token.is_active = False
+
+    db.commit()
+
+    return len(tokens)

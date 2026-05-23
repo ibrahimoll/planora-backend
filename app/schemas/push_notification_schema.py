@@ -89,3 +89,9 @@ class PushSendResultResponse(BaseModel):
     skipped_count: int = 0
     failed_count: int = 0
     deactivated_tokens: int = 0
+
+
+class DeviceTokenDeactivateCurrentRequest(BaseModel):
+    device_key: str | None = Field(default=None, min_length=8, max_length=100)
+    token: str | None = Field(default=None, min_length=10, max_length=5000)
+    device_token_id: int | None = None

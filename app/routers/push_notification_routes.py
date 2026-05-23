@@ -7,7 +7,8 @@ from app.services.firebase_push_service import send_push_to_user
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
 from sqlalchemy.orm import Session
-
+from app.schemas.push_notification_schema import DeviceTokenDeactivateCurrentRequest
+from app.services.push_notification_service import deactivate_current_device_tokens
 from app.db.session import get_db
 from app.dependencies.auth import get_current_active_verified_user
 from app.models.user import User
@@ -67,6 +68,26 @@ def list_my_device_tokens(
         db=db,
         current_user=current_user,
     )
+
+
+@router.patch("/device-tokens/current/deactivate")
+def deactivate_current_device_token(
+    data: DeviceTokenDeactivateCurrentRequest,
+    db: DBSession,
+    current_user: CurrentUser,
+):
+    deactivated_count = deactivate_current_device_tokens(
+        db=db,
+        current_user=current_user,
+        device_key=data.device_key,
+        token=data.token,
+        device_token_id=data.device_token_id,
+    )
+
+    return {
+        "message": "Current device token cleanup completed.",
+        "deactivated_count": deactivated_count,
+    }
 
 
 @router.patch(
