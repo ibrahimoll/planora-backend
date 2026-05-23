@@ -94,6 +94,106 @@ def test_user_can_deactivate_own_device_token(
     assert response.json()['is_active'] is False
 
 
+def test_user_can_heartbeat_device_token_by_id(
+    client: TestClient,
+    db: Session,
+) -> None:
+    _user_id, token = create_verified_user_and_login(
+        client,
+        db,
+        username='pushheartbeatiduser',
+        email='pushheartbeatiduser@example.com',
+    )
+
+    create_response = client.post(
+        '/push-notifications/device-tokens',
+        headers=auth_headers(token),
+        json={
+            'token': 'firebase-heartbeat-id-token-123456789',
+            'platform': 'web',
+            'device_key': 'heartbeat-device-key-id',
+        },
+    )
+
+    device_token_id = create_response.json()['device_token_id']
+
+    response = client.patch(
+        '/push-notifications/device-tokens/current/heartbeat',
+        headers=auth_headers(token),
+        json={
+            'device_token_id': device_token_id,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['device_token_id'] == device_token_id
+    assert body['is_active'] is True
+
+
+def test_user_can_heartbeat_device_token_by_device_key(
+    client: TestClient,
+    db: Session,
+) -> None:
+    _user_id, token = create_verified_user_and_login(
+        client,
+        db,
+        username='pushheartbeatkeyuser',
+        email='pushheartbeatkeyuser@example.com',
+    )
+
+    device_key = 'heartbeat-device-key-match'
+
+    create_response = client.post(
+        '/push-notifications/device-tokens',
+        headers=auth_headers(token),
+        json={
+            'token': 'firebase-heartbeat-key-token-123456789',
+            'platform': 'web',
+            'device_key': device_key,
+        },
+    )
+
+    device_token_id = create_response.json()['device_token_id']
+
+    response = client.patch(
+        '/push-notifications/device-tokens/current/heartbeat',
+        headers=auth_headers(token),
+        json={
+            'device_key': device_key,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['device_token_id'] == device_token_id
+    assert body['device_key'] == device_key
+    assert body['is_active'] is True
+
+
+def test_device_token_heartbeat_returns_404_for_missing_token(
+    client: TestClient,
+    db: Session,
+) -> None:
+    _user_id, token = create_verified_user_and_login(
+        client,
+        db,
+        username='pushheartbeatmissinguser',
+        email='pushheartbeatmissinguser@example.com',
+    )
+
+    response = client.patch(
+        '/push-notifications/device-tokens/current/heartbeat',
+        headers=auth_headers(token),
+        json={
+            'device_key': 'missing-device-key',
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'Device token not found.'
+
+
 def test_user_can_get_default_notification_preferences(
     client: TestClient,
     db: Session,

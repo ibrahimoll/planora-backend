@@ -7,7 +7,7 @@ from typing import Any
 import firebase_admin
 from firebase_admin import credentials, messaging
 from sqlalchemy import select
-from sqlalchemy.orm import Session_get_active_device_tokens
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.device_token import DeviceToken
