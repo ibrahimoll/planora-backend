@@ -2,30 +2,33 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from typing import Annotated
-from app.core.config import settings
-from app.services.firebase_push_service import send_push_to_user
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
 from sqlalchemy.orm import Session
-from app.schemas.push_notification_schema import DeviceTokenDeactivateCurrentRequest
-from app.services.push_notification_service import deactivate_current_device_tokens
+
+from app.core.config import settings
 from app.db.session import get_db
 from app.dependencies.auth import get_current_active_verified_user
 from app.models.user import User
 from app.schemas.push_notification_schema import (
     DeviceTokenCreate,
+    DeviceTokenDeactivateCurrentRequest,
+    DeviceTokenHeartbeatRequest,
     DeviceTokenResponse,
     FirebasePushStatusResponse,
     NotificationPreferenceResponse,
     NotificationPreferenceUpdate,
-    PushNotificationMessageResponse,
     PushNotificationTestCreate,
     PushSendResultResponse,
 )
+from app.services.firebase_push_service import send_push_to_user
 from app.services.push_notification_service import (
+    deactivate_current_device_tokens,
     deactivate_my_device_token,
     get_my_device_tokens,
     get_or_create_notification_preferences,
+    heartbeat_device_token,
     register_device_token,
     update_notification_preferences,
 )
@@ -88,6 +91,31 @@ def deactivate_current_device_token(
         "message": "Current device token cleanup completed.",
         "deactivated_count": deactivated_count,
     }
+
+
+@router.patch(
+    "/device-tokens/current/heartbeat",
+    response_model=DeviceTokenResponse,
+)
+def heartbeat_current_device_token(
+    data: DeviceTokenHeartbeatRequest,
+    db: DBSession,
+    current_user: CurrentUser,
+):
+    device_token = heartbeat_device_token(
+        db=db,
+        current_user=current_user,
+        device_key=data.device_key,
+        device_token_id=data.device_token_id,
+    )
+
+    if device_token is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Device token not found.",
+        )
+
+    return device_token
 
 
 @router.patch(

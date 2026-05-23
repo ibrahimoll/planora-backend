@@ -1,175 +1,105 @@
 from __future__ import annotations
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
-from app.models.device_token import DeviceToken
-from app.models.notification_preference import NotificationPreference
-from app.models.user import User
-from app.schemas.push_notification_schema import (
-    DeviceTokenCreate,
-    NotificationPreferenceUpdate,
-)
+from datetime import datetime
+from enum import StrEnum
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas.notification_schema import NotificationType
 
 
-def register_device_token(
-    db: Session,
-    current_user: User,
-    token_data: DeviceTokenCreate,
-) -> DeviceToken:
-    if token_data.device_key:
-        stmt = select(DeviceToken).where(
-            DeviceToken.user_id == current_user.user_id,
-            DeviceToken.device_key == token_data.device_key,
-        )
-        existing_device = db.execute(stmt).scalars().first()
-
-        if existing_device is not None:
-            existing_device.token = token_data.token
-            existing_device.platform = str(token_data.platform)
-            existing_device.is_active = True
-
-            db.commit()
-            db.refresh(existing_device)
-            return existing_device
-
-    stmt = select(DeviceToken).where(DeviceToken.token == token_data.token)
-    existing_token = db.execute(stmt).scalars().first()
-
-    if existing_token is not None:
-        existing_token.user_id = current_user.user_id
-        existing_token.platform = str(token_data.platform)
-        existing_token.device_key = token_data.device_key
-        existing_token.is_active = True
-
-        db.commit()
-        db.refresh(existing_token)
-        return existing_token
-
-    device_token = DeviceToken(
-        user_id=current_user.user_id,
-        token=token_data.token,
-        platform=str(token_data.platform),
-        device_key=token_data.device_key,
-        is_active=True,
-    )
-
-    db.add(device_token)
-    db.commit()
-    db.refresh(device_token)
-
-    return device_token
-
-def get_my_device_tokens(
-    db: Session,
-    current_user: User,
-) -> list[DeviceToken]:
-    stmt = (
-        select(DeviceToken)
-        .where(DeviceToken.user_id == current_user.user_id)
-        .order_by(DeviceToken.created_at.desc())
-    )
-
-    return list(db.execute(stmt).scalars().all())
+class DevicePlatform(StrEnum):
+    ANDROID = "android"
+    IOS = "ios"
+    WEB = "web"
 
 
-def deactivate_my_device_token(
-    db: Session,
-    current_user: User,
-    device_token_id: int,
-) -> DeviceToken | None:
-    stmt = select(DeviceToken).where(
-        DeviceToken.device_token_id == device_token_id,
-        DeviceToken.user_id == current_user.user_id,
-    )
-
-    device_token = db.execute(stmt).scalars().first()
-
-    if device_token is None:
-        return None
-
-    device_token.is_active = False
-
-    db.commit()
-    db.refresh(device_token)
-
-    return device_token
+class DeviceTokenCreate(BaseModel):
+    token: str = Field(..., min_length=10, max_length=5000)
+    platform: DevicePlatform
+    device_key: str | None = Field(default=None, min_length=8, max_length=100)
 
 
-def get_or_create_notification_preferences(
-    db: Session,
-    current_user: User,
-) -> NotificationPreference:
-    stmt = select(NotificationPreference).where(
-        NotificationPreference.user_id == current_user.user_id,
-    )
-
-    preferences = db.execute(stmt).scalars().first()
-
-    if preferences is not None:
-        return preferences
-
-    preferences = NotificationPreference(user_id=current_user.user_id)
-
-    db.add(preferences)
-    db.commit()
-    db.refresh(preferences)
-
-    return preferences
+class DeviceTokenDeactivateCurrentRequest(BaseModel):
+    device_key: str | None = Field(default=None, min_length=8, max_length=100)
+    token: str | None = Field(default=None, min_length=10, max_length=5000)
+    device_token_id: int | None = None
 
 
-def update_notification_preferences(
-    db: Session,
-    current_user: User,
-    preference_data: NotificationPreferenceUpdate,
-) -> NotificationPreference:
-    preferences = get_or_create_notification_preferences(
-        db=db,
-        current_user=current_user,
-    )
-
-    update_data = preference_data.model_dump(exclude_unset=True)
-
-    for field_name, value in update_data.items():
-        setattr(preferences, field_name, value)
-
-    db.commit()
-    db.refresh(preferences)
-
-    return preferences
+class DeviceTokenHeartbeatRequest(BaseModel):
+    device_key: str | None = Field(default=None, min_length=8, max_length=100)
+    device_token_id: int | None = None
 
 
-def deactivate_current_device_tokens(
-    db: Session,
-    current_user: User,
-    device_key: str | None = None,
-    token: str | None = None,
-    device_token_id: int | None = None,
-) -> int:
-    filters = []
+class DeviceTokenResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
-    if device_key:
-        filters.append(DeviceToken.device_key == device_key)
+    device_token_id: int
+    user_id: int
+    token: str
+    platform: DevicePlatform
+    device_key: str | None = None
+    is_active: bool
+    last_used_at: datetime
+    created_at: datetime
 
-    if token:
-        filters.append(DeviceToken.token == token)
 
-    if device_token_id:
-        filters.append(DeviceToken.device_token_id == device_token_id)
+class NotificationPreferenceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
-    if not filters:
-        return 0
+    preference_id: int
+    user_id: int
+    task_notifications: bool
+    project_notifications: bool
+    team_notifications: bool
+    comment_notifications: bool
+    mention_notifications: bool
+    invite_notifications: bool
+    deadline_notifications: bool
+    ai_notifications: bool
+    risk_notifications: bool
+    system_notifications: bool
+    push_enabled: bool
+    email_enabled: bool
+    updated_at: datetime
+    created_at: datetime
 
-    stmt = select(DeviceToken).where(
-        DeviceToken.user_id == current_user.user_id,
-        or_(*filters),
-    )
 
-    tokens = list(db.execute(stmt).scalars().all())
+class NotificationPreferenceUpdate(BaseModel):
+    task_notifications: bool | None = None
+    project_notifications: bool | None = None
+    team_notifications: bool | None = None
+    comment_notifications: bool | None = None
+    mention_notifications: bool | None = None
+    invite_notifications: bool | None = None
+    deadline_notifications: bool | None = None
+    ai_notifications: bool | None = None
+    risk_notifications: bool | None = None
+    system_notifications: bool | None = None
+    push_enabled: bool | None = None
+    email_enabled: bool | None = None
 
-    for device_token in tokens:
-        device_token.is_active = False
 
-    db.commit()
+class PushNotificationMessageResponse(BaseModel):
+    message: str
 
-    return len(tokens)
+
+class FirebasePushStatusResponse(BaseModel):
+    firebase_enabled: bool
+    firebase_configured: bool
+    message: str
+
+
+class PushNotificationTestCreate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=150)
+    message: str = Field(..., min_length=1, max_length=500)
+    notification_type: NotificationType = NotificationType.SYSTEM
+
+
+class PushSendResultResponse(BaseModel):
+    status: str
+    detail: str
+    sent_count: int = 0
+    skipped_count: int = 0
+    failed_count: int = 0
+    deactivated_tokens: int = 0

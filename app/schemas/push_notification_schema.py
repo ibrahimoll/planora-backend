@@ -4,7 +4,9 @@ from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
+
 from app.schemas.notification_schema import NotificationType
+
 
 class DevicePlatform(StrEnum):
     ANDROID = "android"
@@ -16,6 +18,18 @@ class DeviceTokenCreate(BaseModel):
     token: str = Field(..., min_length=10, max_length=5000)
     platform: DevicePlatform
     device_key: str | None = Field(default=None, min_length=8, max_length=100)
+
+
+class DeviceTokenDeactivateCurrentRequest(BaseModel):
+    device_key: str | None = Field(default=None, min_length=8, max_length=100)
+    token: str | None = Field(default=None, min_length=10, max_length=5000)
+    device_token_id: int | None = None
+
+
+class DeviceTokenHeartbeatRequest(BaseModel):
+    device_key: str | None = Field(default=None, min_length=8, max_length=100)
+    device_token_id: int | None = None
+
 
 class DeviceTokenResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -89,9 +103,3 @@ class PushSendResultResponse(BaseModel):
     skipped_count: int = 0
     failed_count: int = 0
     deactivated_tokens: int = 0
-
-
-class DeviceTokenDeactivateCurrentRequest(BaseModel):
-    device_key: str | None = Field(default=None, min_length=8, max_length=100)
-    token: str | None = Field(default=None, min_length=10, max_length=5000)
-    device_token_id: int | None = None

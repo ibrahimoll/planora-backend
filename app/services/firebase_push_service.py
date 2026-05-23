@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from datetime import datetime, timedelta, timezone
 import json
 from dataclasses import dataclass
 from typing import Any
@@ -7,7 +7,7 @@ from typing import Any
 import firebase_admin
 from firebase_admin import credentials, messaging
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session_get_active_device_tokens
 
 from app.core.config import settings
 from app.models.device_token import DeviceToken
@@ -75,9 +75,12 @@ def _get_active_device_tokens(
     db: Session,
     user_id: int,
 ) -> list[DeviceToken]:
+    recent_cutoff = datetime.now(timezone.utc) - timedelta(minutes=2)
+
     stmt = select(DeviceToken).where(
         DeviceToken.user_id == user_id,
         DeviceToken.is_active.is_(True),
+        DeviceToken.last_used_at >= recent_cutoff,
     )
 
     return list(db.execute(stmt).scalars().all())
