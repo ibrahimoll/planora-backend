@@ -177,11 +177,11 @@ def send_push_to_user(
 
     for device_token in active_tokens:
         firebase_message = messaging.Message(
-            notification=messaging.Notification(
-                title=title,
-                body=message,
-            ),
-            data=push_data,
+            data={
+                **push_data,
+                "title": title,
+                "message": message,
+            },
             token=device_token.token,
         )
 
