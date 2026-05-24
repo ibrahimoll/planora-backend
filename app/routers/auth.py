@@ -1,3 +1,5 @@
+import logging
+from time import perf_counter
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -34,6 +36,8 @@ router = APIRouter(
     prefix="/auth",
     tags=["Authentication"],
 )
+
+logger = logging.getLogger(__name__)
 
 DBSession = Annotated[Session, Depends(get_db)]
 LoginForm = Annotated[OAuth2PasswordRequestForm, Depends()]
@@ -191,6 +195,16 @@ def login(
     form_data: LoginForm,
     db: DBSession,
 ) -> TokenResponse:
+    started_at = perf_counter()
+    identifier_type = "email" if "@" in form_data.username else "username"
+    client_host = request.client.host if request.client else "unknown"
+
+    logger.info(
+        "auth.login.start identifier_type=%s client_host=%s",
+        identifier_type,
+        client_host,
+    )
+
     check_rate_limit(
         request,
         "auth:login",
@@ -207,18 +221,39 @@ def login(
         )
     except ValueError as e:
         error_message = str(e)
+        status_label = "unauthorized"
 
         if error_message == "Invalid username/email or password.":
+            total_ms = (perf_counter() - started_at) * 1000
+            logger.info(
+                "auth.login.finish result=%s identifier_type=%s total_ms=%.2f",
+                status_label,
+                identifier_type,
+                total_ms,
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=error_message,
                 headers={"WWW-Authenticate": "Bearer"},
             ) from e
 
+        total_ms = (perf_counter() - started_at) * 1000
+        logger.info(
+            "auth.login.finish result=forbidden identifier_type=%s total_ms=%.2f",
+            identifier_type,
+            total_ms,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=error_message,
         ) from e
+
+    total_ms = (perf_counter() - started_at) * 1000
+    logger.info(
+        "auth.login.finish result=success identifier_type=%s total_ms=%.2f",
+        identifier_type,
+        total_ms,
+    )
 
     return TokenResponse(
         access_token=access_token,
