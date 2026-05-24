@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
+from app.services.email_service import EmailDeliveryError
 from tests.conftest import (
     auth_headers,
     register_user,
@@ -23,6 +24,37 @@ def test_register_user_success(client: TestClient) -> None:
 
     assert response.status_code == 201
     assert response.json()["message"] == "Registration successful. Please verify your email."
+
+
+def test_register_email_delivery_failure_returns_502(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    import app.services.auth_service as auth_service
+
+    def fail_send_email(*args, **kwargs) -> None:
+        raise EmailDeliveryError("Email delivery failed.")
+
+    monkeypatch.setattr(
+        auth_service,
+        "send_verification_email",
+        fail_send_email,
+    )
+
+    response = client.post(
+        "/auth/register",
+        json={
+            "username": "emailfailuser",
+            "email": "emailfail@example.com",
+            "password": "Password1!",
+            "full_name": "Email Fail User",
+        },
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == (
+        "Email delivery failed. Please try again later or contact support."
+    )
 
 
 def test_register_rejects_weak_password(client: TestClient) -> None:

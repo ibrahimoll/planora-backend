@@ -1,3 +1,4 @@
+import logging
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -6,22 +7,39 @@ import requests
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
+
+class EmailDeliveryError(RuntimeError):
+    """Raised when the configured email provider cannot send a message."""
+
+
+def _response_text(response: requests.Response | None) -> str:
+    if response is None:
+        return ""
+
+    return response.text[:1000]
+
 
 def _send_email_smtp(message: EmailMessage) -> None:
     ssl_context = ssl.create_default_context()
     ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
 
-    with smtplib.SMTP(
-        settings.smtp_host,
-        settings.smtp_port,
-        timeout=20,
-    ) as smtp:
-        smtp.starttls(context=ssl_context)
-        smtp.login(
-            settings.smtp_username.strip(),
-            settings.smtp_password.strip().replace(" ", ""),
-        )
-        smtp.send_message(message)
+    try:
+        with smtplib.SMTP(
+            settings.smtp_host,
+            settings.smtp_port,
+            timeout=20,
+        ) as smtp:
+            smtp.starttls(context=ssl_context)
+            smtp.login(
+                settings.smtp_username.strip(),
+                settings.smtp_password.strip().replace(" ", ""),
+            )
+            smtp.send_message(message)
+    except (OSError, smtplib.SMTPException) as exc:
+        logger.exception("SMTP email delivery failed.")
+        raise EmailDeliveryError("Email delivery failed.") from exc
 
 
 def _send_email_brevo(
@@ -29,33 +47,52 @@ def _send_email_brevo(
     subject: str,
     text_content: str,
 ) -> None:
-    if not settings.brevo_api_key:
-        raise RuntimeError("BREVO_API_KEY is not configured.")
+    brevo_api_key = settings.brevo_api_key.strip() if settings.brevo_api_key else ""
+    sender_email = settings.email_from.strip()
 
-    response = requests.post(
-        "https://api.brevo.com/v3/smtp/email",
-        headers={
-            "accept": "application/json",
-            "api-key": settings.brevo_api_key,
-            "content-type": "application/json",
-        },
-        json={
-            "sender": {
-                "name": settings.email_from_name,
-                "email": settings.email_from,
+    if not brevo_api_key:
+        logger.error("Brevo email delivery failed: BREVO_API_KEY is not configured.")
+        raise EmailDeliveryError("Email provider is not configured.")
+
+    if not sender_email:
+        logger.error("Brevo email delivery failed: EMAIL_FROM is not configured.")
+        raise EmailDeliveryError("Email provider is not configured.")
+
+    try:
+        response = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={
+                "accept": "application/json",
+                "api-key": settings.brevo_api_key.strip(),
+                "content-type": "application/json",
             },
-            "to": [
-                {
-                    "email": recipient_email,
-                }
-            ],
-            "subject": subject,
-            "textContent": text_content,
-        },
-        timeout=20,
-    )
+            json={
+                "sender": {
+                    "name": settings.email_from_name.strip(),
+                    "email": sender_email,
+                },
+                "to": [
+                    {
+                        "email": recipient_email,
+                    }
+                ],
+                "subject": subject,
+                "textContent": text_content,
+            },
+            timeout=20,
+        )
 
-    response.raise_for_status()
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        logger.error(
+            "Brevo email delivery failed with status %s: %s",
+            response.status_code,
+            _response_text(response),
+        )
+        raise EmailDeliveryError("Email delivery failed.") from exc
+    except requests.RequestException as exc:
+        logger.exception("Brevo email delivery request failed.")
+        raise EmailDeliveryError("Email delivery failed.") from exc
 
 
 def _send_email(
@@ -63,7 +100,7 @@ def _send_email(
     subject: str,
     text_content: str,
 ) -> None:
-    if settings.email_provider.lower() == "brevo":
+    if settings.email_provider.strip().lower() == "brevo":
         _send_email_brevo(
             recipient_email=recipient_email,
             subject=subject,

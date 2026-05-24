@@ -27,6 +27,7 @@ from app.services.auth_service import (
     reset_password,
     verify_email,
 )
+from app.services.email_service import EmailDeliveryError
 from app.services.social_auth_service import login_with_google
 
 router = APIRouter(
@@ -37,6 +38,17 @@ router = APIRouter(
 DBSession = Annotated[Session, Depends(get_db)]
 LoginForm = Annotated[OAuth2PasswordRequestForm, Depends()]
 CurrentUser = Annotated[User, Depends(get_current_active_verified_user)]
+
+EMAIL_DELIVERY_FAILED_MESSAGE = (
+    "Email delivery failed. Please try again later or contact support."
+)
+
+
+def _raise_email_delivery_error(exc: EmailDeliveryError) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail=EMAIL_DELIVERY_FAILED_MESSAGE,
+    ) from exc
 
 
 @router.post(
@@ -63,6 +75,8 @@ def register(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
         ) from e
+    except EmailDeliveryError as e:
+        _raise_email_delivery_error(e)
 
     return MessageResponse(
         message="Registration successful. Please verify your email."
@@ -110,7 +124,10 @@ def resend_code(
         identifier=data.email,
     )
 
-    resend_verification_code(db, data)
+    try:
+        resend_verification_code(db, data)
+    except EmailDeliveryError as e:
+        _raise_email_delivery_error(e)
 
     return MessageResponse(
         message="If your account needs verification, a verification code has been sent."
@@ -131,7 +148,10 @@ def forgot_password(
         identifier=data.email,
     )
 
-    request_password_reset(db, data)
+    try:
+        request_password_reset(db, data)
+    except EmailDeliveryError as e:
+        _raise_email_delivery_error(e)
 
     return MessageResponse(
         message="If an account with that email exists, a password reset code has been sent."

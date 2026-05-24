@@ -14,10 +14,10 @@ class Settings(BaseSettings):
     password_reset_code_secret: str
     password_reset_code_expire_minutes: int
 
-    smtp_host: str
-    smtp_port: int
-    smtp_username: str
-    smtp_password: str
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
     email_from: str
 
     email_provider: str = "smtp"
