@@ -37,6 +37,14 @@ from app.services.deadline_reminder_scheduler import (
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    brevo_key = settings.brevo_api_key or ""
+
+    print("EMAIL DEBUG provider:", repr(settings.email_provider))
+    print("EMAIL DEBUG from:", repr(settings.email_from))
+    print("EMAIL DEBUG brevo key length:", len(brevo_key))
+    print("EMAIL DEBUG brevo key starts xkeysib:", brevo_key.startswith("xkeysib-"))
+    print("EMAIL DEBUG brevo key has spaces:", any(ch.isspace() for ch in brevo_key))
+    
     start_deadline_reminder_scheduler()
 
     try:
