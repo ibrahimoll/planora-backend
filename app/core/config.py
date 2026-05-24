@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     smtp_password: str
     email_from: str
 
+    email_provider: str = "smtp"
+    brevo_api_key: str | None = None
+    email_from_name: str = "Planora"
+
     google_client_id: str
 
     ai_provider: str = "local"
