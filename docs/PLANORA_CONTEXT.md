@@ -16,7 +16,7 @@ Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Googl
 
 Admin dashboard stack: separate Next.js repository using the FastAPI backend, protected admin auth, shared API client, dark SaaS admin UI, real backend data, browser Firebase Cloud Messaging token registration, and no fake telemetry.
 
-Mobile app stack/status: Flutter mobile app in `ibrahimoll/planora-mobile`, currently focused on the user-facing auth UI flow using a clean light/dark purple Planora design system. Mobile auth screens are still UI-only; backend auth APIs are not connected yet.
+Mobile app stack/status: Flutter mobile app in `ibrahimoll/planora-mobile`, currently moving from completed auth UI screens into backend API integration. Mobile auth screens are still mostly UI/local-navigation only; backend auth APIs are the active next implementation target.
 
 Repositories:
 
@@ -38,17 +38,29 @@ Latest confirmed status:
 - Backend full regression passed after Step 33 with `139 passed`.
 - Backend full regression passed after AI chat scope guard/Gemini verification with `140 passed`.
 - Backend `python -m compileall app tests` passed after Step 33.
+- Deployment milestone: user has deployed the backend, PostgreSQL database, and web/admin dashboard site. Mobile development is now the active next phase.
 - Admin dashboard final polish pass is complete.
 - Admin dashboard latest local verification after browser FCM work: `npm run lint` reported `0 errors`; `npm run build` passed.
 - Browser FCM token registration was implemented and tested successfully on the web/laptop: browser permission prompt, real Firebase token registration, saved `web` device token, and test push notification received.
 - Temporary admin-dashboard patch scripts were removed from the frontend repo.
-- Mobile onboarding UI is complete in light/dark style and navigates to the login screen.
+- Mobile onboarding UI is complete in light/dark style and navigates to login/register.
 - Mobile login UI is complete and responsive, with light/dark mode toggle, Google logo, Apple placeholder button, Remember me, Forgot password link, and Sign up navigation.
 - Mobile register UI is complete and responsive, with full name, email, password, confirm password, terms checkbox, Google/Apple buttons, and navigation to email verification.
 - Mobile register password rules card is implemented. It appears when the password field is focused and updates live: empty password shows grey circles, failed rules show red X icons, and passed rules show green checks.
 - Mobile email verification UI is complete and responsive. It has six OTP boxes, resend countdown, Verify Email button, Change Email button, and switches between `email_verification_light.png` and `email_verification_dark.png` based on theme.
-- Mobile forgot password UI is the current next manual task. Desired flow: `ForgotPasswordScreen` -> `ResetLinkSentScreen`, with separate light/dark illustration assets for each state.
-- Mobile backend connection is not started yet. Login, register, email verification, forgot password, resend, Google, and Apple actions should remain placeholders or local navigation until the auth UI flow is complete.
+- Mobile forgot password UI is complete. Current flow: `ForgotPasswordScreen` -> `ResetLinkSentScreen`, using separate light/dark assets:
+  - `assets/images/forgot_password_light.png`
+  - `assets/images/forgot_password_dark.png`
+  - `assets/images/reset_link_sent_light.png`
+  - `assets/images/reset_link_sent_dark.png`
+- Mobile backend connection is now the active next task. Login, register, email verification, forgot password, resend, Google, and Apple actions are still placeholders/local navigation until API integration is completed.
+- Mobile API foundation has been started/planned with:
+  - `lib/core/config/app_config.dart`
+  - `lib/core/network/api_client.dart`
+  - `lib/core/network/api_exception.dart`
+  - `lib/core/storage/token_storage.dart`
+- `token_storage.dart` should use `const FlutterSecureStorage()` directly. Do not use deprecated `AndroidOptions(encryptedSharedPreferences: true)` because `encryptedSharedPreferences` is deprecated and ignored by newer `flutter_secure_storage` versions.
+- Future coding guidance requested by the user: explain each step in English first, then provide code function-by-function with explanation. Avoid dumping a large file before explaining the purpose of each function.
 
 Important backend verification commands:
 
@@ -81,6 +93,12 @@ git pull origin main
 flutter pub get
 flutter analyze
 flutter run -d chrome
+```
+
+Run mobile against deployed backend with:
+
+```powershell
+flutter run -d chrome --dart-define=PLANORA_API_URL=https://YOUR_BACKEND_URL
 ```
 
 ## Completed Backend Steps
@@ -146,33 +164,87 @@ Current mobile files/features to remember:
 - Login screen: `lib/features/login/login_screen.dart`.
 - Register screen: `lib/features/register/register_screen.dart`.
 - Email verification screen: `lib/features/email_verification/email_verification_screen.dart`.
-- Planned forgot password screen path: `lib/features/forgot_password/forgot_password_screen.dart`.
+- Forgot password screen: `lib/features/forgot_password/forgot_password_screen.dart`.
+- Reset link sent screen currently lives inside `lib/features/forgot_password/forgot_password_screen.dart` as `ResetLinkSentScreen`.
 - Google logo asset: `assets/icons/google_logo.svg`.
 - Email verification assets:
   - `assets/images/email_verification_light.png`
   - `assets/images/email_verification_dark.png`
-- Planned forgot password assets:
+- Forgot password assets:
   - `assets/images/forgot_password_light.png`
   - `assets/images/forgot_password_dark.png`
   - `assets/images/reset_link_sent_light.png`
   - `assets/images/reset_link_sent_dark.png`
 
-Mobile auth UI flow target before API integration:
+Mobile auth UI flow status:
 
-1. Onboarding -> Login.
-2. Login -> Register.
-3. Register -> Email verification.
-4. Login -> Forgot password.
-5. Forgot password -> Reset link sent.
-6. Later add Reset password screen if using code-based reset in-app instead of email link.
-7. After UI flow is stable, connect backend APIs and secure token storage.
+1. Onboarding -> Login/Register is implemented.
+2. Login -> Register is implemented.
+3. Register -> Email verification is implemented locally.
+4. Login -> Forgot password is implemented.
+5. Forgot password -> Reset link sent is implemented locally.
+6. Backend reset password is code-based, so a real in-app `ResetPasswordScreen` is still needed if the app should complete password reset from the mobile UI.
+7. After API integration, successful login should save the JWT access token and route into the app instead of staying in auth placeholders.
+
+Mobile backend integration plan:
+
+1. Finish/check API foundation files:
+   - `AppConfig` reads `PLANORA_API_URL` from `--dart-define` and trims trailing `/`.
+   - `ApiException` stores clean backend error messages and optional status codes.
+   - `TokenStorage` saves, reads, clears, and checks JWT access token using `flutter_secure_storage`.
+   - `ApiClient` wraps Dio and provides `get`, `postJson`, `postForm`, `patchJson`, and `delete` helpers.
+2. Add auth models and auth API layer:
+   - `lib/features/auth/models/auth_models.dart`
+   - `lib/features/auth/data/auth_api.dart`
+   - Models/functions: `TokenResponse`, `UserResponse`, `MessageResponse`, `login`, `register`, `verifyEmail`, `resendVerificationCode`, `forgotPassword`, `resetPassword`, `getCurrentUser`.
+3. Connect login screen:
+   - Validate email/password.
+   - Show loading state.
+   - Call `POST /auth/login` using form data with fields `username` and `password`.
+   - Save `access_token`.
+   - Call `/auth/me`.
+   - Route to a temporary home screen.
+4. Connect register screen:
+   - Validate full name/email/password.
+   - Backend requires `username`, `email`, `password`, and `full_name`.
+   - Current mobile UI has no username field, so use generated username from email for now unless backend is changed to auto-generate username.
+   - Call `POST /auth/register`.
+   - Route to email verification screen after successful registration.
+5. Connect email verification screen:
+   - Call `POST /auth/verify-email`.
+   - Call `POST /auth/resend-verification-code`.
+   - After verification, route user to login or auto-login only if a token flow is added later.
+6. Connect forgot/reset password:
+   - `ForgotPasswordScreen` should call `POST /auth/forgot-password`.
+   - Add `ResetPasswordScreen` for backend's code-based reset flow.
+   - `ResetPasswordScreen` should collect email, 6-digit code, new password, and confirm password, then call `POST /auth/reset-password`.
+7. Add `AuthGate`:
+   - If token exists and `/auth/me` works, route to Home.
+   - Otherwise route to Onboarding/Login.
+8. Add temporary Home screen:
+   - Show basic authenticated state.
+   - Add logout button that clears token.
+   - Later replace with the real mobile dashboard.
 
 Important mobile/backend integration note:
 
 - Backend auth already supports normal registration/login, email verification, resend verification code, forgot password, reset password, `/auth/me`, and Google login.
 - Mobile UI currently does not call these APIs.
 - Apple login should stay UI-only/coming-later unless Apple Developer setup is available.
-- Backend register may still require `username`; the current mobile register UI does not show username. Before API integration, decide whether mobile should generate username from email/full name or backend should auto-generate username.
+- Google login should be implemented after normal email/password auth unless specifically prioritized.
+- Backend register requires `username`; the current mobile register UI does not show username. For the first mobile API integration, generate a username from email locally or update backend to auto-generate username.
+
+Preferred mobile coding workflow:
+
+- Explain the purpose of the current step in English first.
+- Then provide code one function/class at a time.
+- For each function/class, explain:
+  1. Function/class name.
+  2. What it does.
+  3. Why Planora needs it.
+  4. The exact code for that function/class.
+  5. What to test before continuing.
+- Avoid giving huge multi-file code dumps unless explicitly requested.
 
 ## Current Main Tables
 
