@@ -6,6 +6,7 @@ from email.message import EmailMessage
 import requests
 
 from app.core.config import settings
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
@@ -138,15 +139,21 @@ Planora Team
     )
 
 
-def send_password_reset_email(recipient_email: str, code: str) -> None:
+def send_password_reset_email(recipient_email: str, token: str) -> None:
+    reset_link = (
+        f"{settings.password_reset_frontend_url}"
+        f"?{urlencode({'email': recipient_email, 'token': token})}"
+    )
+
     text_content = f"""Hello,
 
 You requested to reset your Planora password.
-Your password reset code is:
 
-{code}
+Click the link below to reset your password:
 
-This code will expire in {settings.password_reset_code_expire_minutes} minutes.
+{reset_link}
+
+This link will expire in {settings.password_reset_code_expire_minutes} minutes.
 If you did not request this, you can safely ignore this email.
 
 Planora Team
@@ -154,6 +161,6 @@ Planora Team
 
     _send_email(
         recipient_email=recipient_email,
-        subject="Planora password reset code",
+        subject="Reset your Planora password",
         text_content=text_content,
     )

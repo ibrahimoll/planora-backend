@@ -64,6 +64,8 @@ class Settings(BaseSettings):
             for origin in self.backend_cors_origins.split(",")
             if origin.strip()
         ]
+    
+    password_reset_frontend_url: str = "http://localhost:8080/reset-password"
 
 
 settings = Settings()  # pyright: ignore[reportCallIssue]

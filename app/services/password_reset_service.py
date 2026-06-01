@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
+import secrets
 from app.core.config import settings
 from app.models.password_reset_code import PasswordResetCode
 
@@ -31,15 +31,15 @@ def verify_password_reset_code(code: str, stored_code_hash: str) -> bool:
     )
 
 
-def create_password_reset_code(
-    db: Session,
-    user_id: int,
-) -> str:
-    raw_code = generate_password_reset_code()
+def create_password_reset_code(db: Session, user_id: int) -> str:
+    plain_token = secrets.token_urlsafe(32)
 
     reset_code = PasswordResetCode(
         user_id=user_id,
-        code_hash=hash_password_reset_code(raw_code),
+        code_hash=hash_verification_code(
+            plain_token,
+            settings.password_reset_code_secret,
+        ),
         expires_at=datetime.now(timezone.utc)
         + timedelta(minutes=settings.password_reset_code_expire_minutes),
     )
@@ -47,7 +47,7 @@ def create_password_reset_code(
     db.add(reset_code)
     db.flush()
 
-    return raw_code
+    return plain_token
 
 
 def get_latest_active_password_reset_code(
