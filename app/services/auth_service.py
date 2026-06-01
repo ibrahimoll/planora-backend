@@ -36,7 +36,7 @@ from app.services.password_reset_service import (
 )
 
 INVALID_VERIFICATION_CODE_MESSAGE = "Invalid verification code."
-INVALID_PASSWORD_RESET_CODE_MESSAGE = "Invalid password reset code."
+INVALID_PASSWORD_RESET_CODE_MESSAGE = "Invalid password reset token."
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ def register_user(db: Session, data: RegisterRequest) -> User:
         role="user",
         is_active=True,
         is_email_verified=False,
-        profile_pic = build_default_profile_pic(data.full_name),
+        profile_pic=build_default_profile_pic(data.full_name),
     )
 
     db.add(user)
@@ -167,15 +167,15 @@ def request_password_reset(
         user.user_id,
     )
 
-    plain_code = create_password_reset_code(
+    plain_token = create_password_reset_code(
         db,
         user.user_id,
     )
-    
+
     try:
         send_password_reset_email(
             recipient_email=user.email,
-            code=plain_code,
+            token=plain_token,
         )
     except Exception:
         db.rollback()
@@ -209,7 +209,7 @@ def reset_password(
         raise ValueError(INVALID_PASSWORD_RESET_CODE_MESSAGE)
 
     if not verify_password_reset_code(
-        data.code,
+        data.token,
         latest_code.code_hash,
     ):
         raise ValueError(INVALID_PASSWORD_RESET_CODE_MESSAGE)
