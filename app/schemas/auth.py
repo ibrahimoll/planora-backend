@@ -40,12 +40,14 @@ class ResendVerificationCodeRequest(BaseModel):
 
     email: EmailStr
 
-class SocialLoginRequest(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace= True)
 
-    id_token: str = Field(min_length= 10)
+class SocialLoginRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    id_token: str = Field(min_length=10)
     username: str | None = Field(default=None, min_length=3, max_length=50)
-    full_name: str | None = Field(default = None, max_length= 150)
+    full_name: str | None = Field(default=None, max_length=150)
+
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -80,11 +82,10 @@ class ResetPasswordRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     email: EmailStr
-    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    token: str = Field(min_length=20, max_length=200)
     new_password: str = Field(min_length=8, max_length=128)
 
     @field_validator("new_password")
     @classmethod
     def validate_new_password_strength(cls, password: str) -> str:
         return validate_password_strength(password)
-    
