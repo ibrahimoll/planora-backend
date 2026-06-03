@@ -1,6 +1,6 @@
 # Planora Project Context
 
-Last updated: 2026-06-01
+Last updated: 2026-06-03
 
 ## Main Idea
 
@@ -16,7 +16,7 @@ Backend stack: FastAPI, SQLAlchemy ORM, PostgreSQL, Pydantic v2, JWT auth, Googl
 
 Admin dashboard stack: separate Next.js repository using the FastAPI backend, protected admin auth, shared API client, dark SaaS admin UI, real backend data, browser Firebase Cloud Messaging token registration, and no fake telemetry.
 
-Mobile app stack/status: Flutter mobile app in `ibrahimoll/planora-mobile`, currently moving from completed auth UI screens into backend API integration. Mobile auth screens are still mostly UI/local-navigation only; backend auth APIs are the active next implementation target.
+Mobile app stack/status: Flutter mobile app in `ibrahimoll/planora-mobile`. Mobile auth integration, reset-password link flow, AuthGate session persistence, Firebase web hosting, and the first real Home dashboard UI are now implemented/polished. Mobile is now moving from auth/dashboard shell polish into real feature screens and backend data integration for projects, tasks, notifications, AI chat, profile/settings, and team collaboration.
 
 Repositories:
 
@@ -31,38 +31,211 @@ Latest confirmed status:
 - Backend Step 31 Automatic Notification Scheduler is complete.
 - Backend Step 32 Backend Total-Count Pagination is complete.
 - Backend Step 33 Saved Report Export History is complete.
-- Backend AI Chat Assistant now has a project-only scope guard: project/greeting questions are allowed, unrelated questions such as weather are blocked before the LLM provider is called.
+- Backend AI Chat Assistant has a project-only scope guard: project/greeting questions are allowed; unrelated questions such as weather are blocked before the LLM provider is called.
 - Gemini provider was configured locally through `.env` and verified manually by the user. The real `GEMINI_API_KEY` must stay local and must never be committed.
-- Backend Alembic head is now `8b2c6d9f0a11`.
+- Backend Alembic head is `8b2c6d9f0a11`.
 - Backend focused Step 33 test file `tests/test_22_report_export_history_api.py` passed with `3 passed`.
 - Backend full regression passed after Step 33 with `139 passed`.
 - Backend full regression passed after AI chat scope guard/Gemini verification with `140 passed`.
 - Backend `python -m compileall app tests` passed after Step 33.
-- Deployment milestone: user has deployed the backend, PostgreSQL database, and web/admin dashboard site. Mobile development is now the active next phase.
+- Deployment milestone: user has deployed the backend, PostgreSQL database, admin dashboard site, and mobile web preview/hosting flow.
 - Admin dashboard final polish pass is complete.
 - Admin dashboard latest local verification after browser FCM work: `npm run lint` reported `0 errors`; `npm run build` passed.
-- Browser FCM token registration was implemented and tested successfully on the web/laptop: browser permission prompt, real Firebase token registration, saved `web` device token, and test push notification received.
+- Browser FCM token registration was implemented and tested successfully on web/laptop: browser permission prompt, real Firebase token registration, saved `web` device token, and test push notification received.
 - Temporary admin-dashboard patch scripts were removed from the frontend repo.
+
+## Latest Mobile Status — 2026-06-03
+
+Reported latest local mobile commit:
+
+- `1247cc5 Polish auth session and home dashboard`
+
+This commit was reported as committed locally in `planora-mobile`. Push status should be checked with `git status` / `git log origin/main..HEAD` before assuming it is on GitHub.
+
+Completed/updated mobile work:
+
 - Mobile onboarding UI is complete in light/dark style and navigates to login/register.
-- Mobile login UI is complete and responsive, with light/dark mode toggle, Google logo, Apple placeholder button, Remember me, Forgot password link, and Sign up navigation.
-- Mobile register UI is complete and responsive, with full name, email, password, confirm password, terms checkbox, Google/Apple buttons, and navigation to email verification.
-- Mobile register password rules card is implemented. It appears when the password field is focused and updates live: empty password shows grey circles, failed rules show red X icons, and passed rules show green checks.
-- Mobile email verification UI is complete and responsive. It has six OTP boxes, resend countdown, Verify Email button, Change Email button, and switches between `email_verification_light.png` and `email_verification_dark.png` based on theme.
-- Mobile forgot password UI is complete. Current flow: `ForgotPasswordScreen` -> `ResetLinkSentScreen`, using separate light/dark assets:
+- Mobile login UI is complete and responsive.
+- Login supports email/username input if backend supports it.
+- Login now routes successful auth back through AuthGate instead of bypassing the app-level session controller.
+- Mobile register UI is complete and responsive.
+- Register password rules card appears when the password field is focused and updates live.
+- Mobile email verification UI is complete and responsive.
+- Forgot password uses password reset link flow, not reset code flow.
+- `ForgotPasswordScreen` calls backend forgot-password API and routes to `ResetLinkSentScreen`.
+- `ResetLinkSentScreen` has the auth/logo header removed per design request and says reset link, not reset code.
+- Public reset links open `/reset-password?email=...&token=...` directly into `ResetPasswordScreen`.
+- `ResetPasswordScreen` exists and was manually reported working.
+- `/reset-password` direct route is preserved in `main.dart` before AuthGate normal routing.
+- Reset email/token from URL are trimmed/safely handled.
+- `AuthGate` is implemented.
+- AuthGate keeps valid saved JWT sessions and routes to Home automatically.
+- AuthGate clears saved JWT only on real auth rejection; transient network/server failures should not immediately wipe a valid session.
+- AuthGate now has retry/sign-out UI for session-check failures.
+- Logout clears token and returns to onboarding/auth state cleanly.
+- Token storage is implemented through `TokenStorage`.
+- Google auth API helper matching backend `/auth/google` was added in mobile API layer.
+- `AppConfig` handles `PLANORA_API_URL` using `--dart-define` and should trim trailing slashes.
+- Firebase hosting for mobile web was initialized using `build/web` as public directory and SPA rewrite to `index.html`.
+- Render CORS allowed origins were updated to include local web ports/LAN/Firebase/Vercel URLs as needed.
+
+Mobile Home dashboard status:
+
+- Temporary Home screen was replaced by a real first dashboard UI.
+- Header includes greeting based on device time, first name, search icon, notification icon, and avatar actions.
+- Notification dot should appear only when unread notifications exist.
+- Dashboard includes Project Overview, Quick Actions, My Projects, Upcoming Tasks, and bottom navigation.
+- Quick Actions were restyled to compact cards matching the reference: New Project, New Task, Invite Team, View Reports.
+- My Projects icons were polished with modern project-logo cards.
+- Dark mode text/readability was improved; user preference is that dark-mode readable text should be white/near-white.
+- Bottom navigation currently uses Planora style with Home, Projects, center Planora AI, Tasks, Calendar.
+- Profile was removed from bottom navigation; profile/logout/theme actions can stay accessible from avatar/header.
+- Bottom navigation requirements: keep center-docked Planora AI button, Planora purple selected state, smooth sliding selected animation, no random yellow/orange colors.
+- User rejected weak/jumpy animation; smooth sliding active state is required.
+- The `animated_bottom_navigation_bar` package is installed and can be used where useful, but style and smooth sliding behavior matter more than package choice.
+- Android/web overscroll stretch should be avoided across the mobile app where possible.
+
+Mobile verification reported after Codex audit:
+
+- `flutter pub get` passed.
+- `flutter analyze` passed with zero issues.
+- No `test` or `integration_test` directories existed, so no tests were run.
+- Release web preview rendered cleanly with no browser warnings.
+- Live login/logout/reset manual checks were not run by Codex because no real credentials/reset link were available in that workspace.
+
+Manual mobile checks still needed:
+
+1. Launch app with no token -> onboarding/login appears.
+2. Login with real credentials -> Home opens.
+3. Refresh app -> Home opens through AuthGate if token is valid.
+4. Kill/reopen app or reload browser -> valid session persists.
+5. Logout -> onboarding/login appears and token is cleared.
+6. Forgot password -> reset link email arrives.
+7. Reset link -> `ResetPasswordScreen` opens and password can be changed.
+8. Login with new password works.
+9. Toggle dark mode -> all Home/auth text is readable.
+10. Bottom nav: Home/Projects/Planora AI/Tasks/Calendar selected states animate smoothly.
+11. Small mobile widths -> no overflow/clipping.
+12. Scroll to top/bottom -> no ugly stretch/overscroll behavior.
+
+## Important Mobile Files
+
+Auth/core files:
+
+- `lib/main.dart`
+- `lib/core/config/app_config.dart`
+- `lib/core/network/api_client.dart`
+- `lib/core/network/api_exception.dart`
+- `lib/core/storage/token_storage.dart`
+- `lib/features/auth/auth_gate.dart`
+- `lib/features/auth/data/auth_api.dart`
+- `lib/features/auth/models/auth_models.dart`
+
+Auth UI files:
+
+- `lib/features/onboarding/onboarding_screen.dart`
+- `lib/features/login/login_screen.dart`
+- `lib/features/register/register_screen.dart`
+- `lib/features/email_verification/email_verification_screen.dart`
+- `lib/features/forgot_password/forgot_password_screen.dart`
+- `lib/features/reset_password/reset_password_screen.dart`
+- Shared auth responsive helper: `lib/features/auth/shared/auth_responsive_metrics.dart`
+- Shared auth widgets: `lib/features/auth/shared/auth_widgets.dart`
+
+Home/dashboard files:
+
+- `lib/features/home/home_screen.dart`
+- `lib/features/home/widgets/home_bottom_nav.dart`
+
+Theme/assets:
+
+- `lib/core/theme/planora_theme.dart`
+- Google logo asset: `assets/icons/google_logo.svg`
+- Email verification assets:
+  - `assets/images/email_verification_light.png`
+  - `assets/images/email_verification_dark.png`
+- Forgot password/reset link assets:
   - `assets/images/forgot_password_light.png`
   - `assets/images/forgot_password_dark.png`
   - `assets/images/reset_link_sent_light.png`
   - `assets/images/reset_link_sent_dark.png`
-- Mobile backend connection is now the active next task. Login, register, email verification, forgot password, resend, Google, and Apple actions are still placeholders/local navigation until API integration is completed.
-- Mobile API foundation has been started/planned with:
-  - `lib/core/config/app_config.dart`
-  - `lib/core/network/api_client.dart`
-  - `lib/core/network/api_exception.dart`
-  - `lib/core/storage/token_storage.dart`
-- `token_storage.dart` should use `const FlutterSecureStorage()` directly. Do not use deprecated `AndroidOptions(encryptedSharedPreferences: true)` because `encryptedSharedPreferences` is deprecated and ignored by newer `flutter_secure_storage` versions.
-- Future coding guidance requested by the user: explain each step in English first, then provide code function-by-function with explanation. Avoid dumping a large file before explaining the purpose of each function.
 
-Important backend verification commands:
+## Mobile App Current UI Direction
+
+The mobile UI should follow the clean, modern, friendly, professional Planora light/dark purple identity:
+
+- Primary purple gradient buttons.
+- Rounded white/light cards in light mode.
+- Dark navy/slate surfaces in dark mode.
+- Soft lavender/purple backgrounds and accents.
+- Auth screens use Planora logo and `AI-POWERED PROJECT PLANNING` pill where appropriate.
+- Reset link sent/check-email screen should not show the logo/AI pill per latest design request.
+- Responsive layouts using `LayoutBuilder`, `SingleChildScrollView`, max content width, keyboard-safe scrolling, and `AuthResponsiveMetrics`.
+- Auth screens should support small phones, normal phones, tablet/web widths, and keyboard-open states.
+- Home dashboard should match the provided modern reference: greeting header, Project Overview, Quick Actions, My Projects, Upcoming Tasks, and bottom navigation.
+- Bottom navigation style should keep Planora colors, center Planora AI button, and smooth sliding selected animation.
+
+## Mobile Backend Integration Notes
+
+Backend auth already supports:
+
+- `POST /auth/register`
+- `POST /auth/verify-email`
+- `POST /auth/resend-verification-code`
+- `POST /auth/forgot-password`
+- `POST /auth/reset-password`
+- `POST /auth/login`
+- `POST /auth/google`
+- `GET /auth/me`
+
+Important auth/API rules:
+
+- Login uses form data with fields `username` and `password`.
+- The `username` field in login can contain email or username if backend supports both.
+- `/auth/me` requires the Planora JWT access token, not a Google ID token.
+- Google ID token is only submitted to `/auth/google`; backend returns a Planora JWT.
+- Do not log tokens, reset tokens, passwords, Google ID tokens, Gmail app passwords, API keys, or secrets.
+- Token storage should go through `TokenStorage` only.
+- `token_storage.dart` should use `const FlutterSecureStorage()` directly. Do not use deprecated `AndroidOptions(encryptedSharedPreferences: true)`.
+- Apple login should stay UI-only/coming-later unless Apple Developer setup is available.
+- Backend register requires `username`; current mobile register UI historically had no username field, so either generate username from email locally or update backend to auto-generate username before full registration integration.
+
+## Next Recommended Mobile Steps
+
+Recommended order after auth/dashboard polish:
+
+1. Manually verify the real auth lifecycle with deployed backend:
+   - login, refresh, AuthGate persistence, logout, forgot-password email, reset-password link, login with new password.
+2. Push local commit `1247cc5` to `origin/main` if not already pushed.
+3. Build real Projects flow:
+   - project API models/client.
+   - projects list screen.
+   - project detail screen.
+   - create project screen.
+   - connect Home "My Projects" and "New Project" quick action to real data/navigation.
+4. Build real Tasks flow:
+   - task models/client.
+   - tasks list screen.
+   - task detail screen.
+   - create/update/complete task interactions.
+   - connect Home "Upcoming Tasks" and "New Task" quick action.
+5. Build Notifications screen and unread count connection:
+   - connect header bell unread dot to `GET /notifications/unread-count`.
+   - list notifications from `GET /notifications`.
+   - support mark read/read all/delete.
+6. Build Planora AI screen from center bottom button:
+   - project-scoped AI chat UI.
+   - later connect to backend AI chat endpoints.
+7. Build Profile/Settings screens:
+   - profile details.
+   - edit profile.
+   - change password.
+   - theme/settings.
+8. Build Team Members / collaboration screens.
+9. Add tests after screens stabilize.
+10. Final cleanup/optimization after feature completion, not before.
+
+## Important Backend Verification Commands
 
 ```powershell
 $pgPassword = Read-Host "Enter your PostgreSQL postgres password"
@@ -76,7 +249,7 @@ python -m pytest -v
 python -m compileall app tests
 ```
 
-Important admin dashboard verification commands:
+## Important Admin Dashboard Verification Commands
 
 ```powershell
 cd C:\Users\mahdi\OneDrive\Documents\Planora\admin-dashboard
@@ -85,20 +258,27 @@ npm run lint
 npm run build
 ```
 
-Important mobile verification commands:
+## Important Mobile Verification Commands
 
 ```powershell
 cd C:\Users\Ibrahim\Documents\Planora\mobile
 git pull origin main
 flutter pub get
 flutter analyze
-flutter run -d chrome
+flutter run -d chrome --web-port 8080
 ```
 
-Run mobile against deployed backend with:
+Run mobile against deployed backend:
 
 ```powershell
-flutter run -d chrome --dart-define=PLANORA_API_URL=https://YOUR_BACKEND_URL
+flutter run -d chrome --web-port 8080 --dart-define=PLANORA_API_URL=https://planora-api-dqmv.onrender.com
+```
+
+Build/deploy mobile web to Firebase:
+
+```powershell
+flutter build web --dart-define=PLANORA_API_URL=https://planora-api-dqmv.onrender.com
+firebase deploy
 ```
 
 ## Completed Backend Steps
@@ -145,106 +325,6 @@ flutter run -d chrome --dart-define=PLANORA_API_URL=https://YOUR_BACKEND_URL
 31. Automatic Notification Scheduler for due-soon/overdue task reminders and automatic push delivery.
 32. Backend Total-Count Pagination for admin users/projects/tasks/admin logs.
 33. Saved Report Export History.
-
-## Mobile App Current UI Direction
-
-The mobile UI should follow the clean, modern, friendly, professional Planora light/dark purple identity:
-
-- Primary purple gradient buttons.
-- Rounded white/light cards in light mode.
-- Dark navy surfaces in dark mode.
-- Soft lavender/purple backgrounds and accents.
-- Centered Planora logo and `AI-POWERED PROJECT PLANNING` pill on auth screens.
-- Responsive layouts using `LayoutBuilder`, `SingleChildScrollView`, max content width, keyboard-safe scrolling, and `AuthResponsiveMetrics`.
-- The auth screens should support small phones, normal phones, tablet/web widths, and keyboard-open states.
-
-Current mobile files/features to remember:
-
-- Shared auth responsive helper: `lib/features/auth/shared/auth_responsive_metrics.dart`.
-- Login screen: `lib/features/login/login_screen.dart`.
-- Register screen: `lib/features/register/register_screen.dart`.
-- Email verification screen: `lib/features/email_verification/email_verification_screen.dart`.
-- Forgot password screen: `lib/features/forgot_password/forgot_password_screen.dart`.
-- Reset link sent screen currently lives inside `lib/features/forgot_password/forgot_password_screen.dart` as `ResetLinkSentScreen`.
-- Google logo asset: `assets/icons/google_logo.svg`.
-- Email verification assets:
-  - `assets/images/email_verification_light.png`
-  - `assets/images/email_verification_dark.png`
-- Forgot password assets:
-  - `assets/images/forgot_password_light.png`
-  - `assets/images/forgot_password_dark.png`
-  - `assets/images/reset_link_sent_light.png`
-  - `assets/images/reset_link_sent_dark.png`
-
-Mobile auth UI flow status:
-
-1. Onboarding -> Login/Register is implemented.
-2. Login -> Register is implemented.
-3. Register -> Email verification is implemented locally.
-4. Login -> Forgot password is implemented.
-5. Forgot password -> Reset link sent is implemented locally.
-6. Backend reset password is code-based, so a real in-app `ResetPasswordScreen` is still needed if the app should complete password reset from the mobile UI.
-7. After API integration, successful login should save the JWT access token and route into the app instead of staying in auth placeholders.
-
-Mobile backend integration plan:
-
-1. Finish/check API foundation files:
-   - `AppConfig` reads `PLANORA_API_URL` from `--dart-define` and trims trailing `/`.
-   - `ApiException` stores clean backend error messages and optional status codes.
-   - `TokenStorage` saves, reads, clears, and checks JWT access token using `flutter_secure_storage`.
-   - `ApiClient` wraps Dio and provides `get`, `postJson`, `postForm`, `patchJson`, and `delete` helpers.
-2. Add auth models and auth API layer:
-   - `lib/features/auth/models/auth_models.dart`
-   - `lib/features/auth/data/auth_api.dart`
-   - Models/functions: `TokenResponse`, `UserResponse`, `MessageResponse`, `login`, `register`, `verifyEmail`, `resendVerificationCode`, `forgotPassword`, `resetPassword`, `getCurrentUser`.
-3. Connect login screen:
-   - Validate email/password.
-   - Show loading state.
-   - Call `POST /auth/login` using form data with fields `username` and `password`.
-   - Save `access_token`.
-   - Call `/auth/me`.
-   - Route to a temporary home screen.
-4. Connect register screen:
-   - Validate full name/email/password.
-   - Backend requires `username`, `email`, `password`, and `full_name`.
-   - Current mobile UI has no username field, so use generated username from email for now unless backend is changed to auto-generate username.
-   - Call `POST /auth/register`.
-   - Route to email verification screen after successful registration.
-5. Connect email verification screen:
-   - Call `POST /auth/verify-email`.
-   - Call `POST /auth/resend-verification-code`.
-   - After verification, route user to login or auto-login only if a token flow is added later.
-6. Connect forgot/reset password:
-   - `ForgotPasswordScreen` should call `POST /auth/forgot-password`.
-   - Add `ResetPasswordScreen` for backend's code-based reset flow.
-   - `ResetPasswordScreen` should collect email, 6-digit code, new password, and confirm password, then call `POST /auth/reset-password`.
-7. Add `AuthGate`:
-   - If token exists and `/auth/me` works, route to Home.
-   - Otherwise route to Onboarding/Login.
-8. Add temporary Home screen:
-   - Show basic authenticated state.
-   - Add logout button that clears token.
-   - Later replace with the real mobile dashboard.
-
-Important mobile/backend integration note:
-
-- Backend auth already supports normal registration/login, email verification, resend verification code, forgot password, reset password, `/auth/me`, and Google login.
-- Mobile UI currently does not call these APIs.
-- Apple login should stay UI-only/coming-later unless Apple Developer setup is available.
-- Google login should be implemented after normal email/password auth unless specifically prioritized.
-- Backend register requires `username`; the current mobile register UI does not show username. For the first mobile API integration, generate a username from email locally or update backend to auto-generate username.
-
-Preferred mobile coding workflow:
-
-- Explain the purpose of the current step in English first.
-- Then provide code one function/class at a time.
-- For each function/class, explain:
-  1. Function/class name.
-  2. What it does.
-  3. Why Planora needs it.
-  4. The exact code for that function/class.
-  5. What to test before continuing.
-- Avoid giving huge multi-file code dumps unless explicitly requested.
 
 ## Current Main Tables
 
@@ -376,3 +456,17 @@ Push notifications:
 - `PATCH /push-notifications/preferences`
 - `GET /push-notifications/status`
 - `POST /push-notifications/test`
+
+## Preferred Mobile Coding Workflow
+
+- Explain the purpose of the current step in English first.
+- Then provide code one function/class at a time.
+- For each function/class, explain:
+  1. Function/class name.
+  2. What it does.
+  3. Why Planora needs it.
+  4. The exact code for that function/class.
+  5. What to test before continuing.
+- Avoid giving huge multi-file code dumps unless explicitly requested.
+- When the user asks for direct repo changes, make targeted commits and tell the user exactly what to pull/test.
+- Keep checking `ibrahimoll/planora-backend` for endpoint contracts when mobile behavior depends on backend responses.
