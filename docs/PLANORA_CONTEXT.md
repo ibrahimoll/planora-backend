@@ -326,6 +326,14 @@ firebase deploy
 32. Backend Total-Count Pagination for admin users/projects/tasks/admin logs.
 33. Saved Report Export History.
 
+## Latest AI Project Planning State - 2026-06-07
+
+- Mobile-friendly AI planning endpoints are available at `POST /projects/{project_id}/ai-plan/generate` and `POST /teams/{team_id}/projects/{project_id}/ai-plan/generate`.
+- The endpoint stores a row in `ai_plans`, can create real rows in `tasks`, and returns `project_id`, `plan_id`, `summary`, `tasks_created`, and created task summaries.
+- The current generator uses deterministic local fallback logic (`local_rule_based_v1`) and does not require mobile-side AI secrets.
+- Older `/ai-plans` routes remain available for plan history and compatibility.
+- Contract details and examples are documented in `docs/AI_PROJECT_PLANNING.md`.
+
 ## Current Main Tables
 
 - `users`
