@@ -91,6 +91,14 @@ class Task(Base):
         back_populates="created_tasks",
     )
 
+    @property
+    def assigned_user(self) -> "User | None":
+        return self.assignee
+
+    @property
+    def created_by_user(self) -> "User":
+        return self.creator
+
     attachments: Mapped[list["Attachment"]] = relationship(back_populates="task")
 
     deadline_reminders: Mapped[list["DeadlineReminder"]] = relationship(

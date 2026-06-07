@@ -5,6 +5,8 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.user_summary_schema import UserSummaryResponse
+
 
 class ProjectStatus(str, Enum):
     not_started = "not_started"
@@ -18,10 +20,12 @@ class ProjectType(str, Enum):
     personal = "personal"
     team = "team"
 
+
 class ProjectMemberRole(str, Enum):
     owner = "owner"
     manager = "manager"
     member = "member"
+
 
 class ProjectAssignableRole(str, Enum):
     manager = "manager"
@@ -32,10 +36,16 @@ class ProjectMemberUpdate(BaseModel):
     role: ProjectAssignableRole
 
 
+class ProjectMemberInvite(BaseModel):
+    email_or_username: str = Field(..., min_length=3, max_length=255)
+    role: ProjectAssignableRole = ProjectAssignableRole.member
+
+
 class ProjectCreate(BaseModel):
     title: str = Field(..., min_length=2, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
     deadline: datetime
+
 
 class TeamProjectCreate(BaseModel):
     title: str = Field(..., min_length=2, max_length=200)
@@ -64,6 +74,7 @@ class ProjectResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
 class ProjectMemberResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -72,6 +83,8 @@ class ProjectMemberResponse(BaseModel):
     user_id: int
     role: ProjectMemberRole
     joined_at: datetime
+    user: UserSummaryResponse | None = None
+
 
 class ProjectDeleteResponse(BaseModel):
     message: str

@@ -28,6 +28,10 @@ Repositories:
 
 Latest confirmed status:
 
+- Mobile/backend integration follow-up on 2026-06-07 added safe nested user summaries for mobile display. `ProjectMemberResponse`, `TeamMemberResponse`, `TaskResponse`, and `CommentResponse` now expose `UserSummaryResponse` data where the mobile app needs real names/avatars instead of `User #id` or `Member #id` fallbacks.
+- Team project member invite support was added for mobile through `POST /teams/{team_id}/projects/{project_id}/members/invite`. It accepts `email_or_username` plus role, requires the current user to manage the project, prevents duplicates, ensures the target user is on the team, and returns the created project member with nested user summary data.
+- Task list/detail responses now eager-load assignee/creator summaries through SQLAlchemy relationships/properties so mobile task assignee display can use real user data.
+- Backend touched files passed `py_compile` on 2026-06-07. Full backend pytest did not start in the current local Python environment because `pytest` is not installed there.
 - Backend Step 31 Automatic Notification Scheduler is complete.
 - Backend Step 32 Backend Total-Count Pagination is complete.
 - Backend Step 33 Saved Report Export History is complete.

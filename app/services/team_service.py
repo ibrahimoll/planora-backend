@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.project import Project
 from app.models.project_member import ProjectMember
@@ -130,6 +130,7 @@ def get_team_members(
 ) -> list[TeamMember]:
     stmt = (
         select(TeamMember)
+        .options(selectinload(TeamMember.user))
         .where(TeamMember.team_id == team_id)
         .order_by(TeamMember.joined_at.asc())
     )
@@ -161,6 +162,7 @@ def add_team_member(
     db.add(member)
     db.commit()
     db.refresh(member)
+    db.refresh(member, attribute_names=["user"])
 
     return member
 
@@ -174,6 +176,7 @@ def update_team_member_role(
 
     db.commit()
     db.refresh(member)
+    db.refresh(member, attribute_names=["user"])
 
     return member
 

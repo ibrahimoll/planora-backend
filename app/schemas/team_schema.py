@@ -5,20 +5,27 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from app.schemas.user_summary_schema import UserSummaryResponse
+
+
 class TeamRole(str, Enum):
     owner = "owner"
     admin = "admin"
     member = "member"
 
+
 class TeamAssignableRole(str, Enum):
     admin = "admin"
     member = "member"
 
+
 class TeamCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
 
+
 class TeamUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=100)
+
 
 class TeamResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -31,18 +38,22 @@ class TeamResponse(BaseModel):
 class TeamDeleteResponse(BaseModel):
     message: str
 
+
 class TeamMemberAdd(BaseModel):
     email: EmailStr
     role: TeamAssignableRole = TeamAssignableRole.member
 
+
 class TeamMemberUpdate(BaseModel):
     role: TeamAssignableRole
 
+
 class TeamMemberResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    
+
     team_member_id: int
     team_id: int
     user_id: int
     role: TeamRole
     joined_at: datetime
+    user: UserSummaryResponse | None = None

@@ -5,6 +5,8 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.user_summary_schema import UserSummaryResponse
+
 
 class TaskPriority(str, Enum):
     low = "low"
@@ -62,6 +64,8 @@ class TaskResponse(BaseModel):
     due_date: datetime | None
     completed_at: datetime | None
     created_at: datetime
+    assigned_user: UserSummaryResponse | None = None
+    created_by_user: UserSummaryResponse | None = None
 
 
 class TaskDeleteResponse(BaseModel):

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.project import Project
 from app.models.project_member import ProjectMember
@@ -75,6 +75,7 @@ def create_task_for_personal_project(
 
     db.commit()
     db.refresh(task)
+    db.refresh(task, attribute_names=["assignee", "creator"])
 
     return task
 
@@ -85,8 +86,15 @@ def get_tasks_for_personal_project(
     status: TaskStatus | None = None,
     priority: TaskPriority | None = None,
 ) -> list[Task]:
-    stmt = select(Task).where(
-        Task.project_id == project.project_id,
+    stmt = (
+        select(Task)
+        .options(
+            selectinload(Task.assignee),
+            selectinload(Task.creator),
+        )
+        .where(
+            Task.project_id == project.project_id,
+        )
     )
 
     if status is not None:
@@ -105,9 +113,16 @@ def get_task_for_personal_project_by_id(
     project: Project,
     task_id: int,
 ) -> Task | None:
-    stmt = select(Task).where(
-        Task.task_id == task_id,
-        Task.project_id == project.project_id,
+    stmt = (
+        select(Task)
+        .options(
+            selectinload(Task.assignee),
+            selectinload(Task.creator),
+        )
+        .where(
+            Task.task_id == task_id,
+            Task.project_id == project.project_id,
+        )
     )
 
     return db.execute(stmt).scalars().first()
@@ -223,6 +238,7 @@ def update_task(
 
     db.commit()
     db.refresh(task)
+    db.refresh(task, attribute_names=["assignee", "creator"])
 
     return task
 
@@ -331,6 +347,7 @@ def create_task_for_team_project(
 
     db.commit()
     db.refresh(task)
+    db.refresh(task, attribute_names=["assignee", "creator"])
 
     return task
 
@@ -342,8 +359,15 @@ def get_tasks_for_team_project(
     priority: TaskPriority | None = None,
     assigned_to: int | None = None,
 ) -> list[Task]:
-    stmt = select(Task).where(
-        Task.project_id == project.project_id,
+    stmt = (
+        select(Task)
+        .options(
+            selectinload(Task.assignee),
+            selectinload(Task.creator),
+        )
+        .where(
+            Task.project_id == project.project_id,
+        )
     )
 
     if status is not None:
@@ -365,9 +389,16 @@ def get_task_for_team_project_by_id(
     project: Project,
     task_id: int,
 ) -> Task | None:
-    stmt = select(Task).where(
-        Task.task_id == task_id,
-        Task.project_id == project.project_id,
+    stmt = (
+        select(Task)
+        .options(
+            selectinload(Task.assignee),
+            selectinload(Task.creator),
+        )
+        .where(
+            Task.task_id == task_id,
+            Task.project_id == project.project_id,
+        )
     )
 
     return db.execute(stmt).scalars().first()

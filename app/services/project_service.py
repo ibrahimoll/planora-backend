@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.project import Project
 from app.models.project_member import ProjectMember
@@ -290,11 +290,54 @@ def get_project_members(
 ) -> list[ProjectMember]:
     stmt = (
         select(ProjectMember)
+        .options(selectinload(ProjectMember.user))
         .where(ProjectMember.project_id == project_id)
         .order_by(ProjectMember.joined_at.asc())
     )
 
     return list(db.execute(stmt).scalars().all())
+
+
+def get_user_by_email_or_username(
+    db: Session,
+    email_or_username: str,
+) -> User | None:
+    lookup = email_or_username.strip().lower()
+
+    stmt = select(User).where(
+        func.lower(User.email) == lookup,
+    )
+
+    user = db.execute(stmt).scalars().first()
+
+    if user is not None:
+        return user
+
+    stmt = select(User).where(
+        func.lower(User.username) == lookup,
+    )
+
+    return db.execute(stmt).scalars().first()
+
+
+def add_project_member(
+    db: Session,
+    project: Project,
+    user: User,
+    role: ProjectAssignableRole,
+) -> ProjectMember:
+    member = ProjectMember(
+        project_id=project.project_id,
+        user_id=user.user_id,
+        role=role.value,
+    )
+
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+    db.refresh(member, attribute_names=["user"])
+
+    return member
 
 
 def get_project_membership(
