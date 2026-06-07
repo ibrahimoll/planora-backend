@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.comment import Comment
 from app.models.comment_mention import CommentMention
@@ -169,6 +169,7 @@ def create_comment_for_task(
 
     db.commit()
     db.refresh(comment)
+    db.refresh(comment, attribute_names=["user"])
 
     return comment
 
@@ -179,6 +180,7 @@ def get_comments_for_task(
 ) -> list[Comment]:
     stmt = (
         select(Comment)
+        .options(selectinload(Comment.user))
         .where(Comment.task_id == task.task_id)
         .order_by(Comment.created_at.asc())
     )
@@ -191,9 +193,13 @@ def get_comment_for_task_by_id(
     task: Task,
     comment_id: int,
 ) -> Comment | None:
-    stmt = select(Comment).where(
-        Comment.comment_id == comment_id,
-        Comment.task_id == task.task_id,
+    stmt = (
+        select(Comment)
+        .options(selectinload(Comment.user))
+        .where(
+            Comment.comment_id == comment_id,
+            Comment.task_id == task.task_id,
+        )
     )
 
     return db.execute(stmt).scalars().first()

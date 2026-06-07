@@ -19,6 +19,9 @@ class CommentResponse(BaseModel):
     comment_id: int
     task_id: int
     user_id: int
+    user_username: str | None = None
+    user_full_name: str | None = None
+    user_profile_pic: str | None = None
     comment_text: str
     created_at: datetime
 

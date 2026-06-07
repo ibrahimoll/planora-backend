@@ -55,6 +55,18 @@ class Comment(Base):
         back_populates="comments",
     )
 
+    @property
+    def user_username(self) -> str | None:
+        return self.user.username if self.user is not None else None
+
+    @property
+    def user_full_name(self) -> str | None:
+        return self.user.full_name if self.user is not None else None
+
+    @property
+    def user_profile_pic(self) -> str | None:
+        return self.user.profile_pic if self.user is not None else None
+
     mentions: Mapped[list["CommentMention"]] = relationship(
         back_populates="comment",
         cascade="all, delete-orphan",
