@@ -26,7 +26,7 @@ TASK_TITLE_TEMPLATES = [
     "Analyze requirements and constraints",
     "Design the project structure",
     "Prepare the implementation plan",
-    "Implement the core features",
+    "Complete the core project work",
     "Review and test the work",
     "Fix issues and improve quality",
     "Prepare final delivery and documentation",
@@ -35,6 +35,70 @@ TASK_TITLE_TEMPLATES = [
     "Collect feedback and adjust",
     "Submit final version",
 ]
+
+BUSINESS_TASK_TITLE_TEMPLATES = [
+    "Research target niche and customer demand",
+    "Define startup budget and pricing model",
+    "Compare suppliers and sample options",
+    "Choose brand name and positioning",
+    "Plan the first product collection",
+    "Set up sales channel and social presence",
+    "Map launch timeline and promotions",
+    "Confirm delivery and fulfillment process",
+    "Check legal, tax, and operations requirements",
+    "Prepare inventory and order tracking",
+    "Create customer service and returns process",
+    "Review launch readiness and backup plan",
+]
+
+SOFTWARE_TASK_TITLE_TEMPLATES = [
+    "Define product scope and success criteria",
+    "Analyze user requirements and constraints",
+    "Design the app architecture and data model",
+    "Prepare the implementation roadmap",
+    "Build the core product features",
+    "Test key user flows",
+    "Fix issues and improve quality",
+    "Prepare release notes and documentation",
+    "Evaluate technical risks and backup plan",
+    "Finalize presentation material",
+    "Collect feedback and iterate",
+    "Submit final version",
+]
+
+BUSINESS_KEYWORDS = (
+    "business",
+    "clothing",
+    "fashion",
+    "brand",
+    "boutique",
+    "shop",
+    "store",
+    "supplier",
+    "suppliers",
+    "inventory",
+    "delivery",
+    "ecommerce",
+    "e-commerce",
+    "product collection",
+    "startup",
+    "launch",
+    "legal",
+)
+
+SOFTWARE_KEYWORDS = (
+    "software",
+    "app",
+    "mobile app",
+    "website",
+    "platform",
+    "flutter",
+    "backend",
+    "frontend",
+    "code",
+    "coding",
+    "api",
+)
 
 
 def _to_utc(value: datetime) -> datetime:
@@ -74,6 +138,101 @@ def _estimated_hours_for_index(index: int) -> float:
     return estimates[index % len(estimates)]
 
 
+def _contains_any(value: str, keywords: tuple[str, ...]) -> bool:
+    normalized = value.lower()
+
+    return any(keyword in normalized for keyword in keywords)
+
+
+def _select_task_title_templates(project_context: str) -> list[str]:
+    is_business = _contains_any(project_context, BUSINESS_KEYWORDS)
+    is_software = _contains_any(project_context, SOFTWARE_KEYWORDS)
+
+    if is_business and not is_software:
+        return BUSINESS_TASK_TITLE_TEMPLATES
+
+    if is_software:
+        return SOFTWARE_TASK_TITLE_TEMPLATES
+
+    return TASK_TITLE_TEMPLATES
+
+
+def _build_milestones(
+    project_context: str,
+    include_milestones: bool,
+) -> list[dict[str, Any]]:
+    if not include_milestones:
+        return []
+
+    if _contains_any(project_context, BUSINESS_KEYWORDS) and not _contains_any(
+        project_context,
+        SOFTWARE_KEYWORDS,
+    ):
+        return [
+            {
+                "name": "Business concept validated",
+                "description": "Niche, budget, suppliers, and brand direction are clear.",
+                "suggested_order": 1,
+            },
+            {
+                "name": "Launch setup completed",
+                "description": "Product collection, channels, delivery, and operations are ready.",
+                "suggested_order": 2,
+            },
+            {
+                "name": "Go-to-market reviewed",
+                "description": "Launch plan, legal checks, and risk backup are finalized.",
+                "suggested_order": 3,
+            },
+        ]
+
+    return [
+        {
+            "name": "Planning completed",
+            "description": "Scope, requirements, and structure are clear.",
+            "suggested_order": 1,
+        },
+        {
+            "name": "Core work completed",
+            "description": "Main project work is finished.",
+            "suggested_order": 2,
+        },
+        {
+            "name": "Final review completed",
+            "description": "Testing, cleanup, and final delivery are done.",
+            "suggested_order": 3,
+        },
+    ]
+
+
+def _build_risks(project_context: str) -> list[dict[str, str]]:
+    if _contains_any(project_context, BUSINESS_KEYWORDS) and not _contains_any(
+        project_context,
+        SOFTWARE_KEYWORDS,
+    ):
+        return [
+            {
+                "risk": "Supplier or inventory delays",
+                "recommendation": "Compare multiple suppliers and order samples before committing.",
+            },
+            {
+                "risk": "Unclear niche or pricing",
+                "recommendation": "Validate demand, budget, and pricing before the launch spend.",
+            },
+        ]
+
+    return [
+        {
+            "risk": "Deadline pressure",
+            "recommendation": "Start high-priority tasks early and review progress daily.",
+        },
+        {
+            "risk": "Unclear requirements",
+            "recommendation": "Confirm project scope before implementation begins.",
+        },
+    ]
+
+
 def build_generated_plan(
     project: Project,
     input_prompt: str,
@@ -91,6 +250,8 @@ def build_generated_plan(
         or project.description
         or f"Create a structured project plan for {project.title}."
     )
+    combined_context = f"{project.title}\n{project_context}"
+    task_title_templates = _select_task_title_templates(combined_context)
 
     tasks: list[dict[str, Any]] = []
     assignable_member_ids = [
@@ -100,8 +261,8 @@ def build_generated_plan(
     ]
 
     for index in range(task_count):
-        title_template = TASK_TITLE_TEMPLATES[index % len(TASK_TITLE_TEMPLATES)]
-        suffix = f" {index + 1}" if index >= len(TASK_TITLE_TEMPLATES) else ""
+        title_template = task_title_templates[index % len(task_title_templates)]
+        suffix = f" {index + 1}" if index >= len(task_title_templates) else ""
         assigned_to = (
             assignable_member_ids[index % len(assignable_member_ids)]
             if project.project_type == "team" and assignable_member_ids
@@ -139,35 +300,11 @@ def build_generated_plan(
             "deadline": _to_utc(project.deadline).isoformat(),
         },
         "tasks": tasks,
-        "milestones": [
-            {
-                "name": "Planning completed",
-                "description": "Scope, requirements, and structure are clear.",
-                "suggested_order": 1,
-            },
-            {
-                "name": "Implementation completed",
-                "description": "Core project work is finished.",
-                "suggested_order": 2,
-            },
-            {
-                "name": "Final review completed",
-                "description": "Testing, cleanup, and final delivery are done.",
-                "suggested_order": 3,
-            },
-        ]
-        if include_milestones
-        else [],
-        "risks": [
-            {
-                "risk": "Deadline pressure",
-                "recommendation": "Start high-priority tasks early and review progress daily.",
-            },
-            {
-                "risk": "Unclear requirements",
-                "recommendation": "Confirm project scope before implementation begins.",
-            },
-        ],
+        "milestones": _build_milestones(
+            project_context=combined_context,
+            include_milestones=include_milestones,
+        ),
+        "risks": _build_risks(combined_context),
         "recommendations": [
             "Review the generated tasks before starting.",
             "Adjust due dates if the project deadline is very close.",

@@ -409,6 +409,56 @@ def test_generate_ai_plan_endpoint_creates_plan_row_and_tasks(
     assert {task["assigned_to"] for task in tasks} == {user_id}
 
 
+def test_generate_ai_plan_endpoint_uses_business_tasks_for_clothing_idea(
+    client: TestClient,
+    db: Session,
+):
+    _, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_generate_clothing_owner",
+        email="ai_generate_clothing_owner@example.com",
+    )
+
+    project = create_personal_project(
+        client=client,
+        token=token,
+        title="Clothing Business Launch",
+    )
+
+    response = client.post(
+        f"/projects/{project['project_id']}/ai-plan/generate",
+        headers=auth_headers(token),
+        json={
+            "prompt": (
+                "I want to start a clothing business with a small online store, "
+                "suppliers, delivery, branding, and legal setup."
+            ),
+            "generate_tasks": True,
+            "overwrite_existing_tasks": False,
+            "preferred_task_count": 8,
+            "include_milestones": True,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+
+    task_titles = " ".join(
+        task["title"].lower()
+        for task in response.json()["tasks"]
+    )
+
+    assert "supplier" in task_titles
+    assert "brand" in task_titles
+    assert "product collection" in task_titles
+    assert "delivery" in task_titles
+    assert "app" not in task_titles
+    assert "software" not in task_titles
+    assert "code" not in task_titles
+    assert "land" not in task_titles
+    assert "factory" not in task_titles
+
+
 def test_generate_ai_plan_endpoint_can_store_plan_without_creating_tasks(
     client: TestClient,
     db: Session,
