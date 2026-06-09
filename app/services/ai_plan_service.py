@@ -940,7 +940,7 @@ def _normalize_ai_plan_response(
         ]
 
     return {
-        "source": "gemini_structured_v1",
+        "source": "local_rule_based_fallback_v1",        
         "domain": domain,
         "summary": summary,
         "project": {
@@ -1046,7 +1046,7 @@ def _build_local_generated_plan(
         )
 
     return {
-        "source": "gemini_structured_v1",
+        "source": "local_rule_based_fallback_v1",
         "domain": domain,
         "summary": (
             f"Generated a structured fallback plan for '{project.title}' with "
@@ -1117,13 +1117,13 @@ def build_generated_plan(
     fallback_summary = str(fallback_plan.get("summary", "")).strip()
 
     return {
-        **fallback_plan,
-        "source": "gemini_structured_v1",
-        "summary": (
-            f"{fallback_summary} AI provider was unavailable or returned invalid JSON, "
-            "so Planora used a safe fallback."
-        ).strip(),
-    }
+    **fallback_plan,
+    "source": "local_rule_based_fallback_v1",
+    "summary": (
+        f"{fallback_summary} AI provider was unavailable or returned invalid JSON, "
+        "so Planora used a safe fallback."
+    ).strip(),
+}
 
 
 def _parse_due_date(value: str) -> datetime:
