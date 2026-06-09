@@ -9,7 +9,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-MAX_AI_REPLY_LENGTH = 4000
+MAX_AI_REPLY_LENGTH = 12000
 
 
 def _clean_ai_text(value: str) -> str:
@@ -68,7 +68,7 @@ def _generate_with_gemini(prompt: str) -> str | None:
         ],
         "generationConfig": {
             "temperature": 0.35,
-            "maxOutputTokens": 800,
+            "maxOutputTokens": 2500,
         },
     }
 

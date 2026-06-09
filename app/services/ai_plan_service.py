@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -25,6 +26,7 @@ from app.schemas.ai_plan_schema import (
 )
 from app.schemas.task_schema import TaskStatus
 from app.services.activity_log_service import create_activity_log
+from app.services.ai_provider_service import generate_ai_reply_from_provider
 
 
 TASK_TITLE_TEMPLATES = [
@@ -71,47 +73,6 @@ SOFTWARE_TASK_TITLE_TEMPLATES = [
     "Collect feedback and iterate",
     "Submit final version",
 ]
-
-BUSINESS_KEYWORDS = (
-    "business",
-    "clothing",
-    "fashion",
-    "apparel",
-    "brand",
-    "boutique",
-    "shop",
-    "store",
-    "supplier",
-    "suppliers",
-    "inventory",
-    "delivery",
-    "payment",
-    "returns",
-    "ecommerce",
-    "e-commerce",
-    "online store",
-    "online shop",
-    "product collection",
-    "startup",
-    "launch",
-    "legal",
-    "social media",
-    "sell",
-)
-
-SOFTWARE_KEYWORDS = (
-    "software",
-    "app",
-    "mobile app",
-    "website",
-    "platform",
-    "flutter",
-    "backend",
-    "frontend",
-    "code",
-    "coding",
-    "api",
-)
 
 INSTRUCTION_PREFIXES = (
     "create a complete planora project plan",
@@ -160,7 +121,11 @@ SOFTWARE_PATTERNS = (
     r"\bcode\b",
     r"\bcoding\b",
     r"\bapplication\b",
-    r"\b(?:build|create|develop|design|launch|make)\s+(?:an?\s+)?(?:mobile\s+)?app\b",
+    r"\bgame\b",
+    r"\bclicking\s+game\b",
+    r"\bclicker\b",
+    r"\b(?:build|create|develop|design|launch|make)\s+"
+    r"(?:an?\s+)?(?:mobile\s+)?(?:app|game|website|platform|software)\b",
     r"\bapp\s+(?:for|to)\b",
 )
 
@@ -175,6 +140,9 @@ def _to_utc(value: datetime) -> datetime:
 def _build_due_dates(project: Project, task_count: int) -> list[datetime]:
     now = datetime.now(timezone.utc)
     deadline = _to_utc(project.deadline)
+
+    if task_count <= 0:
+        return []
 
     if deadline <= now:
         return [deadline for _ in range(task_count)]
@@ -200,15 +168,6 @@ def _priority_for_index(index: int, task_count: int) -> str:
 def _estimated_hours_for_index(index: int) -> float:
     estimates = [2.0, 3.0, 4.0, 5.0, 3.5, 4.5]
     return estimates[index % len(estimates)]
-
-
-def _contains_any(
-    value: str,
-    keywords: tuple[str, ...],
-) -> bool:
-    normalized = value.lower()
-
-    return any(keyword in normalized for keyword in keywords)
 
 
 def _matches_any_pattern(
@@ -330,19 +289,13 @@ def _detect_project_domain(project_context: str) -> str:
 
     explicit_software_build = re.search(
         r"\b(?:build|create|develop|design|make|launch)\s+"
-        r"(?:an?\s+)?(?:mobile\s+)?(?:app|web\s+app|website|platform|software|backend|frontend|api)\b",
+        r"(?:an?\s+)?(?:flutter\s+)?(?:mobile\s+)?"
+        r"(?:app|application|game|clicking\s+game|clicker|web\s+app|website|platform|software|backend|frontend|api)\b",
         project_context,
         flags=re.IGNORECASE,
     )
 
-    # If the idea is mainly about selling products, stores, suppliers,
-    # customers, pricing, or a brand, treat it as business/e-commerce.
-    # Only choose software when the user clearly says the deliverable is
-    # an app, website, platform, backend, frontend, API, or software.
-    if is_business and not explicit_software_build:
-        return "business"
-
-    if is_explicit_software:
+    if explicit_software_build or is_explicit_software:
         return "software"
 
     if is_business:
@@ -649,7 +602,392 @@ def _build_recommendations(domain: str) -> list[str]:
     ]
 
 
-def build_generated_plan(
+def _strip_json_code_fence(value: str) -> str:
+    cleaned = value.strip()
+
+    if cleaned.startswith("```json"):
+        cleaned = cleaned.removeprefix("```json").strip()
+
+    elif cleaned.startswith("```"):
+        cleaned = cleaned.removeprefix("```").strip()
+
+    if cleaned.endswith("```"):
+        cleaned = cleaned.removesuffix("```").strip()
+
+    return cleaned
+
+
+def _parse_json_object(value: str) -> dict[str, Any] | None:
+    cleaned = _strip_json_code_fence(value)
+
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        first_brace = cleaned.find("{")
+        last_brace = cleaned.rfind("}")
+
+        if first_brace == -1 or last_brace == -1 or last_brace <= first_brace:
+            return None
+
+        try:
+            data = json.loads(cleaned[first_brace : last_brace + 1])
+        except json.JSONDecodeError:
+            return None
+
+    return data if isinstance(data, dict) else None
+
+
+def _build_structured_ai_plan_prompt(
+    project: Project,
+    input_prompt: str,
+    task_count: int,
+    include_milestones: bool,
+) -> str:
+    deadline_text = _to_utc(project.deadline).date().isoformat()
+    description = project.description or "No description provided."
+
+    return f"""
+You are Planora AI, an expert project planning assistant.
+
+Your job:
+Generate a practical project plan for ANY user idea.
+Do not rely on fixed categories.
+Understand the actual project idea and create tasks that match it exactly.
+
+Critical rules:
+- Return valid JSON only. No Markdown. No code fences. No explanations outside JSON.
+- Do not add software/app tasks unless the user is clearly building software, an app, a website, a platform, code, or a game.
+- Do not add business/supplier/marketing tasks unless the user is clearly starting or running a business.
+- Do not use generic placeholder task titles.
+- Do not copy this prompt into task descriptions.
+- Do not include "$1", "**", backticks, or template artifacts.
+- Each task must be specific to the user's actual idea.
+- Use beginner-friendly task descriptions.
+- Keep task descriptions short, useful, and actionable.
+- Generate exactly {task_count} tasks.
+- Priority must be one of: low, medium, high.
+- estimated_hours must be a number between 0.5 and 40.
+- suggested_order must start at 1 and increase by 1.
+- due_date must be ISO 8601 datetime strings before or on the project deadline.
+- If you are unsure about details, make practical assumptions and state them in the summary/recommendations.
+
+Project context:
+- title: {project.title}
+- description: {description}
+- project_type: {project.project_type}
+- deadline: {deadline_text}
+
+User idea and requirements:
+{input_prompt.strip()}
+
+Return JSON in exactly this shape:
+{{
+  "domain": "short natural domain label, for example mobile_game, restaurant_business, marketing_agency, study_plan, event_planning, general_project",
+  "summary": "short summary of the generated plan",
+  "tasks": [
+    {{
+      "suggested_order": 1,
+      "title": "specific task title",
+      "description": "short practical description",
+      "priority": "high",
+      "estimated_hours": 2.5
+    }}
+  ],
+  "milestones": [
+    {{
+      "name": "milestone name",
+      "description": "milestone description",
+      "suggested_order": 1
+    }}
+  ],
+  "risks": [
+    {{
+      "risk": "main risk",
+      "recommendation": "how to reduce it"
+    }}
+  ],
+  "recommendations": [
+    "practical recommendation"
+  ]
+}}
+
+Milestones:
+{"Include 2-4 milestones." if include_milestones else "Return an empty milestones array."}
+""".strip()
+
+
+def _clean_ai_text_field(value: Any, fallback: str, max_length: int = 500) -> str:
+    if value is None:
+        return fallback
+
+    cleaned = str(value).strip()
+    cleaned = re.sub(r"\*\*(.*?)\*\*", r"\1", cleaned)
+    cleaned = re.sub(r"__(.*?)__", r"\1", cleaned)
+    cleaned = re.sub(r"`([^`]*)`", r"\1", cleaned)
+    cleaned = cleaned.replace("$1", "")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    if not cleaned:
+        return fallback
+
+    if len(cleaned) > max_length:
+        cleaned = cleaned[: max_length - 3].rstrip() + "..."
+
+    return cleaned
+
+
+def _is_bad_ai_task_text(value: str) -> bool:
+    lowered = value.lower()
+
+    bad_fragments = [
+        "create a complete planora project plan",
+        "available hours per week",
+        "preferred task count",
+        "return valid json",
+        "project context:",
+        "user idea and requirements:",
+        "do not add",
+        "$1",
+    ]
+
+    return any(fragment in lowered for fragment in bad_fragments)
+
+
+def _coerce_ai_priority(value: Any, fallback: str = "medium") -> str:
+    priority = str(value or "").strip().lower()
+
+    if priority in {"low", "medium", "high"}:
+        return priority
+
+    return fallback
+
+
+def _coerce_ai_estimated_hours(value: Any, fallback: float) -> float:
+    try:
+        hours = float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+    if hours < 0.5:
+        return 0.5
+
+    if hours > 40:
+        return 40.0
+
+    return round(hours, 2)
+
+
+def _build_ai_due_dates(project: Project, task_count: int) -> list[str]:
+    return [
+        due_date.isoformat()
+        for due_date in _build_due_dates(project=project, task_count=task_count)
+    ]
+
+
+def _normalize_ai_plan_response(
+    ai_data: dict[str, Any],
+    project: Project,
+    task_count: int,
+    include_milestones: bool,
+) -> dict[str, Any] | None:
+    raw_tasks = ai_data.get("tasks")
+
+    if not isinstance(raw_tasks, list):
+        return None
+
+    raw_tasks = raw_tasks[:task_count]
+
+    if len(raw_tasks) < max(3, min(task_count, 3)):
+        return None
+
+    due_dates = _build_ai_due_dates(project=project, task_count=len(raw_tasks))
+    tasks: list[dict[str, Any]] = []
+    seen_titles: set[str] = set()
+
+    for index, raw_task in enumerate(raw_tasks):
+        if not isinstance(raw_task, dict):
+            return None
+
+        title = _clean_ai_text_field(
+            raw_task.get("title"),
+            fallback=f"Complete project step {index + 1}",
+            max_length=120,
+        )
+        description = _clean_ai_text_field(
+            raw_task.get("description"),
+            fallback="Complete this step with a clear, useful output.",
+            max_length=700,
+        )
+
+        if _is_bad_ai_task_text(title) or _is_bad_ai_task_text(description):
+            return None
+
+        normalized_title_key = title.lower()
+
+        if normalized_title_key in seen_titles:
+            title = f"{title} {index + 1}"
+            normalized_title_key = title.lower()
+
+        seen_titles.add(normalized_title_key)
+
+        tasks.append(
+            {
+                "suggested_order": index + 1,
+                "title": title,
+                "description": description,
+                "priority": _coerce_ai_priority(
+                    raw_task.get("priority"),
+                    fallback=_priority_for_index(index=index, task_count=len(raw_tasks)),
+                ),
+                "estimated_hours": _coerce_ai_estimated_hours(
+                    raw_task.get("estimated_hours"),
+                    fallback=_estimated_hours_for_index(index),
+                ),
+                "due_date": due_dates[index],
+                "assigned_to": raw_task.get("assigned_to"),
+            }
+        )
+
+    domain = _clean_ai_text_field(
+        ai_data.get("domain"),
+        fallback="ai_generated",
+        max_length=80,
+    )
+    summary = _clean_ai_text_field(
+        ai_data.get("summary"),
+        fallback=(
+            f"Generated a practical AI plan for '{project.title}' with "
+            f"{len(tasks)} tasks before the project deadline."
+        ),
+        max_length=700,
+    )
+
+    milestones: list[dict[str, Any]] = []
+
+    if include_milestones:
+        raw_milestones = ai_data.get("milestones")
+
+        if isinstance(raw_milestones, list):
+            for index, raw_milestone in enumerate(raw_milestones[:4]):
+                if not isinstance(raw_milestone, dict):
+                    continue
+
+                milestones.append(
+                    {
+                        "name": _clean_ai_text_field(
+                            raw_milestone.get("name"),
+                            fallback=f"Milestone {index + 1}",
+                            max_length=120,
+                        ),
+                        "description": _clean_ai_text_field(
+                            raw_milestone.get("description"),
+                            fallback="Important project checkpoint.",
+                            max_length=300,
+                        ),
+                        "suggested_order": index + 1,
+                    }
+                )
+
+    risks: list[dict[str, str]] = []
+    raw_risks = ai_data.get("risks")
+
+    if isinstance(raw_risks, list):
+        for raw_risk in raw_risks[:4]:
+            if not isinstance(raw_risk, dict):
+                continue
+
+            risks.append(
+                {
+                    "risk": _clean_ai_text_field(
+                        raw_risk.get("risk"),
+                        fallback="Project risk",
+                        max_length=160,
+                    ),
+                    "recommendation": _clean_ai_text_field(
+                        raw_risk.get("recommendation"),
+                        fallback="Review this risk before starting.",
+                        max_length=300,
+                    ),
+                }
+            )
+
+    recommendations: list[str] = []
+    raw_recommendations = ai_data.get("recommendations")
+
+    if isinstance(raw_recommendations, list):
+        for raw_recommendation in raw_recommendations[:5]:
+            recommendations.append(
+                _clean_ai_text_field(
+                    raw_recommendation,
+                    fallback="Review the plan before accepting it.",
+                    max_length=220,
+                )
+            )
+
+    if not recommendations:
+        recommendations = [
+            "Review the generated tasks before accepting the plan.",
+            "Regenerate if the tasks do not match your idea.",
+            "Edit unclear tasks before saving the project.",
+        ]
+
+    if not risks:
+        risks = [
+            {
+                "risk": "Unclear scope",
+                "recommendation": "Review the generated tasks and edit anything that does not match your idea.",
+            }
+        ]
+
+    return {
+        "source": "gemini_structured_v1",
+        "domain": domain,
+        "summary": summary,
+        "project": {
+            "project_id": project.project_id,
+            "title": project.title,
+            "project_type": project.project_type,
+            "deadline": _to_utc(project.deadline).isoformat(),
+        },
+        "tasks": tasks,
+        "milestones": milestones,
+        "risks": risks,
+        "recommendations": recommendations,
+    }
+
+
+def _build_ai_generated_plan(
+    project: Project,
+    input_prompt: str,
+    task_count: int,
+    include_milestones: bool,
+) -> dict[str, Any] | None:
+    prompt = _build_structured_ai_plan_prompt(
+        project=project,
+        input_prompt=input_prompt,
+        task_count=task_count,
+        include_milestones=include_milestones,
+    )
+
+    provider_reply = generate_ai_reply_from_provider(prompt)
+
+    if provider_reply is None:
+        return None
+
+    parsed = _parse_json_object(provider_reply)
+
+    if parsed is None:
+        return None
+
+    return _normalize_ai_plan_response(
+        ai_data=parsed,
+        project=project,
+        task_count=task_count,
+        include_milestones=include_milestones,
+    )
+
+
+def _build_local_generated_plan(
     project: Project,
     input_prompt: str,
     task_count: int,
@@ -708,10 +1046,10 @@ def build_generated_plan(
         )
 
     return {
-        "source": "local_rule_based_v1",
+        "source": "local_rule_based_fallback_v1",
         "domain": domain,
         "summary": (
-            f"Generated a structured plan for '{project.title}' with "
+            f"Generated a structured fallback plan for '{project.title}' with "
             f"{task_count} tasks before the project deadline."
         ),
         "project": {
@@ -727,6 +1065,64 @@ def build_generated_plan(
         ),
         "risks": _build_risks(domain),
         "recommendations": _build_recommendations(domain),
+    }
+
+
+def build_generated_plan(
+    project: Project,
+    input_prompt: str,
+    task_count: int,
+    include_milestones: bool = True,
+    project_members: list[ProjectMember] | None = None,
+) -> dict[str, Any]:
+    project_context = (
+        input_prompt.strip()
+        or project.description
+        or f"Create a structured project plan for {project.title}."
+    )
+
+    ai_generated_plan = _build_ai_generated_plan(
+        project=project,
+        input_prompt=project_context,
+        task_count=task_count,
+        include_milestones=include_milestones,
+    )
+
+    if ai_generated_plan is not None:
+        assignable_member_ids = [
+            member.user_id
+            for member in (project_members or [])
+            if member.user_id is not None
+        ]
+
+        if project.project_type == "team" and assignable_member_ids:
+            for index, task in enumerate(ai_generated_plan["tasks"]):
+                task["assigned_to"] = assignable_member_ids[
+                    index % len(assignable_member_ids)
+                ]
+        else:
+            for task in ai_generated_plan["tasks"]:
+                task["assigned_to"] = None
+
+        return ai_generated_plan
+
+    fallback_plan = _build_local_generated_plan(
+        project=project,
+        input_prompt=input_prompt,
+        task_count=task_count,
+        include_milestones=include_milestones,
+        project_members=project_members,
+    )
+
+    fallback_summary = str(fallback_plan.get("summary", "")).strip()
+
+    return {
+        **fallback_plan,
+        "source": "local_rule_based_fallback_v1",
+        "summary": (
+            f"{fallback_summary} AI provider was unavailable or returned invalid JSON, "
+            "so Planora used a safe fallback."
+        ).strip(),
     }
 
 
@@ -929,13 +1325,14 @@ def create_ai_plan_and_tasks_for_project(
             "created_task_ids": created_task_ids,
             "overwrite_existing_tasks": plan_data.overwrite_existing_tasks,
             "overwritten_task_count": overwritten_task_count,
-            "source": "local_rule_based_v1",
+            "source": str(generated_plan.get("source", "unknown")),
         },
         commit=False,
     )
 
     db.commit()
     db.refresh(ai_plan)
+
     for task in created_tasks:
         db.refresh(task)
 
