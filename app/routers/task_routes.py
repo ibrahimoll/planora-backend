@@ -18,6 +18,7 @@ from app.schemas.task_schema import (
     TaskUpdate,
 )
 from app.services.task_service import (
+    can_manage_personal_project_tasks,
     create_task_for_personal_project,
     delete_task_for_personal_project,
     get_my_personal_project_for_tasks,
@@ -25,12 +26,15 @@ from app.services.task_service import (
     get_tasks_for_personal_project,
     update_task_for_personal_project,
 )
+from app.services.project_service import get_project_membership
 
 DBSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_verified_user)]
 
 PROJECT_NOT_FOUND = "Project not found"
 TASK_NOT_FOUND = "Task not found"
+NOT_ALLOWED = "You are not allowed to perform this action"
+ASSIGNEE_NOT_PROJECT_MEMBER = "Assigned user must be a member of this project"
 
 router = APIRouter(
     prefix="/projects/{project_id}/tasks",
@@ -61,11 +65,37 @@ def create_task(
             detail=PROJECT_NOT_FOUND,
         )
 
+    if not can_manage_personal_project_tasks(
+        db=db,
+        project=project,
+        current_user=current_user,
+    ):
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail=NOT_ALLOWED,
+        )
+
+    assigned_to = task_data.assigned_to or current_user.user_id
+
+    if assigned_to != project.created_by:
+        assignee_membership = get_project_membership(
+            db=db,
+            project_id=project_id,
+            user_id=assigned_to,
+        )
+
+        if assignee_membership is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail=ASSIGNEE_NOT_PROJECT_MEMBER,
+            )
+
     return create_task_for_personal_project(
         db=db,
         project=project,
         task_data=task_data,
         current_user=current_user,
+        assigned_to=assigned_to,
     )
 
 
@@ -172,6 +202,43 @@ def update_task(
             detail=TASK_NOT_FOUND,
         )
 
+    is_manager = can_manage_personal_project_tasks(
+        db=db,
+        project=project,
+        current_user=current_user,
+    )
+
+    if not is_manager:
+        if task.assigned_to != current_user.user_id:
+            raise HTTPException(
+                status_code=http_status.HTTP_403_FORBIDDEN,
+                detail=NOT_ALLOWED,
+            )
+
+        update_data = task_data.model_dump(exclude_unset=True)
+        allowed_member_fields = {"status", "actual_hours"}
+        forbidden_fields = set(update_data.keys()) - allowed_member_fields
+
+        if forbidden_fields:
+            raise HTTPException(
+                status_code=http_status.HTTP_403_FORBIDDEN,
+                detail="Project members can only update status and actual_hours for their own tasks",
+            )
+
+    if is_manager and task_data.assigned_to is not None:
+        if task_data.assigned_to != project.created_by:
+            assignee_membership = get_project_membership(
+                db=db,
+                project_id=project_id,
+                user_id=task_data.assigned_to,
+            )
+
+            if assignee_membership is None:
+                raise HTTPException(
+                    status_code=http_status.HTTP_400_BAD_REQUEST,
+                    detail=ASSIGNEE_NOT_PROJECT_MEMBER,
+                )
+
     return update_task_for_personal_project(
         db=db,
         task=task,
@@ -212,6 +279,16 @@ def delete_task(
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=TASK_NOT_FOUND,
+        )
+
+    if not can_manage_personal_project_tasks(
+        db=db,
+        project=project,
+        current_user=current_user,
+    ):
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail=NOT_ALLOWED,
         )
 
     delete_task_for_personal_project(

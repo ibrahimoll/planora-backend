@@ -20,6 +20,7 @@ from app.schemas.task_schema import (
     TeamTaskUpdate,
 )
 from app.services.activity_log_service import create_activity_log
+from app.services.project_service import can_manage_project, get_project_membership
 
 
 def get_my_personal_project_for_tasks(
@@ -27,10 +28,21 @@ def get_my_personal_project_for_tasks(
     project_id: int,
     current_user: User,
 ) -> Project | None:
+    member_exists = (
+        select(ProjectMember.member_id)
+        .where(
+            ProjectMember.project_id == Project.project_id,
+            ProjectMember.user_id == current_user.user_id,
+        )
+        .exists()
+    )
     stmt = select(Project).where(
         Project.project_id == project_id,
-        Project.created_by == current_user.user_id,
         Project.project_type == "personal",
+        (
+            (Project.created_by == current_user.user_id)
+            | member_exists
+        ),
     )
 
     return db.execute(stmt).scalars().first()
@@ -41,10 +53,11 @@ def create_task_for_personal_project(
     project: Project,
     task_data: TaskCreate,
     current_user: User,
+    assigned_to: int | None = None,
 ) -> Task:
     task = Task(
         project_id=project.project_id,
-        assigned_to=current_user.user_id,
+        assigned_to=assigned_to or current_user.user_id,
         created_by=current_user.user_id,
         title=task_data.title,
         description=task_data.description,
@@ -78,6 +91,23 @@ def create_task_for_personal_project(
     db.refresh(task, attribute_names=["assignee", "creator"])
 
     return task
+
+
+def can_manage_personal_project_tasks(
+    db: Session,
+    project: Project,
+    current_user: User,
+) -> bool:
+    if project.created_by == current_user.user_id:
+        return True
+
+    membership = get_project_membership(
+        db=db,
+        project_id=project.project_id,
+        user_id=current_user.user_id,
+    )
+
+    return membership is not None and can_manage_project(membership)
 
 
 def get_tasks_for_personal_project(

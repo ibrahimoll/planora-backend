@@ -346,7 +346,11 @@ def invite_project_member(
         email_or_username=member_data.email_or_username,
     )
 
-    if user_to_add is None or not user_to_add.is_active:
+    if (
+        user_to_add is None
+        or not user_to_add.is_active
+        or not user_to_add.is_email_verified
+    ):
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail=USER_NOT_FOUND,

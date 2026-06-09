@@ -1,10 +1,12 @@
 # AI Project Planning
 
-Date: 2026-06-07
+Date: 2026-06-09
 
 ## Backend Behavior
 
 Planora stores AI project plans in `ai_plans` and can create real `tasks` rows from the generated plan. The current generator is deterministic and local (`local_rule_based_v1`), so it does not require a client-side AI key or hardcoded secret.
+
+The generator derives a project domain from the user's idea/context before selecting tasks. Clothing, ecommerce, social commerce, and other business ideas get supplier, pricing, collection, sales channel, launch, delivery, and operations tasks. Explicit software ideas still get app/product tasks. Generated task descriptions are concise task-specific blurbs and should not contain the full prompt or instruction scaffold.
 
 Generated task data respects the backend task constraints:
 
@@ -62,6 +64,71 @@ Response body:
 }
 ```
 
+## Preview Then Accept From Idea
+
+The mobile AI wizard should prefer the true preview/accept flow when creating a new project from an idea. Preview does not create a project, AI plan, or tasks.
+
+Preview request:
+
+```http
+POST /ai-plans/preview-from-idea
+```
+
+```json
+{
+  "project_idea": "Start a small online clothing business",
+  "deadline": "2026-08-30T12:00:00Z",
+  "project_type": "personal",
+  "team_id": null,
+  "available_hours_per_week": 8,
+  "preferred_task_count": 10,
+  "requirements": "Keep the first launch small and sell through Instagram.",
+  "include_milestones": true
+}
+```
+
+Accept request:
+
+```http
+POST /ai-plans/accept-preview
+```
+
+```json
+{
+  "preview": {
+    "source": "local_rule_based_v1",
+    "domain": "business",
+    "project_title": "Start a small online clothing business",
+    "description": "A practical launch plan for the project idea.",
+    "project_type": "personal",
+    "team_id": null,
+    "deadline": "2026-08-30T12:00:00Z",
+    "summary": "Previewed a structured plan with 10 tasks before the deadline.",
+    "tasks": [
+      {
+        "suggested_order": 1,
+        "title": "Define clothing niche and target customer",
+        "description": "Clarify who the first collection serves, what style it offers, and what makes it worth buying.",
+        "priority": "high",
+        "estimated_hours": 2.0,
+        "status": "todo",
+        "due_date": "2026-06-16T12:00:00Z",
+        "assigned_to": null
+      }
+    ],
+    "milestones": [],
+    "risks": [],
+    "recommendations": [],
+    "project_idea": "Start a small online clothing business",
+    "requirements": "Keep the first launch small and sell through Instagram.",
+    "available_hours_per_week": 8,
+    "preferred_task_count": 10
+  }
+}
+```
+
+Accept should send back the preview object returned by the preview endpoint, including any client-side edits to task titles/descriptions. It creates the personal or team project, saves the AI plan, and creates the accepted tasks. Team previews require team membership; team accept requires project-create/manage permission.
+
 ## Plan Only
 
 Set `generate_tasks` to `false` to save an AI plan without creating tasks:
@@ -92,7 +159,7 @@ Those routes return the stored `AIPlanResponse` shape. The newer `/ai-plan/gener
 The Flutter app calls `/ai-plan/generate` from:
 
 - Project Details: generate, append, or replace tasks for the currently opened project.
-- Create Project: optional AI Tasks toggle creates tasks immediately after the project row is created.
+- AI project wizard: calls `/ai-plans/preview-from-idea` first, then `/ai-plans/accept-preview` only after the user accepts the plan.
 - Planora AI Chat: `Plan` action generates tasks for the selected project without pretending the planning endpoint is chat history.
 
 ## Limitations

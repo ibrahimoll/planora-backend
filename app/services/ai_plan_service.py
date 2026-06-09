@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -13,9 +14,14 @@ from app.models.task import Task
 from app.models.user import User
 from app.schemas.activity_log_schema import ActivityLogEventType
 from app.schemas.ai_plan_schema import (
+    AIPlanAcceptPreviewRequest,
+    AIPlanAcceptPreviewResponse,
     AIPlanGenerateRequest,
     AIPlanGenerateResponse,
     AIPlanGeneratedTaskResponse,
+    AIPlanPreviewRequest,
+    AIPlanPreviewResponse,
+    AIPlanPreviewTaskResponse,
 )
 from app.schemas.task_schema import TaskStatus
 from app.services.activity_log_service import create_activity_log
@@ -37,17 +43,17 @@ TASK_TITLE_TEMPLATES = [
 ]
 
 BUSINESS_TASK_TITLE_TEMPLATES = [
-    "Research target niche and customer demand",
-    "Define startup budget and pricing model",
-    "Compare suppliers and sample options",
-    "Choose brand name and positioning",
-    "Plan the first product collection",
-    "Set up sales channel and social presence",
-    "Map launch timeline and promotions",
-    "Confirm delivery and fulfillment process",
-    "Check legal, tax, and operations requirements",
+    "Define clothing niche and target customer",
+    "Research competitors and market demand",
+    "Estimate startup budget and pricing",
+    "Choose brand name and visual identity",
+    "Find suppliers or print/manufacturing options",
+    "Plan first product collection",
+    "Create social media content plan",
+    "Set up online sales channel",
+    "Plan delivery, payment, and returns",
+    "Prepare launch campaign",
     "Prepare inventory and order tracking",
-    "Create customer service and returns process",
     "Review launch readiness and backup plan",
 ]
 
@@ -70,6 +76,7 @@ BUSINESS_KEYWORDS = (
     "business",
     "clothing",
     "fashion",
+    "apparel",
     "brand",
     "boutique",
     "shop",
@@ -78,12 +85,18 @@ BUSINESS_KEYWORDS = (
     "suppliers",
     "inventory",
     "delivery",
+    "payment",
+    "returns",
     "ecommerce",
     "e-commerce",
+    "online store",
+    "online shop",
     "product collection",
     "startup",
     "launch",
     "legal",
+    "social media",
+    "sell",
 )
 
 SOFTWARE_KEYWORDS = (
@@ -98,6 +111,57 @@ SOFTWARE_KEYWORDS = (
     "code",
     "coding",
     "api",
+)
+
+INSTRUCTION_PREFIXES = (
+    "create a complete planora project plan",
+    "project type:",
+    "deadline:",
+    "available hours per week:",
+    "preferred task count:",
+    "create tasks that directly depend",
+    "do not default to software",
+    "for a clothing business, include",
+    "do not suggest extreme physical asset tasks",
+    "return a practical plan",
+)
+
+BUSINESS_PATTERNS = (
+    r"\bbusiness\b",
+    r"\bclothing\b",
+    r"\bfashion\b",
+    r"\bapparel\b",
+    r"\bbrand\b",
+    r"\bboutique\b",
+    r"\bshop\b",
+    r"\bstore\b",
+    r"\bsell(?:ing)?\b",
+    r"\bsupplier(?:s)?\b",
+    r"\binventory\b",
+    r"\bdelivery\b",
+    r"\bpayment(?:s)?\b",
+    r"\breturns?\b",
+    r"\be-?commerce\b",
+    r"\bonline\s+(?:business|store|shop|sales|brand)\b",
+    r"\bproduct\s+collection\b",
+    r"\bsocial\s+media\b",
+)
+
+SOFTWARE_PATTERNS = (
+    r"\bsoftware\b",
+    r"\bmobile\s+app\b",
+    r"\bweb\s+app\b",
+    r"\bwebsite\b",
+    r"\bplatform\b",
+    r"\bflutter\b",
+    r"\bbackend\b",
+    r"\bfrontend\b",
+    r"\bapi\b",
+    r"\bcode\b",
+    r"\bcoding\b",
+    r"\bapplication\b",
+    r"\b(?:build|create|develop|design|launch|make)\s+(?:an?\s+)?(?:mobile\s+)?app\b",
+    r"\bapp\s+(?:for|to)\b",
 )
 
 
@@ -138,36 +202,324 @@ def _estimated_hours_for_index(index: int) -> float:
     return estimates[index % len(estimates)]
 
 
-def _contains_any(value: str, keywords: tuple[str, ...]) -> bool:
+def _contains_any(
+    value: str,
+    keywords: tuple[str, ...],
+) -> bool:
     normalized = value.lower()
 
     return any(keyword in normalized for keyword in keywords)
 
 
-def _select_task_title_templates(project_context: str) -> list[str]:
-    is_business = _contains_any(project_context, BUSINESS_KEYWORDS)
-    is_software = _contains_any(project_context, SOFTWARE_KEYWORDS)
+def _matches_any_pattern(
+    value: str,
+    patterns: tuple[str, ...],
+) -> bool:
+    return any(
+        re.search(pattern, value, flags=re.IGNORECASE) is not None
+        for pattern in patterns
+    )
 
-    if is_business and not is_software:
+
+def _line_is_generation_instruction(line: str) -> bool:
+    normalized = line.strip().lower()
+
+    return any(normalized.startswith(prefix) for prefix in INSTRUCTION_PREFIXES)
+
+
+def _extract_section_lines(
+    lines: list[str],
+    start_label: str,
+    stop_labels: tuple[str, ...],
+) -> list[str]:
+    collected: list[str] = []
+    is_collecting = False
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        lower = line.lower()
+
+        if lower == start_label:
+            is_collecting = True
+            continue
+
+        if is_collecting and lower in stop_labels:
+            break
+
+        if is_collecting:
+            if not line:
+                continue
+
+            if _line_is_generation_instruction(line):
+                break
+
+            collected.append(line)
+
+    return collected
+
+
+def _extract_labeled_value(
+    lines: list[str],
+    label: str,
+) -> str | None:
+    label_prefix = f"{label.lower()}:"
+
+    for line in lines:
+        stripped = line.strip()
+
+        if stripped.lower().startswith(label_prefix):
+            value = stripped[len(label_prefix) :].strip()
+            return value or None
+
+    return None
+
+
+def _extract_user_project_context(
+    project: Project,
+    input_prompt: str,
+) -> str:
+    lines = input_prompt.splitlines()
+    pieces: list[str] = []
+
+    for value in (
+        project.title,
+        project.description,
+        _extract_labeled_value(lines, "Project title"),
+        _extract_labeled_value(lines, "Idea"),
+    ):
+        if value and value.strip():
+            pieces.append(value.strip())
+
+    pieces.extend(
+        _extract_section_lines(
+            lines=lines,
+            start_label="project idea and goal:",
+            stop_labels=(
+                "requirements, features, constraints, and notes:",
+                "requirements and constraints:",
+            ),
+        )
+    )
+    pieces.extend(
+        _extract_section_lines(
+            lines=lines,
+            start_label="requirements, features, constraints, and notes:",
+            stop_labels=(),
+        )
+    )
+
+    if pieces:
+        return "\n".join(dict.fromkeys(pieces))
+
+    cleaned_lines = [
+        line.strip()
+        for line in lines
+        if line.strip() and not _line_is_generation_instruction(line)
+    ]
+
+    return "\n".join(
+        value
+        for value in (project.title, project.description, "\n".join(cleaned_lines))
+        if value and value.strip()
+    )
+
+
+def _detect_project_domain(project_context: str) -> str:
+    is_business = _matches_any_pattern(project_context, BUSINESS_PATTERNS)
+    is_explicit_software = _matches_any_pattern(project_context, SOFTWARE_PATTERNS)
+
+    if is_explicit_software:
+        return "software"
+
+    if is_business:
+        return "business"
+
+    return "general"
+
+
+def _select_task_title_templates(domain: str) -> list[str]:
+    if domain == "business":
         return BUSINESS_TASK_TITLE_TEMPLATES
 
-    if is_software:
+    if domain == "software":
         return SOFTWARE_TASK_TITLE_TEMPLATES
 
     return TASK_TITLE_TEMPLATES
 
 
+def _business_task_description(
+    title: str,
+) -> str:
+    normalized = title.lower()
+
+    if "niche" in normalized or "target customer" in normalized:
+        return (
+            "Identify the clothing category, customer profile, style, price range, "
+            "and reason buyers would choose the brand."
+        )
+
+    if "competitor" in normalized or "market" in normalized:
+        return (
+            "Review similar online clothing brands, their prices, products, "
+            "content, and customer demand signals."
+        )
+
+    if "budget" in normalized or "pricing" in normalized:
+        return (
+            "List expected costs for samples, inventory, packaging, ads, delivery, "
+            "platform fees, and target profit margin."
+        )
+
+    if "brand name" in normalized or "visual identity" in normalized:
+        return (
+            "Choose a memorable name and define colors, tone, logo direction, "
+            "and the brand feeling customers should remember."
+        )
+
+    if "supplier" in normalized or "manufacturing" in normalized:
+        return (
+            "Compare at least 3 suppliers or production options and note prices, "
+            "minimum order quantity, quality, and delivery time."
+        )
+
+    if "collection" in normalized:
+        return (
+            "Select the first products, sizes, colors, sample needs, and the small "
+            "launch quantity to test demand."
+        )
+
+    if "social media" in normalized or "content" in normalized:
+        return (
+            "Plan Instagram/TikTok posts, product photos, launch messages, offers, "
+            "and how customers will contact or order."
+        )
+
+    if "sales channel" in normalized or "online" in normalized:
+        return (
+            "Choose how customers will buy online, such as social DMs, marketplace, "
+            "simple store, payment links, or a website."
+        )
+
+    if "delivery" in normalized or "payment" in normalized or "returns" in normalized:
+        return (
+            "Define payment methods, delivery partners, shipping fees, return rules, "
+            "and customer confirmation messages."
+        )
+
+    if "launch campaign" in normalized:
+        return (
+            "Create a simple launch plan with first posts, offers, outreach, launch "
+            "date, and customer follow-up."
+        )
+
+    if "inventory" in normalized or "tracking" in normalized:
+        return (
+            "Set up a simple inventory tracker for SKUs, quantities, costs, sales, "
+            "and reorder alerts."
+        )
+
+    return (
+        "Turn this business step into a small, measurable action with a clear owner, "
+        "deadline, and launch-ready output."
+    )
+
+
+def _software_task_description(
+    title: str,
+) -> str:
+    normalized = title.lower()
+
+    if "scope" in normalized:
+        return (
+            "Define target users, core use cases, success metrics, and the first "
+            "version's must-have features."
+        )
+
+    if "requirements" in normalized:
+        return (
+            "Write the user stories, constraints, dependencies, and acceptance "
+            "criteria needed before implementation."
+        )
+
+    if "architecture" in normalized or "data model" in normalized:
+        return (
+            "Design the technical structure, data entities, integrations, and main "
+            "screens or services."
+        )
+
+    if "roadmap" in normalized:
+        return (
+            "Break the build into milestones, estimate the work, and order tasks "
+            "around the deadline."
+        )
+
+    if "features" in normalized:
+        return (
+            "Implement the smallest complete set of features that proves the main "
+            "product workflow."
+        )
+
+    if "test" in normalized:
+        return (
+            "Test the critical user journeys, edge cases, and expected error states "
+            "before release."
+        )
+
+    return (
+        "Complete this software delivery step with a clear output, owner, and testable "
+        "result."
+    )
+
+
+def _general_task_description(
+    title: str,
+) -> str:
+    normalized = title.lower()
+
+    if "scope" in normalized or "requirements" in normalized:
+        return (
+            "Clarify the expected outcome, constraints, resources, and what success "
+            "will look like."
+        )
+
+    if "review" in normalized or "test" in normalized:
+        return (
+            "Check the work against the success criteria, collect feedback, and list "
+            "the fixes needed."
+        )
+
+    if "final" in normalized or "submit" in normalized:
+        return (
+            "Prepare the final version, confirm all required pieces are complete, "
+            "and package it for delivery."
+        )
+
+    return (
+        "Complete this step with a specific outcome, short checklist, and deadline."
+    )
+
+
+def _build_task_description_for_domain(
+    domain: str,
+    title: str,
+) -> str:
+    if domain == "business":
+        return _business_task_description(title)
+
+    if domain == "software":
+        return _software_task_description(title)
+
+    return _general_task_description(title)
+
+
 def _build_milestones(
-    project_context: str,
+    domain: str,
     include_milestones: bool,
 ) -> list[dict[str, Any]]:
     if not include_milestones:
         return []
 
-    if _contains_any(project_context, BUSINESS_KEYWORDS) and not _contains_any(
-        project_context,
-        SOFTWARE_KEYWORDS,
-    ):
+    if domain == "business":
         return [
             {
                 "name": "Business concept validated",
@@ -182,6 +534,25 @@ def _build_milestones(
             {
                 "name": "Go-to-market reviewed",
                 "description": "Launch plan, legal checks, and risk backup are finalized.",
+                "suggested_order": 3,
+            },
+        ]
+
+    if domain == "software":
+        return [
+            {
+                "name": "Product scope approved",
+                "description": "Users, features, constraints, and success criteria are clear.",
+                "suggested_order": 1,
+            },
+            {
+                "name": "Core product built",
+                "description": "Main technical workflow is implemented and ready to test.",
+                "suggested_order": 2,
+            },
+            {
+                "name": "Release readiness completed",
+                "description": "Testing, fixes, documentation, and release notes are done.",
                 "suggested_order": 3,
             },
         ]
@@ -205,11 +576,8 @@ def _build_milestones(
     ]
 
 
-def _build_risks(project_context: str) -> list[dict[str, str]]:
-    if _contains_any(project_context, BUSINESS_KEYWORDS) and not _contains_any(
-        project_context,
-        SOFTWARE_KEYWORDS,
-    ):
+def _build_risks(domain: str) -> list[dict[str, str]]:
+    if domain == "business":
         return [
             {
                 "risk": "Supplier or inventory delays",
@@ -218,6 +586,18 @@ def _build_risks(project_context: str) -> list[dict[str, str]]:
             {
                 "risk": "Unclear niche or pricing",
                 "recommendation": "Validate demand, budget, and pricing before the launch spend.",
+            },
+        ]
+
+    if domain == "software":
+        return [
+            {
+                "risk": "Scope creep",
+                "recommendation": "Keep the first version small and defer nonessential features.",
+            },
+            {
+                "risk": "Technical unknowns",
+                "recommendation": "Prototype risky integrations before committing to the full build.",
             },
         ]
 
@@ -230,6 +610,28 @@ def _build_risks(project_context: str) -> list[dict[str, str]]:
             "risk": "Unclear requirements",
             "recommendation": "Confirm project scope before implementation begins.",
         },
+    ]
+
+
+def _build_recommendations(domain: str) -> list[str]:
+    if domain == "business":
+        return [
+            "Validate the niche and pricing before buying inventory.",
+            "Compare suppliers and order samples before committing.",
+            "Keep the launch channel simple until demand is proven.",
+        ]
+
+    if domain == "software":
+        return [
+            "Confirm the first version scope before implementation begins.",
+            "Prototype risky technical pieces early.",
+            "Test the main user flows before release.",
+        ]
+
+    return [
+        "Review the generated tasks before starting.",
+        "Adjust due dates if the project deadline is very close.",
+        "Assign team tasks manually after generation.",
     ]
 
 
@@ -250,8 +652,12 @@ def build_generated_plan(
         or project.description
         or f"Create a structured project plan for {project.title}."
     )
-    combined_context = f"{project.title}\n{project_context}"
-    task_title_templates = _select_task_title_templates(combined_context)
+    user_project_context = _extract_user_project_context(
+        project=project,
+        input_prompt=project_context,
+    )
+    domain = _detect_project_domain(user_project_context)
+    task_title_templates = _select_task_title_templates(domain)
 
     tasks: list[dict[str, Any]] = []
     assignable_member_ids = [
@@ -273,9 +679,9 @@ def build_generated_plan(
             {
                 "suggested_order": index + 1,
                 "title": f"{title_template}{suffix}",
-                "description": (
-                    f"For project '{project.title}', complete this step based on: "
-                    f"{project_context[:400]}"
+                "description": _build_task_description_for_domain(
+                    domain=domain,
+                    title=title_template,
                 ),
                 "priority": _priority_for_index(
                     index=index,
@@ -289,6 +695,7 @@ def build_generated_plan(
 
     return {
         "source": "local_rule_based_v1",
+        "domain": domain,
         "summary": (
             f"Generated a structured plan for '{project.title}' with "
             f"{task_count} tasks before the project deadline."
@@ -301,15 +708,11 @@ def build_generated_plan(
         },
         "tasks": tasks,
         "milestones": _build_milestones(
-            project_context=combined_context,
+            domain=domain,
             include_milestones=include_milestones,
         ),
-        "risks": _build_risks(combined_context),
-        "recommendations": [
-            "Review the generated tasks before starting.",
-            "Adjust due dates if the project deadline is very close.",
-            "Assign team tasks manually after generation.",
-        ],
+        "risks": _build_risks(domain),
+        "recommendations": _build_recommendations(domain),
     }
 
 
@@ -337,12 +740,24 @@ def _create_tasks_from_plan(
             assigned_to=assigned_to,
             created_by=current_user.user_id,
             title=str(task_data["title"]),
-            description=str(task_data["description"]),
+            description=(
+                str(task_data["description"])
+                if task_data.get("description") is not None
+                else None
+            ),
             priority=str(task_data["priority"]),
-            estimated_hours=float(task_data["estimated_hours"]),
+            estimated_hours=(
+                float(task_data["estimated_hours"])
+                if task_data.get("estimated_hours") is not None
+                else None
+            ),
             actual_hours=None,
             status=TaskStatus.todo.value,
-            due_date=_parse_due_date(str(task_data["due_date"])),
+            due_date=(
+                _parse_due_date(str(task_data["due_date"]))
+                if task_data.get("due_date") is not None
+                else None
+            ),
             completed_at=None,
         )
 
@@ -527,6 +942,261 @@ def create_ai_plan_generation_response(
     )
 
     return AIPlanGenerateResponse(
+        project_id=project.project_id,
+        plan_id=ai_plan.plan_id,
+        summary=str(ai_plan.generated_plan.get("summary", "")),
+        tasks_created=len(created_tasks),
+        tasks=[
+            AIPlanGeneratedTaskResponse(
+                task_id=task.task_id,
+                title=task.title,
+                description=task.description,
+                priority=task.priority,
+                estimated_hours=(
+                    float(task.estimated_hours)
+                    if task.estimated_hours is not None
+                    else None
+                ),
+                status=task.status,
+                due_date=task.due_date,
+            )
+            for task in created_tasks
+        ],
+    )
+
+
+def _derive_preview_project_title(project_idea: str) -> str:
+    title = (
+        re.split(r"[\n.!?]", project_idea.strip(), maxsplit=1)[0]
+        .strip()
+    )
+    title = re.sub(
+        r"^\s*i\s+want\s+to\s+",
+        "",
+        title,
+        flags=re.IGNORECASE,
+    )
+    title = re.sub(
+        r"^\s*(build|create|start|launch)\s+",
+        "",
+        title,
+        flags=re.IGNORECASE,
+    ).strip()
+
+    if not title:
+        return "AI Generated Plan"
+
+    if len(title) > 86:
+        title = f"{title[:83].rstrip()}..."
+
+    return title[0].upper() + title[1:]
+
+
+def _build_preview_description(
+    preview_data: AIPlanPreviewRequest,
+) -> str:
+    pieces = [
+        "AI planning brief",
+        "",
+        f"Idea: {preview_data.project_idea.strip()}",
+        f"Available hours per week: {preview_data.available_hours_per_week}",
+        f"Preferred task count: {preview_data.preferred_task_count}",
+    ]
+
+    requirements = (preview_data.requirements or "").strip()
+
+    if requirements:
+        pieces.append(f"Requirements and constraints: {requirements}")
+
+    return "\n".join(pieces)
+
+
+def _build_preview_prompt(
+    preview_data: AIPlanPreviewRequest,
+) -> str:
+    pieces = [
+        f"Project idea and goal:\n{preview_data.project_idea.strip()}",
+    ]
+
+    requirements = (preview_data.requirements or "").strip()
+
+    if requirements:
+        pieces.append(f"Requirements, features, constraints, and notes:\n{requirements}")
+
+    return "\n\n".join(pieces)
+
+
+def _preview_task_response_from_plan_task(
+    task_data: dict[str, Any],
+) -> AIPlanPreviewTaskResponse:
+    return AIPlanPreviewTaskResponse(
+        suggested_order=int(task_data["suggested_order"]),
+        title=str(task_data["title"]),
+        description=str(task_data["description"]),
+        priority=str(task_data["priority"]),
+        estimated_hours=(
+            float(task_data["estimated_hours"])
+            if task_data.get("estimated_hours") is not None
+            else None
+        ),
+        status=TaskStatus.todo.value,
+        due_date=_parse_due_date(str(task_data["due_date"]))
+        if task_data.get("due_date") is not None
+        else None,
+        assigned_to=task_data.get("assigned_to"),
+    )
+
+
+def create_ai_plan_preview(
+    preview_data: AIPlanPreviewRequest,
+    current_user: User,
+) -> AIPlanPreviewResponse:
+    project = Project(
+        project_id=0,
+        created_by=current_user.user_id,
+        team_id=preview_data.team_id,
+        title=_derive_preview_project_title(preview_data.project_idea),
+        description=_build_preview_description(preview_data),
+        deadline=preview_data.deadline,
+        status="not_started",
+        project_type=preview_data.project_type.value,
+    )
+
+    generated_plan = build_generated_plan(
+        project=project,
+        input_prompt=_build_preview_prompt(preview_data),
+        task_count=preview_data.preferred_task_count,
+        include_milestones=preview_data.include_milestones,
+        project_members=None,
+    )
+
+    return AIPlanPreviewResponse(
+        source=str(generated_plan["source"]),
+        domain=str(generated_plan["domain"]),
+        project_title=project.title,
+        description=project.description,
+        project_type=preview_data.project_type,
+        team_id=preview_data.team_id,
+        deadline=preview_data.deadline,
+        summary=str(generated_plan["summary"]),
+        tasks=[
+            _preview_task_response_from_plan_task(task)
+            for task in generated_plan["tasks"]
+        ],
+        milestones=list(generated_plan["milestones"]),
+        risks=list(generated_plan["risks"]),
+        recommendations=list(generated_plan["recommendations"]),
+        project_idea=preview_data.project_idea,
+        requirements=preview_data.requirements,
+        available_hours_per_week=preview_data.available_hours_per_week,
+        preferred_task_count=preview_data.preferred_task_count,
+    )
+
+
+def _generated_plan_from_preview(
+    project: Project,
+    preview: AIPlanPreviewResponse,
+) -> dict[str, Any]:
+    return {
+        "source": preview.source,
+        "domain": preview.domain,
+        "summary": preview.summary,
+        "project": {
+            "project_id": project.project_id,
+            "title": project.title,
+            "project_type": project.project_type,
+            "deadline": _to_utc(project.deadline).isoformat(),
+        },
+        "tasks": [
+            {
+                "suggested_order": task.suggested_order,
+                "title": task.title,
+                "description": task.description,
+                "priority": task.priority,
+                "estimated_hours": task.estimated_hours,
+                "due_date": task.due_date.isoformat() if task.due_date else None,
+                "assigned_to": task.assigned_to,
+            }
+            for task in preview.tasks
+        ],
+        "milestones": preview.milestones,
+        "risks": preview.risks,
+        "recommendations": preview.recommendations,
+    }
+
+
+def create_ai_plan_from_accepted_preview(
+    db: Session,
+    project: Project,
+    current_user: User,
+    accept_data: AIPlanAcceptPreviewRequest,
+) -> AIPlanAcceptPreviewResponse:
+    preview = accept_data.preview
+    input_prompt = _build_preview_prompt(
+        AIPlanPreviewRequest(
+            project_idea=preview.project_idea,
+            deadline=preview.deadline,
+            project_type=preview.project_type,
+            team_id=preview.team_id,
+            available_hours_per_week=preview.available_hours_per_week,
+            preferred_task_count=preview.preferred_task_count,
+            requirements=preview.requirements,
+        )
+    )
+    generated_plan = _generated_plan_from_preview(
+        project=project,
+        preview=preview,
+    )
+
+    ai_plan = AIPlan(
+        project_id=project.project_id,
+        generated_by=current_user.user_id,
+        input_prompt=input_prompt,
+        generated_plan=generated_plan,
+    )
+
+    db.add(ai_plan)
+    db.flush()
+
+    created_tasks = _create_tasks_from_plan(
+        db=db,
+        project=project,
+        current_user=current_user,
+        generated_plan=generated_plan,
+    )
+    created_task_ids = [task.task_id for task in created_tasks]
+    ai_plan.generated_plan = {
+        **generated_plan,
+        "created_task_ids": created_task_ids,
+        "tasks_created": len(created_task_ids),
+        "overwrite_existing_tasks": False,
+        "overwritten_task_count": 0,
+    }
+
+    create_activity_log(
+        db=db,
+        project=project,
+        actor=current_user,
+        event_type=ActivityLogEventType.AI_PLAN_GENERATED,
+        message=f"{current_user.full_name} accepted an AI preview for '{project.title}'.",
+        metadata={
+            "plan_id": ai_plan.plan_id,
+            "created_task_count": len(created_task_ids),
+            "created_task_ids": created_task_ids,
+            "source": preview.source,
+        },
+        commit=False,
+    )
+
+    db.commit()
+    db.refresh(project)
+    db.refresh(ai_plan)
+
+    for task in created_tasks:
+        db.refresh(task)
+
+    return AIPlanAcceptPreviewResponse(
+        project=project,
         project_id=project.project_id,
         plan_id=ai_plan.plan_id,
         summary=str(ai_plan.generated_plan.get("summary", "")),

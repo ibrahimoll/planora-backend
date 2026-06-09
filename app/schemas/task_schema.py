@@ -28,6 +28,7 @@ class TaskCreate(BaseModel):
     estimated_hours: float | None = Field(default=None, ge=0)
     actual_hours: float | None = Field(default=None, ge=0)
     due_date: datetime | None = None
+    assigned_to: int | None = None
 
 
 class TaskUpdate(BaseModel):
@@ -38,6 +39,7 @@ class TaskUpdate(BaseModel):
     actual_hours: float | None = Field(default=None, ge=0)
     status: TaskStatus | None = None
     due_date: datetime | None = None
+    assigned_to: int | None = None
 
 
 class TeamTaskCreate(TaskCreate):

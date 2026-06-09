@@ -5,6 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.project_schema import ProjectResponse, ProjectType
+
 
 class AIPlanGenerateRequest(BaseModel):
     input_prompt: str | None = Field(default=None, max_length=5000)
@@ -57,3 +59,52 @@ class AIPlanGenerateResponse(BaseModel):
     summary: str
     tasks_created: int
     tasks: list[AIPlanGeneratedTaskResponse]
+
+
+class AIPlanPreviewRequest(BaseModel):
+    project_idea: str = Field(..., min_length=12, max_length=5000)
+    deadline: datetime
+    project_type: ProjectType = ProjectType.personal
+    team_id: int | None = None
+    available_hours_per_week: int = Field(default=8, ge=1, le=168)
+    preferred_task_count: int = Field(default=8, ge=3, le=12)
+    requirements: str | None = Field(default=None, max_length=5000)
+    include_milestones: bool = True
+
+
+class AIPlanPreviewTaskResponse(BaseModel):
+    suggested_order: int
+    title: str
+    description: str | None
+    priority: str
+    estimated_hours: float | None
+    status: str = "todo"
+    due_date: datetime | None
+    assigned_to: int | None = None
+
+
+class AIPlanPreviewResponse(BaseModel):
+    source: str
+    domain: str
+    project_title: str
+    description: str | None
+    project_type: ProjectType
+    team_id: int | None
+    deadline: datetime
+    summary: str
+    tasks: list[AIPlanPreviewTaskResponse]
+    milestones: list[dict[str, Any]]
+    risks: list[dict[str, str]]
+    recommendations: list[str]
+    project_idea: str
+    requirements: str | None = None
+    available_hours_per_week: int
+    preferred_task_count: int
+
+
+class AIPlanAcceptPreviewRequest(BaseModel):
+    preview: AIPlanPreviewResponse
+
+
+class AIPlanAcceptPreviewResponse(AIPlanGenerateResponse):
+    project: ProjectResponse

@@ -1,6 +1,6 @@
 # Planora Project Context
 
-Last updated: 2026-06-03
+Last updated: 2026-06-09
 
 ## Main Idea
 
@@ -28,6 +28,11 @@ Repositories:
 
 Latest confirmed status:
 
+- Mobile/backend integration follow-up on 2026-06-09 added true AI plan preview/accept support. `POST /ai-plans/preview-from-idea` returns a project/task preview without creating database rows, and `POST /ai-plans/accept-preview` creates the accepted personal or team project with its tasks.
+- The deterministic AI planner now detects business domains such as clothing/social commerce and produces practical business tasks instead of software/app tasks. Generated task descriptions are short, task-specific copy and should not leak the full prompt or internal instruction scaffold.
+- Personal projects now support collaborators through `project_members`: owners are added as project members at creation, personal project members can view the project/tasks, managers can manage tasks, and project owners can invite/update/remove collaborators.
+- Personal project deletion remains owner-only and deletes related tasks/membership through the existing database relationships/cascade behavior.
+- Mobile now exposes Project Details delete controls and a Teams quick action from Home so project deletion and team navigation are easier to find.
 - Mobile/backend integration follow-up on 2026-06-07 added safe nested user summaries for mobile display. `ProjectMemberResponse`, `TeamMemberResponse`, `TaskResponse`, and `CommentResponse` now expose `UserSummaryResponse` data where the mobile app needs real names/avatars instead of `User #id` or `Member #id` fallbacks.
 - Team project member invite support was added for mobile through `POST /teams/{team_id}/projects/{project_id}/members/invite`. It accepts `email_or_username` plus role, requires the current user to manage the project, prevents duplicates, ensures the target user is on the team, and returns the created project member with nested user summary data.
 - Task list/detail responses now eager-load assignee/creator summaries through SQLAlchemy relationships/properties so mobile task assignee display can use real user data.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.project import Project
@@ -38,6 +38,14 @@ def create_personal_project(
     db.add(project)
     db.flush()
 
+    owner_member = ProjectMember(
+        project_id=project.project_id,
+        user_id=current_user.user_id,
+        role=ProjectMemberRole.owner.value,
+    )
+
+    db.add(owner_member)
+
     create_activity_log(
         db=db,
         project=project,
@@ -62,9 +70,20 @@ def get_my_personal_projects(
     current_user: User,
     status: ProjectStatus | None = None,
 ) -> list[Project]:
+    member_exists = (
+        select(ProjectMember.member_id)
+        .where(
+            ProjectMember.project_id == Project.project_id,
+            ProjectMember.user_id == current_user.user_id,
+        )
+        .exists()
+    )
     stmt = select(Project).where(
-        Project.created_by == current_user.user_id,
         Project.project_type == "personal",
+        or_(
+            Project.created_by == current_user.user_id,
+            member_exists,
+        ),
     )
 
     if status is not None:
@@ -80,13 +99,67 @@ def get_my_personal_project_by_id(
     project_id: int,
     current_user: User,
 ) -> Project | None:
+    member_exists = (
+        select(ProjectMember.member_id)
+        .where(
+            ProjectMember.project_id == Project.project_id,
+            ProjectMember.user_id == current_user.user_id,
+        )
+        .exists()
+    )
     stmt = select(Project).where(
         Project.project_id == project_id,
-        Project.created_by == current_user.user_id,
         Project.project_type == "personal",
+        or_(
+            Project.created_by == current_user.user_id,
+            member_exists,
+        ),
     )
 
     return db.execute(stmt).scalars().first()
+
+
+def get_owned_personal_project_by_id(
+    db: Session,
+    project_id: int,
+    current_user: User,
+) -> Project | None:
+    stmt = select(Project).where(
+        Project.project_id == project_id,
+        Project.project_type == "personal",
+        Project.created_by == current_user.user_id,
+    )
+
+    return db.execute(stmt).scalars().first()
+
+
+def get_manageable_personal_project_by_id(
+    db: Session,
+    project_id: int,
+    current_user: User,
+) -> Project | None:
+    project = get_my_personal_project_by_id(
+        db=db,
+        project_id=project_id,
+        current_user=current_user,
+    )
+
+    if project is None:
+        return None
+
+    if project.created_by == current_user.user_id:
+        return project
+
+    membership = get_project_membership(
+        db=db,
+        project_id=project_id,
+        user_id=current_user.user_id,
+    )
+
+    if membership is not None and can_manage_project(membership):
+        return project
+
+    return None
 
 
 def update_my_personal_project(
@@ -379,3 +452,11 @@ def update_project_member_role(
     db.refresh(member)
 
     return member
+
+
+def remove_project_member(
+    db: Session,
+    member: ProjectMember,
+) -> None:
+    db.delete(member)
+    db.commit()

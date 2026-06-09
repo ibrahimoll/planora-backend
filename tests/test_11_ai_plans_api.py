@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.ai_plan import AIPlan
+from app.models.project import Project
 from app.models.task import Task
 
 from tests.conftest import (
@@ -457,6 +458,151 @@ def test_generate_ai_plan_endpoint_uses_business_tasks_for_clothing_idea(
     assert "code" not in task_titles
     assert "land" not in task_titles
     assert "factory" not in task_titles
+
+
+def test_generate_ai_plan_ignores_negative_instruction_text_for_clothing_business(
+    client: TestClient,
+    db: Session,
+):
+    _, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_generate_clothing_social_owner",
+        email="ai_generate_clothing_social_owner@example.com",
+    )
+
+    project = create_personal_project(
+        client=client,
+        token=token,
+        title="Clothing business online",
+    )
+
+    response = client.post(
+        f"/projects/{project['project_id']}/ai-plan/generate",
+        headers=auth_headers(token),
+        json={
+            "prompt": "\n".join(
+                [
+                    "Create a complete Planora project plan and task list.",
+                    "Project title: Clothing business online",
+                    "Available hours per week: 8",
+                    "Preferred task count: 10",
+                    "",
+                    "Project idea and goal:",
+                    "I want to create my own page on social media and sell my clothing brand online",
+                    "",
+                    "Do not default to software, app, coding, or implementation tasks unless the idea is software.",
+                ]
+            ),
+            "generate_tasks": True,
+            "preferred_task_count": 10,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+
+    tasks = response.json()["tasks"]
+    task_titles = " ".join(task["title"].lower() for task in tasks)
+    task_descriptions = "\n".join(
+        (task["description"] or "")
+        for task in tasks
+    )
+
+    assert "clothing niche" in task_titles
+    assert "social media content" in task_titles
+    assert "online sales channel" in task_titles
+    assert "delivery, payment, and returns" in task_titles
+    assert "design the app architecture" not in task_titles
+    assert "build the core product features" not in task_titles
+    assert "test key user flows" not in task_titles
+    assert "Create a complete Planora project plan" not in task_descriptions
+    assert "Available hours per week" not in task_descriptions
+    assert "Preferred task count" not in task_descriptions
+    assert "Do not default to software" not in task_descriptions
+
+
+def test_generate_ai_plan_uses_software_tasks_for_explicit_flutter_app(
+    client: TestClient,
+    db: Session,
+):
+    _, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_generate_software_owner",
+        email="ai_generate_software_owner@example.com",
+    )
+
+    project = create_personal_project(
+        client=client,
+        token=token,
+        title="Food Delivery Product",
+    )
+
+    response = client.post(
+        f"/projects/{project['project_id']}/ai-plan/generate",
+        headers=auth_headers(token),
+        json={
+            "prompt": "Build a Flutter mobile app for food delivery.",
+            "generate_tasks": True,
+            "preferred_task_count": 6,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+
+    task_titles = " ".join(
+        task["title"].lower()
+        for task in response.json()["tasks"]
+    )
+
+    assert "design the app architecture and data model" in task_titles
+    assert "build the core product features" in task_titles
+
+
+def test_preview_from_idea_does_not_create_project_until_accepted(
+    client: TestClient,
+    db: Session,
+):
+    _, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_preview_owner",
+        email="ai_preview_owner@example.com",
+    )
+
+    before_count = db.query(Project).count()
+    preview_response = client.post(
+        "/ai-plans/preview-from-idea",
+        headers=auth_headers(token),
+        json={
+            "project_idea": "I want to create my own page on social media and sell my clothing brand online",
+            "deadline": "2026-08-01T12:00:00+00:00",
+            "project_type": "personal",
+            "available_hours_per_week": 8,
+            "preferred_task_count": 8,
+            "requirements": "Start with a small collection and low budget.",
+        },
+    )
+
+    assert preview_response.status_code == 200, preview_response.text
+    assert db.query(Project).count() == before_count
+
+    preview = preview_response.json()
+    assert preview["domain"] == "business"
+    assert any("clothing niche" in task["title"].lower() for task in preview["tasks"])
+
+    accept_response = client.post(
+        "/ai-plans/accept-preview",
+        headers=auth_headers(token),
+        json={"preview": preview},
+    )
+
+    assert accept_response.status_code == 201, accept_response.text
+
+    accepted = accept_response.json()
+    assert accepted["project"]["project_id"] == accepted["project_id"]
+    assert accepted["tasks_created"] == 8
+    assert db.query(Project).count() == before_count + 1
 
 
 def test_generate_ai_plan_endpoint_can_store_plan_without_creating_tasks(
