@@ -727,6 +727,7 @@ def _build_local_rule_based_reply(
     lowered_message = user_message.lower()
     task_summary = _calculate_task_summary(tasks)
     next_tasks = _get_next_tasks(tasks)
+    next_task_lines = _build_next_task_lines(next_tasks)
 
     context: dict[str, Any] = {
         "source": "local_rule_based_chat_v1",
