@@ -43,11 +43,11 @@ TASK_TITLE_TEMPLATES = [
 ]
 
 BUSINESS_TASK_TITLE_TEMPLATES = [
-    "Define clothing niche and target customer",
+    "Define product niche and target customer",
     "Research competitors and market demand",
     "Estimate startup budget and pricing",
     "Choose brand name and visual identity",
-    "Find suppliers or print/manufacturing options",
+    "Find suppliers or production options",
     "Plan first product collection",
     "Create social media content plan",
     "Set up online sales channel",
@@ -328,6 +328,20 @@ def _detect_project_domain(project_context: str) -> str:
     is_business = _matches_any_pattern(project_context, BUSINESS_PATTERNS)
     is_explicit_software = _matches_any_pattern(project_context, SOFTWARE_PATTERNS)
 
+    explicit_software_build = re.search(
+        r"\b(?:build|create|develop|design|make|launch)\s+"
+        r"(?:an?\s+)?(?:mobile\s+)?(?:app|web\s+app|website|platform|software|backend|frontend|api)\b",
+        project_context,
+        flags=re.IGNORECASE,
+    )
+
+    # If the idea is mainly about selling products, stores, suppliers,
+    # customers, pricing, or a brand, treat it as business/e-commerce.
+    # Only choose software when the user clearly says the deliverable is
+    # an app, website, platform, backend, frontend, API, or software.
+    if is_business and not explicit_software_build:
+        return "business"
+
     if is_explicit_software:
         return "software"
 
@@ -354,29 +368,29 @@ def _business_task_description(
 
     if "niche" in normalized or "target customer" in normalized:
         return (
-            "Identify the clothing category, customer profile, style, price range, "
-            "and reason buyers would choose the brand."
+            "Decide what product category you will start with, who your ideal "
+            "customer is, your style or value angle, and why people would buy from you."
         )
 
     if "competitor" in normalized or "market" in normalized:
         return (
-            "Review similar online clothing brands, their prices, products, "
-            "content, and customer demand signals."
+            "Review similar businesses, their prices, products, content, customer "
+            "comments, and signs of demand."
         )
 
     if "budget" in normalized or "pricing" in normalized:
         return (
-            "List expected costs for samples, inventory, packaging, ads, delivery, "
+            "List expected costs for samples, stock, packaging, ads, delivery, "
             "platform fees, and target profit margin."
         )
 
     if "brand name" in normalized or "visual identity" in normalized:
         return (
             "Choose a memorable name and define colors, tone, logo direction, "
-            "and the brand feeling customers should remember."
+            "and the feeling customers should remember."
         )
 
-    if "supplier" in normalized or "manufacturing" in normalized:
+    if "supplier" in normalized or "production" in normalized or "manufacturing" in normalized:
         return (
             "Compare at least 3 suppliers or production options and note prices, "
             "minimum order quantity, quality, and delivery time."
@@ -384,25 +398,25 @@ def _business_task_description(
 
     if "collection" in normalized:
         return (
-            "Select the first products, sizes, colors, sample needs, and the small "
-            "launch quantity to test demand."
+            "Choose the first products to launch, possible variants, sample needs, "
+            "and a small starting quantity to test demand."
         )
 
     if "social media" in normalized or "content" in normalized:
         return (
-            "Plan Instagram/TikTok posts, product photos, launch messages, offers, "
+            "Plan posts, product photos, short videos, launch messages, offers, "
             "and how customers will contact or order."
         )
 
     if "sales channel" in normalized or "online" in normalized:
         return (
-            "Choose how customers will buy online, such as social DMs, marketplace, "
-            "simple store, payment links, or a website."
+            "Choose how customers will buy, such as social DMs, marketplace, "
+            "simple online store, payment links, or a website."
         )
 
     if "delivery" in normalized or "payment" in normalized or "returns" in normalized:
         return (
-            "Define payment methods, delivery partners, shipping fees, return rules, "
+            "Define payment methods, delivery options, shipping fees, return rules, "
             "and customer confirmation messages."
         )
 
@@ -414,13 +428,13 @@ def _business_task_description(
 
     if "inventory" in normalized or "tracking" in normalized:
         return (
-            "Set up a simple inventory tracker for SKUs, quantities, costs, sales, "
+            "Set up a simple tracker for products, quantities, costs, sales, "
             "and reorder alerts."
         )
 
     return (
-        "Turn this business step into a small, measurable action with a clear owner, "
-        "deadline, and launch-ready output."
+        "Turn this business step into a small, measurable action with a clear output, "
+        "deadline, and next step."
     )
 
 
