@@ -202,7 +202,7 @@ def _is_project_related_message(user_message: str) -> bool:
         "help me plan",
         "what can you help",
         "what can you do",
-                "what does",
+        "what does",
         "what is",
         "what are",
         "what means",
@@ -405,7 +405,8 @@ def _build_next_task_lines(tasks: list[Task]) -> list[str]:
         )
 
         lines.append(
-            f"- {task.title} | priority: {task.priority} | status: {task.status} | due: {due_text}"
+            f"- {task.title} | priority: {task.priority} | "
+            f"status: {task.status} | due: {due_text}"
         )
 
     return lines
@@ -445,6 +446,40 @@ def _is_explanation_request(user_message: str) -> bool:
     ]
 
     return _contains_any(message, explanation_patterns)
+
+
+def _should_use_deterministic_project_reply(user_message: str) -> bool:
+    message = _normalize_message(user_message)
+
+    deterministic_patterns = [
+        "what should i do",
+        "what do i do",
+        "what to do",
+        "what task",
+        "what tasks",
+        "what task do i have",
+        "first task",
+        "next task",
+        "next tasks",
+        "todo",
+        "to do",
+        "priority",
+        "priorities",
+        "progress",
+        "status",
+        "summary",
+        "overview",
+        "risk",
+        "deadline",
+        "schedule",
+        "team workload",
+        "workload",
+    ]
+
+    return _is_explanation_request(user_message) or _contains_any(
+        message,
+        deterministic_patterns,
+    )
 
 
 def _find_referenced_task(user_message: str, tasks: list[Task]) -> Task | None:
@@ -543,7 +578,13 @@ def _build_explanation_reply(
             "4. The next task can start without confusion."
         )
 
-    if "idk" in message or "stuck" in message or "lost" in message or "i dont know" in message or "i don't know" in message:
+    if (
+        "idk" in message
+        or "stuck" in message
+        or "lost" in message
+        or "i dont know" in message
+        or "i don't know" in message
+    ):
         next_tasks = _get_next_tasks(tasks, limit=1)
 
         if next_tasks:
@@ -597,6 +638,105 @@ def _build_explanation_reply(
         "3. What result proves it is done.\n\n"
         "Ask me about any task title, and I will explain it in simpler steps."
     )
+
+
+def _build_team_workload_reply(
+    project: Project,
+    tasks: list[Task],
+) -> str:
+    if project.project_type == "personal":
+        assigned_tasks = len(
+            [
+                task
+                for task in tasks
+                if getattr(task, "assigned_to", None) is not None
+                and task.status != "completed"
+            ]
+        )
+
+        unassigned_tasks = len(
+            [
+                task
+                for task in tasks
+                if getattr(task, "assigned_to", None) is None
+                and task.status != "completed"
+            ]
+        )
+
+        return (
+            f"'{project.title}' is currently a personal project, so there is no "
+            "team workload to balance yet.\n\n"
+            f"Open tasks assigned to someone: {assigned_tasks}\n"
+            f"Open unassigned tasks: {unassigned_tasks}\n\n"
+            "If you invite collaborators later and assign tasks to them, I can "
+            "summarize who has too much work, who is free, and which tasks are unassigned."
+        )
+
+    workload: dict[int | str, dict[str, int]] = {}
+    unassigned = 0
+
+    for task in tasks:
+        if task.status == "completed":
+            continue
+
+        assignee_id = getattr(task, "assigned_to", None)
+
+        if assignee_id is None:
+            unassigned += 1
+            continue
+
+        if assignee_id not in workload:
+            workload[assignee_id] = {
+                "total": 0,
+                "high": 0,
+                "medium": 0,
+                "low": 0,
+            }
+
+        workload[assignee_id]["total"] += 1
+
+        if task.priority in ["high", "medium", "low"]:
+            workload[assignee_id][task.priority] += 1
+
+    if not workload and unassigned == 0:
+        return (
+            f"'{project.title}' has no open assigned tasks right now, so there is "
+            "no team workload to balance."
+        )
+
+    lines = [
+        f"Team workload for '{project.title}':",
+    ]
+
+    for assignee_id, counts in sorted(
+        workload.items(),
+        key=lambda item: (-item[1]["total"], str(item[0])),
+    ):
+        lines.append(
+            f"- User {assignee_id}: {counts['total']} open task(s), "
+            f"{counts['high']} high priority"
+        )
+
+    lines.append(f"- Unassigned open tasks: {unassigned}")
+
+    overloaded = [
+        assignee_id
+        for assignee_id, counts in workload.items()
+        if counts["total"] >= 5 or counts["high"] >= 3
+    ]
+
+    if overloaded:
+        lines.append(
+            "Recommendation: rebalance high-priority tasks from the busiest "
+            "member(s) or assign unassigned tasks to members with fewer open tasks."
+        )
+    else:
+        lines.append(
+            "Recommendation: workload looks manageable. Keep high-priority tasks "
+            "visible and assign unassigned work before the deadline."
+        )
+
+    return "\n".join(lines)
 
 
 def _format_task_for_prompt(task: Task) -> str:
@@ -749,6 +889,11 @@ def _build_local_rule_based_reply(
             "created_at": latest_risk.created_at.isoformat(),
         }
 
+    if any(word in lowered_message for word in ["workload", "team workload"]):
+        context["intent"] = "team_workload"
+        reply = _build_team_workload_reply(project=project, tasks=tasks)
+
+        return reply, context
 
     if _is_explanation_request(user_message):
         context["intent"] = "explanation"
@@ -763,7 +908,8 @@ def _build_local_rule_based_reply(
     if any(word in lowered_message for word in ["hello", "hi", "hey", "how are you"]):
         reply = (
             f"Hello! I am your Planora project assistant. "
-            f"I checked '{project.title}' and I can help with progress, next tasks, risks, deadlines, and scheduling."
+            f"I checked '{project.title}' and I can help with progress, next tasks, "
+            "risks, deadlines, and scheduling."
         )
 
         return reply, context
@@ -789,7 +935,8 @@ def _build_local_rule_based_reply(
         if not next_task_lines:
             reply = (
                 f"'{project.title}' has no remaining incomplete tasks. "
-                "The next step is to review the project, finalize documentation, and mark the project completed if everything is done."
+                "The next step is to review the project, finalize documentation, "
+                "and mark the project completed if everything is done."
             )
         else:
             reply = (
@@ -803,8 +950,10 @@ def _build_local_rule_based_reply(
             f"Project summary for '{project.title}': "
             f"{task_summary['completed_tasks']}/{task_summary['total_tasks']} tasks completed "
             f"({task_summary['completion_percentage']}%). "
-            f"Todo: {task_summary['todo_tasks']}, in progress: {task_summary['in_progress_tasks']}, "
-            f"blocked: {task_summary['blocked_tasks']}, overdue: {task_summary['overdue_tasks']}. "
+            f"Todo: {task_summary['todo_tasks']}, "
+            f"in progress: {task_summary['in_progress_tasks']}, "
+            f"blocked: {task_summary['blocked_tasks']}, "
+            f"overdue: {task_summary['overdue_tasks']}. "
             f"Remaining estimated work: {task_summary['remaining_estimated_hours']} hour(s)."
         )
 
@@ -813,8 +962,9 @@ def _build_local_rule_based_reply(
 
         reply = (
             f"'{project.title}' deadline is {deadline_text}. "
-            f"You still have {task_summary['total_tasks'] - task_summary['completed_tasks']} incomplete task(s), "
-            f"with around {task_summary['remaining_estimated_hours']} estimated hour(s) remaining. "
+            f"You still have {task_summary['total_tasks'] - task_summary['completed_tasks']} "
+            f"incomplete task(s), with around "
+            f"{task_summary['remaining_estimated_hours']} estimated hour(s) remaining. "
             "Use smart scheduling if due dates need to be reorganized."
         )
 
@@ -896,16 +1046,34 @@ def create_ai_chat_exchange(
             assistant_context=assistant_context,
         )
 
-    recent_messages = _get_recent_chat_history(
-        db=db,
-        project_id=project.project_id,
-    )
-
     fallback_reply, assistant_context = _build_local_rule_based_reply(
         project=project,
         user_message=chat_data.message,
         tasks=tasks,
         latest_risk=latest_risk,
+    )
+
+    if _should_use_deterministic_project_reply(chat_data.message):
+        assistant_context = {
+            **assistant_context,
+            "source": "local_rule_based_chat_v1",
+            "fallback_used": True,
+            "provider_skipped": True,
+            "provider_skip_reason": "deterministic_project_query",
+        }
+
+        return _save_chat_exchange(
+            db=db,
+            project=project,
+            current_user=current_user,
+            user_message_text=chat_data.message,
+            ai_reply=fallback_reply,
+            assistant_context=assistant_context,
+        )
+
+    recent_messages = _get_recent_chat_history(
+        db=db,
+        project_id=project.project_id,
     )
 
     llm_prompt = _build_llm_prompt(
