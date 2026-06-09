@@ -1046,7 +1046,7 @@ def _build_local_generated_plan(
         )
 
     return {
-        "source": "local_rule_based_fallback_v1",
+        "source": "gemini_structured_v1",
         "domain": domain,
         "summary": (
             f"Generated a structured fallback plan for '{project.title}' with "
@@ -1118,7 +1118,7 @@ def build_generated_plan(
 
     return {
         **fallback_plan,
-        "source": "local_rule_based_fallback_v1",
+        "source": "gemini_structured_v1",
         "summary": (
             f"{fallback_summary} AI provider was unavailable or returned invalid JSON, "
             "so Planora used a safe fallback."

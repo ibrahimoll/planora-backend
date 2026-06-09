@@ -1,6 +1,10 @@
-#.\venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BASE_DIR = Path(__file__).resolve().parents[2]
+
 
 class Settings(BaseSettings):
     database_url: str
@@ -29,7 +33,7 @@ class Settings(BaseSettings):
     ai_provider: str = "local"
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-2.5-flash"
-    gemini_timeout_seconds: int = 15
+    gemini_timeout_seconds: int = 30
 
     backend_cors_origins: str = (
         "http://localhost:3000,"
@@ -52,8 +56,11 @@ class Settings(BaseSettings):
     deadline_reminder_hours_ahead: int = 24
     deadline_reminder_include_overdue: bool = True
 
+    password_reset_frontend_url: str = "http://localhost:8080/reset-password"
+
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=BASE_DIR / ".env",
+        env_file_encoding="utf-8",
         extra="ignore",
     )
 
@@ -64,8 +71,6 @@ class Settings(BaseSettings):
             for origin in self.backend_cors_origins.split(",")
             if origin.strip()
         ]
-    
-    password_reset_frontend_url: str = "http://localhost:8080/reset-password"
 
 
 settings = Settings()  # pyright: ignore[reportCallIssue]
