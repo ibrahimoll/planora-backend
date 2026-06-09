@@ -940,7 +940,7 @@ def _normalize_ai_plan_response(
         ]
 
     return {
-        "source": "local_rule_based_fallback_v1",        
+        "source": "gemini_structured_v1",      
         "domain": domain,
         "summary": summary,
         "project": {
