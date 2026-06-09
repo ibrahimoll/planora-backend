@@ -165,6 +165,18 @@ def _is_project_related_message(user_message: str) -> bool:
         "timeline",
         "smart schedule",
         "risk analysis",
+        "scope",
+        "product scope",
+        "criteria",
+        "success criteria",
+        "meaning",
+        "means",
+        "define",
+        "definition",
+        "explain",
+        "understand",
+        "stuck",
+        "lost",
     ]
 
     project_question_patterns = [
@@ -190,6 +202,30 @@ def _is_project_related_message(user_message: str) -> bool:
         "help me plan",
         "what can you help",
         "what can you do",
+                "what does",
+        "what is",
+        "what are",
+        "what means",
+        "what do you mean",
+        "meaning of",
+        "means what",
+        "i do not understand",
+        "i don't understand",
+        "i dont understand",
+        "i do not know",
+        "i don't know",
+        "i dont know",
+        "idk",
+        "i am lost",
+        "i'm lost",
+        "i am stuck",
+        "i'm stuck",
+        "break it down",
+        "make it simpler",
+        "explain this",
+        "explain the task",
+        "how do i complete",
+        "how should i complete",
     ]
 
     generic_project_assistant_patterns = [
@@ -375,6 +411,194 @@ def _build_next_task_lines(tasks: list[Task]) -> list[str]:
     return lines
 
 
+def _is_explanation_request(user_message: str) -> bool:
+    message = _normalize_message(user_message)
+
+    explanation_patterns = [
+        "what does",
+        "what is",
+        "what are",
+        "what means",
+        "what do you mean",
+        "meaning of",
+        "means what",
+        "explain",
+        "define",
+        "definition",
+        "understand",
+        "i do not understand",
+        "i don't understand",
+        "i dont understand",
+        "i do not know",
+        "i don't know",
+        "i dont know",
+        "idk",
+        "lost",
+        "stuck",
+        "break it down",
+        "make it simpler",
+        "how do i complete",
+        "how should i complete",
+        "success criteria",
+        "product scope",
+        "scope",
+    ]
+
+    return _contains_any(message, explanation_patterns)
+
+
+def _find_referenced_task(user_message: str, tasks: list[Task]) -> Task | None:
+    message = _normalize_message(user_message)
+
+    if not tasks:
+        return None
+
+    stop_words = {
+        "the",
+        "and",
+        "for",
+        "with",
+        "this",
+        "that",
+        "what",
+        "does",
+        "mean",
+        "means",
+        "explain",
+        "define",
+        "task",
+        "project",
+    }
+
+    best_task: Task | None = None
+    best_score = 0
+
+    for task in tasks:
+        title = _normalize_message(task.title)
+
+        if title and title in message:
+            return task
+
+        title_words = [
+            word
+            for word in title.split()
+            if len(word) >= 4 and word not in stop_words
+        ]
+
+        score = sum(1 for word in title_words if word in message)
+
+        if score > best_score:
+            best_score = score
+            best_task = task
+
+    if best_score >= 2:
+        return best_task
+
+    if any(
+        phrase in message
+        for phrase in ["this task", "the task", "first task", "current task"]
+    ):
+        next_tasks = _get_next_tasks(tasks, limit=1)
+
+        if next_tasks:
+            return next_tasks[0]
+
+    return None
+
+
+def _build_explanation_reply(
+    project: Project,
+    user_message: str,
+    tasks: list[Task],
+) -> str:
+    message = _normalize_message(user_message)
+    referenced_task = _find_referenced_task(user_message, tasks)
+
+    if "product scope" in message or (
+        "scope" in message and "success criteria" in message
+    ):
+        return (
+            f"For '{project.title}', product scope means deciding exactly what "
+            "your project will include at the start and what it will not include yet.\n\n"
+            "Success criteria means how you will know the task is finished.\n\n"
+            "Example:\n"
+            "1. Choose the first products or services you will offer.\n"
+            "2. Choose the target customer.\n"
+            "3. Decide your price range or quality level.\n"
+            "4. Write a clear result, like: I selected 3 products, one target "
+            "customer, and a first sales channel.\n\n"
+            "Next small action: write the first 3 products or services you want "
+            "to start with."
+        )
+
+    if "success criteria" in message or "criteria" in message:
+        return (
+            "Success criteria means the clear proof that a task is complete.\n\n"
+            f"For '{project.title}', do not leave the task vague. Write what the "
+            "finished result should look like.\n\n"
+            "Example success criteria:\n"
+            "1. The target customer is written down.\n"
+            "2. The first products or services are selected.\n"
+            "3. The price range is decided.\n"
+            "4. The next task can start without confusion."
+        )
+
+    if "idk" in message or "stuck" in message or "lost" in message or "i dont know" in message or "i don't know" in message:
+        next_tasks = _get_next_tasks(tasks, limit=1)
+
+        if next_tasks:
+            task = next_tasks[0]
+
+            return (
+                f"No problem. Let’s make '{project.title}' simple.\n\n"
+                f"Start with this task: {task.title}\n\n"
+                "Do it in 3 small steps:\n"
+                "1. Read the task title and write what result you need.\n"
+                "2. Spend 20-30 minutes collecting the basic information.\n"
+                "3. Write one small output, even if it is not perfect.\n\n"
+                "After that, come back and ask me to check or improve it."
+            )
+
+        return (
+            f"No problem. For '{project.title}', start with 3 simple decisions:\n"
+            "1. What exactly are you trying to create or launch?\n"
+            "2. Who is it for?\n"
+            "3. What is the first small result you can finish today?"
+        )
+
+    if referenced_task is not None:
+        description = (referenced_task.description or "").strip()
+
+        reply = (
+            f"The task '{referenced_task.title}' means you need to turn this part "
+            "of the project into a clear, doable result.\n\n"
+        )
+
+        if description:
+            reply += f"Task context: {description}\n\n"
+
+        reply += (
+            "How to do it:\n"
+            "1. Write what the final output should be.\n"
+            "2. Break it into 2-3 small actions.\n"
+            "3. Finish the smallest action first.\n"
+            "4. Mark the task complete only when the output is clear.\n\n"
+            "Next small action: write one sentence describing what this task should "
+            "produce."
+        )
+
+        return reply
+
+    return (
+        f"I can help explain that for '{project.title}'.\n\n"
+        "In Planora, a task should tell you:\n"
+        "1. What to do.\n"
+        "2. Why it matters for the project.\n"
+        "3. What result proves it is done.\n\n"
+        "Ask me about any task title, and I will explain it in simpler steps."
+    )
+
+
 def _format_task_for_prompt(task: Task) -> str:
     due_text = (
         _to_utc(task.due_date).date().isoformat()
@@ -447,6 +671,7 @@ Your job:
 - Be clear and concise.
 - If the user greets you, greet them back and explain what you can help with.
 - If the user asks about progress, risk, deadline, scheduling, workload, or next tasks, use the project data.
+- If the user asks what a task, product scope, success criteria, or project term means, explain it simply with an example and one next action.
 - If the user asks about anything unrelated to this project, do not answer that topic.
 - For unrelated questions, say you can only help with this Planora project and suggest project-related topics.
 - Do not answer weather, news, sports, politics, entertainment, trivia, homework, medical, legal, financial, or unrelated coding questions.
@@ -523,7 +748,16 @@ def _build_local_rule_based_reply(
             "created_at": latest_risk.created_at.isoformat(),
         }
 
-    next_task_lines = _build_next_task_lines(next_tasks)
+
+    if _is_explanation_request(user_message):
+        context["intent"] = "explanation"
+        reply = _build_explanation_reply(
+            project=project,
+            user_message=user_message,
+            tasks=tasks,
+        )
+
+        return reply, context
 
     if any(word in lowered_message for word in ["hello", "hi", "hey", "how are you"]):
         reply = (
