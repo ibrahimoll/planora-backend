@@ -847,19 +847,18 @@ def _format_actionable_description(
     clean_title = title.strip() or "Complete this task"
     clean_base = (
         base_description.strip()
-        or "Complete this task with a clear practical result."
+        or f"Complete '{clean_title}' with a clear practical result."
     )
-    clean_context = project_context.strip() or "this project"
 
     return (
         f"Goal: {clean_base}\n\n"
         "Steps:\n"
-        f"1. Read the project idea again: {clean_context}\n"
-        f"2. Decide what '{clean_title}' means for this specific project.\n"
-        "3. Complete the smallest useful version of this task first.\n"
-        "4. Save the result clearly so you can use it in the next task.\n\n"
-        f"Deliverable: A clear completed output for '{clean_title}' that matches the project idea.\n\n"
-        "Done when: You can show the result, explain why it matters, and use it to continue the project."
+        f"1. Focus only on this task: {clean_title}.\n"
+        "2. Create the smallest useful output for this step.\n"
+        "3. Check that the output is clear and usable.\n"
+        "4. Save or document the result before moving to the next task.\n\n"
+        f"Deliverable: A finished output for '{clean_title}'.\n\n"
+        "Done when: This task has a visible result that helps the project move forward."
     )
 
 
