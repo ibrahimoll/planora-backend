@@ -1129,8 +1129,13 @@ def _repair_generic_task_descriptions(
         if not isinstance(raw_task, dict):
             continue
 
+        suggested_order_value = raw_task.get("suggested_order")
+
+        if suggested_order_value is None:
+            continue
+
         try:
-            suggested_order = int(raw_task.get("suggested_order"))
+            suggested_order = int(str(suggested_order_value))
         except (TypeError, ValueError):
             continue
 
@@ -1165,7 +1170,18 @@ def _repair_generic_task_descriptions(
             repaired_tasks.append(task)
             continue
 
-        suggested_order = int(task.get("suggested_order") or len(repaired_tasks) + 1)
+        suggested_order_value = task.get("suggested_order")
+        fallback_order = len(repaired_tasks) + 1
+
+        try:
+            suggested_order = (
+                int(str(suggested_order_value))
+                if suggested_order_value is not None
+                else fallback_order
+            )
+        except (TypeError, ValueError):
+            suggested_order = fallback_order
+
         repaired_description = repaired_by_order.get(suggested_order)
 
         if repaired_description is None:
@@ -1914,8 +1930,7 @@ def _preview_task_response_from_plan_task(
     task_data: dict[str, Any],
 ) -> AIPlanPreviewTaskResponse:
     return AIPlanPreviewTaskResponse(
-        suggested_order=int(task_data["suggested_order"]),
-        title=str(task_data["title"]),
+        suggested_order=int(str(task_data.get("suggested_order") or 1)),        title=str(task_data["title"]),
         description=str(task_data["description"]),
         priority=str(task_data["priority"]),
         estimated_hours=(
