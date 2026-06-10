@@ -74,6 +74,19 @@ SOFTWARE_TASK_TITLE_TEMPLATES = [
     "Submit final version",
 ]
 
+UNIVERSAL_TASK_PHASES = [
+    "Clarify the exact outcome",
+    "Identify who this is for",
+    "List the needed resources",
+    "Define the first simple version",
+    "Create the first working result",
+    "Test it with real feedback",
+    "Improve the weak points",
+    "Prepare the final version",
+    "Share or launch it",
+    "Track results and next actions",
+]
+
 INSTRUCTION_PREFIXES = (
     "create a complete planora project plan",
     "project type:",
@@ -647,29 +660,58 @@ def _build_structured_ai_plan_prompt(
     description = project.description or "No description provided."
 
     return f"""
-You are Planora AI, an expert project planning assistant.
+You are Planora AI, an expert project planner.
 
 Your job:
-Generate a practical project plan for ANY user idea.
-Do not rely on fixed categories.
-Understand the actual project idea and create tasks that match it exactly.
+Create a practical task plan for the user's real idea.
+You must understand the idea first, then generate useful tasks that help the user move from idea to execution.
 
-Critical rules:
-- Return valid JSON only. No Markdown. No code fences. No explanations outside JSON.
-- Do not add software/app tasks unless the user is clearly building software, an app, a website, a platform, code, or a game.
-- Do not add business/supplier/marketing tasks unless the user is clearly starting or running a business.
-- Do not use generic placeholder task titles.
-- Do not copy this prompt into task descriptions.
-- Do not include "$1", "**", backticks, or template artifacts.
-- Each task must be specific to the user's actual idea.
-- Use beginner-friendly task descriptions.
-- Keep task descriptions short, useful, and actionable.
+Do not rely on fixed categories.
+Do not assume the project is software unless the user clearly asks for software, app, website, code, game, backend, frontend, or platform.
+Do not assume the project is a business unless the user clearly wants to sell, launch, earn money, attract customers, or operate a service.
+
+Critical output rules:
+- Return valid JSON only.
+- No Markdown.
+- No code fences.
+- No text outside JSON.
 - Generate exactly {task_count} tasks.
+- Task titles must start with an action verb.
+- Task titles must be specific to the user's idea.
+- Avoid vague titles like "Research", "Plan", "Prepare", "Improve", "Start marketing", or "Create content".
 - Priority must be one of: low, medium, high.
 - estimated_hours must be a number between 0.5 and 40.
 - suggested_order must start at 1 and increase by 1.
-- due_date must be ISO 8601 datetime strings before or on the project deadline.
-- If you are unsure about details, make practical assumptions and state them in the summary/recommendations.
+
+Universal task quality rules:
+Every task description must include these exact sections:
+
+Goal:
+Explain why this task matters.
+
+Steps:
+1. Give the first practical action.
+2. Give the second practical action.
+3. Give the third practical action.
+Add up to 5 steps only when useful.
+
+Deliverable:
+Explain exactly what the user should have after finishing the task.
+
+Done when:
+Explain how the user knows the task is complete.
+
+Important:
+- The task must teach the user what to do.
+- The task must not be only a reminder.
+- The task must not be generic.
+- The task must be understandable by a beginner.
+- The task must move the project forward.
+- If the idea is about selling something, include tasks about offer, audience, pricing, cost, sales, and delivery.
+- If the idea is about creating something, include tasks about requirements, materials/tools, first version, testing, feedback, and final delivery.
+- If the idea is about learning, include tasks about topics, practice, review, exercises, and progress checks.
+- If the idea is about an event, include tasks about goal, people, budget, location, schedule, materials, and follow-up.
+- If the idea is about content, include tasks about audience, content pillars, first posts/videos, publishing schedule, and feedback.
 
 Project context:
 - title: {project.title}
@@ -682,13 +724,13 @@ User idea and requirements:
 
 Return JSON in exactly this shape:
 {{
-  "domain": "short natural domain label, for example mobile_game, restaurant_business, marketing_agency, study_plan, event_planning, general_project",
+  "domain": "short natural label inferred from the user idea",
   "summary": "short summary of the generated plan",
   "tasks": [
     {{
       "suggested_order": 1,
-      "title": "specific task title",
-      "description": "short practical description",
+      "title": "specific action-based task title",
+      "description": "Goal: Explain why this task matters.\\n\\nSteps:\\n1. First practical action.\\n2. Second practical action.\\n3. Third practical action.\\n\\nDeliverable: The exact output the user should have.\\n\\nDone when: How the user knows this task is finished.",
       "priority": "high",
       "estimated_hours": 2.5
     }}
@@ -716,7 +758,12 @@ Milestones:
 """.strip()
 
 
-def _clean_ai_text_field(value: Any, fallback: str, max_length: int = 500) -> str:
+def _clean_ai_text_field(
+    value: Any,
+    fallback: str,
+    max_length: int = 500,
+    preserve_newlines: bool = False,
+) -> str:
     if value is None:
         return fallback
 
@@ -725,7 +772,29 @@ def _clean_ai_text_field(value: Any, fallback: str, max_length: int = 500) -> st
     cleaned = re.sub(r"__(.*?)__", r"\1", cleaned)
     cleaned = re.sub(r"`([^`]*)`", r"\1", cleaned)
     cleaned = cleaned.replace("$1", "")
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    if preserve_newlines:
+        lines = [
+            re.sub(r"[ \t]+", " ", line).strip()
+            for line in cleaned.splitlines()
+        ]
+
+        compact_lines: list[str] = []
+        previous_blank = False
+
+        for line in lines:
+            if not line:
+                if not previous_blank:
+                    compact_lines.append("")
+                previous_blank = True
+                continue
+
+            compact_lines.append(line)
+            previous_blank = False
+
+        cleaned = "\n".join(compact_lines).strip()
+    else:
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
     if not cleaned:
         return fallback
@@ -734,6 +803,7 @@ def _clean_ai_text_field(value: Any, fallback: str, max_length: int = 500) -> st
         cleaned = cleaned[: max_length - 3].rstrip() + "..."
 
     return cleaned
+
 
 
 def _is_bad_ai_task_text(value: str) -> bool:
@@ -751,6 +821,48 @@ def _is_bad_ai_task_text(value: str) -> bool:
     ]
 
     return any(fragment in lowered for fragment in bad_fragments)
+
+
+def _is_actionable_task_description(value: str) -> bool:
+    lowered = value.lower()
+
+    required_sections = [
+        "goal:",
+        "steps:",
+        "deliverable:",
+        "done when:",
+    ]
+
+    has_all_sections = all(section in lowered for section in required_sections)
+    numbered_steps = len(re.findall(r"(?:^|\n)\s*\d+\.", value))
+
+    return has_all_sections and numbered_steps >= 3
+
+
+def _format_actionable_description(
+    title: str,
+    base_description: str,
+    project_context: str,
+) -> str:
+    clean_title = title.strip() or "Complete this task"
+    clean_base = (
+        base_description.strip()
+        or "Complete this task with a clear practical result."
+    )
+    clean_context = project_context.strip() or "this project"
+
+    return (
+        f"Goal: {clean_base}\n\n"
+        "Steps:\n"
+        f"1. Read the project idea again: {clean_context}\n"
+        f"2. Decide what '{clean_title}' means for this specific project.\n"
+        "3. Complete the smallest useful version of this task first.\n"
+        "4. Save the result clearly so you can use it in the next task.\n\n"
+        f"Deliverable: A clear completed output for '{clean_title}' that matches the project idea.\n\n"
+        "Done when: You can show the result, explain why it matters, and use it to continue the project."
+    )
+
+
 
 
 def _coerce_ai_priority(value: Any, fallback: str = "medium") -> str:
@@ -787,6 +899,7 @@ def _build_ai_due_dates(project: Project, task_count: int) -> list[str]:
 def _normalize_ai_plan_response(
     ai_data: dict[str, Any],
     project: Project,
+    input_prompt: str,
     task_count: int,
     include_milestones: bool,
 ) -> dict[str, Any] | None:
@@ -803,6 +916,10 @@ def _normalize_ai_plan_response(
     due_dates = _build_ai_due_dates(project=project, task_count=len(raw_tasks))
     tasks: list[dict[str, Any]] = []
     seen_titles: set[str] = set()
+    project_context = _extract_user_project_context(
+        project=project,
+        input_prompt=input_prompt,
+    )
 
     for index, raw_task in enumerate(raw_tasks):
         if not isinstance(raw_task, dict):
@@ -815,12 +932,28 @@ def _normalize_ai_plan_response(
         )
         description = _clean_ai_text_field(
             raw_task.get("description"),
-            fallback="Complete this step with a clear, useful output.",
-            max_length=700,
+            fallback=(
+                "Goal: Complete this step with a clear practical result.\n\n"
+                "Steps:\n"
+                "1. Understand what this task requires.\n"
+                "2. Complete the smallest useful version.\n"
+                "3. Review the result before moving forward.\n\n"
+                "Deliverable: A finished result for this task.\n\n"
+                "Done when: The result is clear, saved, and useful for the next task."
+            ),
+            max_length=2200,
+            preserve_newlines=True,
         )
 
         if _is_bad_ai_task_text(title) or _is_bad_ai_task_text(description):
             return None
+
+        if not _is_actionable_task_description(description):
+            description = _format_actionable_description(
+                title=title,
+                base_description=description,
+                project_context=project_context,
+            )
 
         normalized_title_key = title.lower()
 
@@ -940,7 +1073,7 @@ def _normalize_ai_plan_response(
         ]
 
     return {
-        "source": "gemini_structured_v1",      
+        "source": "gemini_structured_v2",      
         "domain": domain,
         "summary": summary,
         "project": {
@@ -982,6 +1115,7 @@ def _build_ai_generated_plan(
     return _normalize_ai_plan_response(
         ai_data=parsed,
         project=project,
+        input_prompt=input_prompt,
         task_count=task_count,
         include_milestones=include_milestones,
     )
@@ -1008,8 +1142,8 @@ def _build_local_generated_plan(
         project=project,
         input_prompt=project_context,
     )
-    domain = _detect_project_domain(user_project_context)
-    task_title_templates = _select_task_title_templates(domain)
+    domain = "universal_project"
+    task_title_templates = UNIVERSAL_TASK_PHASES
 
     tasks: list[dict[str, Any]] = []
     assignable_member_ids = [
@@ -1031,9 +1165,12 @@ def _build_local_generated_plan(
             {
                 "suggested_order": index + 1,
                 "title": f"{title_template}{suffix}",
-                "description": _build_task_description_for_domain(
-                    domain=domain,
+                "description": _format_actionable_description(
                     title=title_template,
+                    base_description=(
+                        "Complete this phase in a way that directly matches the user's project idea."
+                    ),
+                    project_context=user_project_context,
                 ),
                 "priority": _priority_for_index(
                     index=index,
@@ -1046,7 +1183,7 @@ def _build_local_generated_plan(
         )
 
     return {
-        "source": "local_rule_based_fallback_v1",
+        "source": "local_universal_fallback_v2",
         "domain": domain,
         "summary": (
             f"Generated a structured fallback plan for '{project.title}' with "
@@ -1118,7 +1255,7 @@ def build_generated_plan(
 
     return {
     **fallback_plan,
-    "source": "local_rule_based_fallback_v1",
+    "source": "local_universal_fallback_v2",
     "summary": (
         f"{fallback_summary} AI provider was unavailable or returned invalid JSON, "
         "so Planora used a safe fallback."
