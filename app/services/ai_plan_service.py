@@ -30,56 +30,61 @@ from app.services.ai_provider_service import generate_ai_reply_from_provider
 
 
 TASK_TITLE_TEMPLATES = [
-    "Write the first clear version of the idea",
-    "Choose the exact first outcome",
-    "List the tools and resources needed",
-    "Create the smallest useful first version",
-    "Test the first result with one real example",
-    "Fix the confusing or broken parts",
-    "Prepare the version to share",
-    "Share it with the first real audience",
-    "Collect feedback and choose the next improvement",
-    "Track what worked and plan the next step",
+    "Define scope and success criteria",
+    "Analyze requirements and constraints",
+    "Design the project structure",
+    "Prepare the implementation plan",
+    "Complete the core project work",
+    "Review and test the work",
+    "Fix issues and improve quality",
+    "Prepare final delivery and documentation",
+    "Evaluate risks and backup plan",
+    "Finalize presentation material",
+    "Collect feedback and adjust",
+    "Submit final version",
 ]
 
 BUSINESS_TASK_TITLE_TEMPLATES = [
-    "Choose the first offer to sell",
-    "Define the first target customer",
-    "Calculate the cost and selling price",
-    "Create the basic brand and sales message",
-    "Find the first supplier or production method",
-    "Prepare the first small batch or service package",
-    "Create the first sales channel",
-    "Set up payment, delivery, and order tracking",
-    "Make the first launch content",
-    "Sell to the first real customers",
-    "Collect feedback and improve the offer",
+    "Define product niche and target customer",
+    "Research competitors and market demand",
+    "Estimate startup budget and pricing",
+    "Choose brand name and visual identity",
+    "Find suppliers or production options",
+    "Plan first product collection",
+    "Create social media content plan",
+    "Set up online sales channel",
+    "Plan delivery, payment, and returns",
+    "Prepare launch campaign",
+    "Prepare inventory and order tracking",
+    "Review launch readiness and backup plan",
 ]
 
 SOFTWARE_TASK_TITLE_TEMPLATES = [
-    "Choose the first usable version to build",
-    "List the main users and user actions",
-    "Sketch the main screens and data needed",
-    "Create the project setup and folder structure",
-    "Build the first working flow",
-    "Add the most important feature",
-    "Test the main user flow",
-    "Fix the first bugs and confusing parts",
-    "Prepare the release build",
-    "Show it to first users and collect feedback",
+    "Define product scope and success criteria",
+    "Analyze user requirements and constraints",
+    "Design the app architecture and data model",
+    "Prepare the implementation roadmap",
+    "Build the core product features",
+    "Test key user flows",
+    "Fix issues and improve quality",
+    "Prepare release notes and documentation",
+    "Evaluate technical risks and backup plan",
+    "Finalize presentation material",
+    "Collect feedback and iterate",
+    "Submit final version",
 ]
 
 UNIVERSAL_TASK_PHASES = [
-    "Write the first clear version of the idea",
-    "Choose the exact first outcome",
-    "List the tools and resources needed",
-    "Create the smallest useful first version",
-    "Test the first result with one real example",
-    "Fix the confusing or broken parts",
-    "Prepare the version to share",
-    "Share it with the first real audience",
-    "Collect feedback and choose the next improvement",
-    "Track what worked and plan the next step",
+    "Clarify the exact outcome",
+    "Identify who this is for",
+    "List the needed resources",
+    "Define the first simple version",
+    "Create the first working result",
+    "Test it with real feedback",
+    "Improve the weak points",
+    "Prepare the final version",
+    "Share or launch it",
+    "Track results and next actions",
 ]
 
 INSTRUCTION_PREFIXES = (
@@ -327,177 +332,152 @@ def _business_task_description(
 ) -> str:
     normalized = title.lower()
 
-    if "offer" in normalized or "sell" in normalized:
+    if "niche" in normalized or "target customer" in normalized:
         return (
-            "Choose one simple product or service to sell first so the launch is focused and easy to test."
+            "Decide what product category you will start with, who your ideal "
+            "customer is, your style or value angle, and why people would buy from you."
         )
 
-    if "target customer" in normalized or "audience" in normalized:
+    if "competitor" in normalized or "market" in normalized:
         return (
-            "Define the exact type of customer you want first, what they need, and why they would choose your offer."
+            "Review similar businesses, their prices, products, content, customer "
+            "comments, and signs of demand."
         )
 
-    if "cost" in normalized or "price" in normalized or "pricing" in normalized:
+    if "budget" in normalized or "pricing" in normalized:
         return (
-            "Calculate the cost of one sale and choose a price that covers cost, delivery, and profit."
+            "List expected costs for samples, stock, packaging, ads, delivery, "
+            "platform fees, and target profit margin."
         )
 
-    if "brand" in normalized or "message" in normalized:
+    if "brand name" in normalized or "visual identity" in normalized:
         return (
-            "Create a simple name, visual direction, and sales message that explains the offer clearly."
+            "Choose a memorable name and define colors, tone, logo direction, "
+            "and the feeling customers should remember."
         )
 
-    if "supplier" in normalized or "production" in normalized or "method" in normalized:
+    if "supplier" in normalized or "production" in normalized or "manufacturing" in normalized:
         return (
-            "Find how you will make or source the offer and compare cost, quality, and delivery time."
+            "Compare at least 3 suppliers or production options and note prices, "
+            "minimum order quantity, quality, and delivery time."
         )
 
-    if "batch" in normalized or "package" in normalized or "collection" in normalized:
+    if "collection" in normalized:
         return (
-            "Prepare a small first version of the product or service so you can test demand before scaling."
+            "Choose the first products to launch, possible variants, sample needs, "
+            "and a small starting quantity to test demand."
         )
 
-    if "sales channel" in normalized or "online" in normalized or "channel" in normalized:
+    if "social media" in normalized or "content" in normalized:
         return (
-            "Choose the simplest place customers can see the offer and contact you to order."
+            "Plan posts, product photos, short videos, launch messages, offers, "
+            "and how customers will contact or order."
         )
 
-    if "delivery" in normalized or "payment" in normalized or "tracking" in normalized:
+    if "sales channel" in normalized or "online" in normalized:
         return (
-            "Set up the basic order process, including payment method, delivery option, and order tracking."
+            "Choose how customers will buy, such as social DMs, marketplace, "
+            "simple online store, payment links, or a website."
         )
 
-    if "launch content" in normalized or "content" in normalized:
+    if "delivery" in normalized or "payment" in normalized or "returns" in normalized:
         return (
-            "Create the first photos, captions, or messages needed to show the offer and invite people to buy."
+            "Define payment methods, delivery options, shipping fees, return rules, "
+            "and customer confirmation messages."
         )
 
-    if "first real customers" in normalized or "customers" in normalized:
+    if "launch campaign" in normalized:
         return (
-            "Reach out to a small group of real people and try to get the first orders or commitments."
+            "Create a simple launch plan with first posts, offers, outreach, launch "
+            "date, and customer follow-up."
         )
 
-    if "feedback" in normalized:
+    if "inventory" in normalized or "tracking" in normalized:
         return (
-            "Ask early customers what was clear, what was confusing, and what should be improved first."
+            "Set up a simple tracker for products, quantities, costs, sales, "
+            "and reorder alerts."
         )
 
     return (
-        "Complete this business step by producing one clear output that helps you sell, test, or improve the offer."
+        "Turn this business step into a small, measurable action with a clear output, "
+        "deadline, and next step."
     )
+
 
 def _software_task_description(
     title: str,
 ) -> str:
     normalized = title.lower()
 
-    if "first usable version" in normalized or "scope" in normalized:
+    if "scope" in normalized:
         return (
-            "Choose the smallest useful version to build first and remove features that can wait."
+            "Define target users, core use cases, success metrics, and the first "
+            "version's must-have features."
         )
 
-    if "users" in normalized or "user actions" in normalized or "requirements" in normalized:
+    if "requirements" in normalized:
         return (
-            "List who will use it and the exact actions they must be able to complete in the first version."
+            "Write the user stories, constraints, dependencies, and acceptance "
+            "criteria needed before implementation."
         )
 
-    if "screens" in normalized or "data" in normalized or "architecture" in normalized:
+    if "architecture" in normalized or "data model" in normalized:
         return (
-            "Sketch the main screens, data fields, and flow before writing the full implementation."
+            "Design the technical structure, data entities, integrations, and main "
+            "screens or services."
         )
 
-    if "setup" in normalized or "folder" in normalized or "roadmap" in normalized:
+    if "roadmap" in normalized:
         return (
-            "Create the project setup, organize the files, and prepare the tools needed to start building."
+            "Break the build into milestones, estimate the work, and order tasks "
+            "around the deadline."
         )
 
-    if "working flow" in normalized or "features" in normalized:
+    if "features" in normalized:
         return (
-            "Build the first complete flow that proves the product can work from start to finish."
+            "Implement the smallest complete set of features that proves the main "
+            "product workflow."
         )
 
-    if "important feature" in normalized:
+    if "test" in normalized:
         return (
-            "Build the one feature that matters most for the first usable version."
-        )
-
-    if "test" in normalized or "user flow" in normalized:
-        return (
-            "Test the main flow like a real user and write down anything broken or confusing."
-        )
-
-    if "bugs" in normalized or "confusing" in normalized or "quality" in normalized:
-        return (
-            "Fix the most obvious bugs and confusing parts before adding more features."
-        )
-
-    if "release" in normalized or "documentation" in normalized:
-        return (
-            "Prepare the build, notes, screenshots, or instructions needed to share the first version."
-        )
-
-    if "feedback" in normalized or "first users" in normalized:
-        return (
-            "Show the first version to real users and collect specific feedback for the next improvement."
+            "Test the critical user journeys, edge cases, and expected error states "
+            "before release."
         )
 
     return (
-        "Complete this software step with one clear output that can be built, tested, or shown."
+        "Complete this software delivery step with a clear output, owner, and testable "
+        "result."
     )
+
 
 def _general_task_description(
     title: str,
 ) -> str:
     normalized = title.lower()
 
-    if "first clear version" in normalized or "idea" in normalized:
+    if "scope" in normalized or "requirements" in normalized:
         return (
-            "Write the idea in a simple way so you know exactly what you are trying to make or achieve."
+            "Clarify the expected outcome, constraints, resources, and what success "
+            "will look like."
         )
 
-    if "first outcome" in normalized or "outcome" in normalized:
+    if "review" in normalized or "test" in normalized:
         return (
-            "Choose the first result you want to finish instead of trying to complete everything at once."
+            "Check the work against the success criteria, collect feedback, and list "
+            "the fixes needed."
         )
 
-    if "tools" in normalized or "resources" in normalized:
+    if "final" in normalized or "submit" in normalized:
         return (
-            "List the tools, materials, information, people, or accounts needed to complete the first version."
-        )
-
-    if "smallest useful" in normalized or "first version" in normalized:
-        return (
-            "Create the smallest version that proves the idea can work."
-        )
-
-    if "test" in normalized or "example" in normalized:
-        return (
-            "Try the first result with one real example and check what works or fails."
-        )
-
-    if "fix" in normalized or "broken" in normalized or "confusing" in normalized:
-        return (
-            "Fix the parts that make the result unclear, incomplete, or hard to use."
-        )
-
-    if "share" in normalized or "audience" in normalized:
-        return (
-            "Prepare and share the result with the first person or group who can react to it."
-        )
-
-    if "feedback" in normalized or "improvement" in normalized:
-        return (
-            "Collect simple feedback and choose the next useful improvement."
-        )
-
-    if "track" in normalized or "next step" in normalized:
-        return (
-            "Write what worked, what did not work, and what you will do next."
+            "Prepare the final version, confirm all required pieces are complete, "
+            "and package it for delivery."
         )
 
     return (
-        "Complete this step with one clear output that proves progress."
+        "Complete this step with a specific outcome, short checklist, and deadline."
     )
+
 
 def _build_task_description_for_domain(
     domain: str,
@@ -683,18 +663,12 @@ def _build_structured_ai_plan_prompt(
 You are Planora AI, an expert project planner.
 
 Your job:
-Read the user's project idea carefully and turn it into practical beginner-friendly tasks.
-The user may enter any kind of idea: business, app, game, content, learning goal, event, service, product, school project, personal project, or something else.
-You must create the right tasks for the exact idea instead of using generic project-management phases.
+Create a practical task plan for the user's real idea.
+You must understand the idea first, then generate useful tasks that help the user move from idea to execution.
 
-Main behavior:
-- Understand what the user is trying to create, sell, learn, organize, publish, build, or improve.
-- Generate tasks that make the user know what to do next.
-- The first task must be easy enough to start in 10 minutes.
-- Every task must produce something visible, written, chosen, built, tested, shared, sold, or ready to use.
-- Do not rely on fixed categories.
-- Do not assume the project is software unless the user clearly asks for software, app, website, code, game, backend, frontend, API, or platform.
-- Do not assume the project is a business unless the user clearly wants to sell, launch, earn money, attract customers, or operate a service.
+Do not rely on fixed categories.
+Do not assume the project is software unless the user clearly asks for software, app, website, code, game, backend, frontend, or platform.
+Do not assume the project is a business unless the user clearly wants to sell, launch, earn money, attract customers, or operate a service.
 
 Critical output rules:
 - Return valid JSON only.
@@ -704,63 +678,40 @@ Critical output rules:
 - Generate exactly {task_count} tasks.
 - Task titles must start with an action verb.
 - Task titles must be specific to the user's idea.
+- Avoid vague titles like "Research", "Plan", "Prepare", "Improve", "Start marketing", or "Create content".
 - Priority must be one of: low, medium, high.
 - estimated_hours must be a number between 0.5 and 40.
 - suggested_order must start at 1 and increase by 1.
 
-Forbidden task behavior:
-- Do not copy the project idea into task descriptions.
-- Do not use the same description for multiple tasks.
-- Do not write descriptions that only explain the project idea.
-- Do not create vague tasks like "Research", "Planning", "Analysis", "Preparation", "Strategy", "Review", or "Improve" unless the title and description say exactly what the user must do.
-- Do not use professional project-management language when a beginner would not understand it.
-- Do not make tasks that require big money, a full team, legal setup, or advanced tools unless the user asked for that.
-- Do not tell the user to do everything at once.
-
-Good title examples:
-- Choose the first food item to sell
-- Calculate the cost of one order
-- Create the first playable scene
-- Add basic player movement
-- Write the first video script
-- Set up the first customer order form
-- Build the login screen
-- Test the first version with 3 people
-
-Bad title examples:
-- Research
-- Planning
-- Analyze requirements
-- Define scope
-- Prepare strategy
-- Improve quality
-- Review project
-
-Every task description must use these exact sections:
+Universal task quality rules:
+Every task description must include these exact sections:
 
 Goal:
-One simple sentence explaining why this task matters.
+Explain why this task matters.
 
 Steps:
-1. First practical action the user can do immediately.
-2. Second practical action.
-3. Third practical action.
-Add step 4 or 5 only if useful.
+1. Give the first practical action.
+2. Give the second practical action.
+3. Give the third practical action.
+Add up to 5 steps only when useful.
 
 Deliverable:
-The exact thing the user should have after finishing the task.
+Explain exactly what the user should have after finishing the task.
 
 Done when:
-A clear condition that proves this task is complete.
+Explain how the user knows the task is complete.
 
-Idea-specific guidance:
-- If the idea is about selling something, include tasks about first offer, audience, price, cost, sales channel, payment, delivery, first customers, and feedback.
-- If the idea is about creating a game, include tasks about first simple game idea, engine/tool, playable scene, player action, core mechanic, level/round, win/lose condition, and testing.
-- If the idea is about creating an app or website, include tasks about first version, users, screens, data, setup, main flow, testing, and release.
-- If the idea is about content, include tasks about audience, topic pillars, first script/post, publishing schedule, feedback, and improvement.
-- If the idea is about learning, include tasks about topics, practice exercises, small projects, review, and progress checks.
-- If the idea is about an event, include tasks about goal, guests, budget, location, schedule, materials, invitations, and follow-up.
-- If the idea does not fit a category, still create practical tasks that help the user start and finish the first useful version.
+Important:
+- The task must teach the user what to do.
+- The task must not be only a reminder.
+- The task must not be generic.
+- The task must be understandable by a beginner.
+- The task must move the project forward.
+- If the idea is about selling something, include tasks about offer, audience, pricing, cost, sales, and delivery.
+- If the idea is about creating something, include tasks about requirements, materials/tools, first version, testing, feedback, and final delivery.
+- If the idea is about learning, include tasks about topics, practice, review, exercises, and progress checks.
+- If the idea is about an event, include tasks about goal, people, budget, location, schedule, materials, and follow-up.
+- If the idea is about content, include tasks about audience, content pillars, first posts/videos, publishing schedule, and feedback.
 
 Project context:
 - title: {project.title}
@@ -779,7 +730,7 @@ Return JSON in exactly this shape:
     {{
       "suggested_order": 1,
       "title": "specific action-based task title",
-      "description": "Goal: Explain why this exact task matters.\\n\\nSteps:\\n1. First practical action.\\n2. Second practical action.\\n3. Third practical action.\\n\\nDeliverable: The exact output the user should have.\\n\\nDone when: How the user knows this task is finished.",
+      "description": "Goal: Explain why this task matters.\\n\\nSteps:\\n1. First practical action.\\n2. Second practical action.\\n3. Third practical action.\\n\\nDeliverable: The exact output the user should have.\\n\\nDone when: How the user knows this task is finished.",
       "priority": "high",
       "estimated_hours": 2.5
     }}
@@ -805,6 +756,7 @@ Return JSON in exactly this shape:
 Milestones:
 {"Include 2-4 milestones." if include_milestones else "Return an empty milestones array."}
 """.strip()
+
 
 def _clean_ai_text_field(
     value: Any,
@@ -887,6 +839,7 @@ def _is_actionable_task_description(value: str) -> bool:
     return has_all_sections and numbered_steps >= 3
 
 
+
 def _normalize_comparison_text(value: str) -> str:
     return re.sub(r"\s+", " ", value.strip().lower())
 
@@ -955,6 +908,27 @@ def _description_key(description: str) -> str:
     return cleaned[:500]
 
 
+def _description_is_too_generic(description: str) -> bool:
+    lowered = description.lower()
+
+    generic_fragments = [
+        "focus only on this task",
+        "decide the smallest useful result",
+        "complete that result without adding extra",
+        "check that the result is clear",
+        "a clear finished output for",
+        "read the project idea and decide what",
+        "write the exact output needed for",
+        "create the smallest useful version of that output",
+        "remove anything that belongs to a later version",
+        "save the result so it can be used in the next task",
+    ]
+
+    matches = sum(fragment in lowered for fragment in generic_fragments)
+
+    return matches >= 2
+
+
 def _is_low_quality_task_title(title: str) -> bool:
     normalized = _normalize_comparison_text(title)
     generic_titles = {
@@ -978,27 +952,31 @@ def _format_actionable_description(
     project_context: str,
 ) -> str:
     clean_title = title.strip() or "Complete this task"
-    clean_base = base_description.strip()
+    clean_base = (
+        base_description.strip()
+        or f"Complete '{clean_title}' with one clear practical result."
+    )
+    clean_context = re.sub(r"\s+", " ", project_context.strip())
 
-    if (
-        not clean_base
-        or _is_bad_ai_task_text(clean_base)
-        or _description_repeats_project_idea(
-            description=clean_base,
-            project_context=project_context,
-        )
-    ):
-        clean_base = f"Complete '{clean_title}' with a clear practical result."
+    if len(clean_context) > 180:
+        clean_context = clean_context[:177].rstrip() + "..."
+
+    context_line = (
+        f" Use this project context while doing it: {clean_context}"
+        if clean_context
+        else ""
+    )
 
     return (
         f"Goal: {clean_base}\n\n"
         "Steps:\n"
-        f"1. Focus only on this task: {clean_title}.\n"
-        "2. Decide the smallest useful result this task should produce.\n"
-        "3. Complete that result without adding extra features or extra work.\n"
-        "4. Check that the result is clear, saved, and ready for the next task.\n\n"
-        f"Deliverable: A clear finished output for '{clean_title}'.\n\n"
-        "Done when: You have something visible, written, chosen, built, tested, or ready to use."
+        f"1. Write what '{clean_title}' means for this exact project, not for a generic project.{context_line}\n"
+        "2. List the concrete items, fields, screens, products, people, or actions needed for this task.\n"
+        "3. Create the smallest usable output for this task using those concrete details.\n"
+        "4. Remove anything that belongs to a later version so the task stays easy to finish.\n"
+        "5. Check that the output can be used directly in the next task.\n\n"
+        f"Deliverable: A project-specific output for '{clean_title}' that can be used immediately.\n\n"
+        "Done when: The output is clear, specific to this idea, and ready to guide the next step."
     )
 
 
@@ -1031,6 +1009,184 @@ def _build_ai_due_dates(project: Project, task_count: int) -> list[str]:
         due_date.isoformat()
         for due_date in _build_due_dates(project=project, task_count=task_count)
     ]
+
+
+def _build_task_description_repair_prompt(
+    project: Project,
+    input_prompt: str,
+    tasks: list[dict[str, Any]],
+) -> str:
+    project_context = _extract_user_project_context(
+        project=project,
+        input_prompt=input_prompt,
+    )
+    task_payload = [
+        {
+            "suggested_order": task.get("suggested_order"),
+            "title": task.get("title"),
+            "current_description": task.get("description"),
+        }
+        for task in tasks
+    ]
+
+    return f"""
+You are Planora AI.
+
+The previous task descriptions were too generic.
+Rewrite only the task descriptions so every task is specific to the user's exact project idea.
+
+Project idea and requirements:
+{project_context}
+
+Tasks to repair:
+{json.dumps(task_payload, ensure_ascii=False, indent=2)}
+
+Rules:
+- Keep the same suggested_order values.
+- Keep the same titles.
+- Rewrite every description to be project-specific.
+- Do not repeat the same steps for every task.
+- Do not copy the project idea as the description.
+- Use simple beginner-friendly language.
+- Each task must produce something visible, written, built, tested, chosen, shared, sold, or ready to use.
+- Make the steps concrete for this exact idea. For example, if the idea is a homework app, mention homework fields, subjects, due dates, reminders, dashboard, filters, or completed status where relevant.
+
+Every description must use this exact structure:
+
+Goal: One simple sentence explaining why this exact task matters.
+
+Steps:
+1. First practical project-specific action.
+2. Second practical project-specific action.
+3. Third practical project-specific action.
+4. Optional fourth project-specific action when useful.
+
+Deliverable: The exact output the user should have after finishing this task.
+
+Done when: A clear condition that proves this task is complete.
+
+Return valid JSON only in this exact shape:
+{{
+  "tasks": [
+    {{
+      "suggested_order": 1,
+      "title": "same title",
+      "description": "Goal: ...\n\nSteps:\n1. ...\n2. ...\n3. ...\n\nDeliverable: ...\n\nDone when: ..."
+    }}
+  ]
+}}
+""".strip()
+
+
+def _generated_plan_has_generic_descriptions(generated_plan: dict[str, Any]) -> bool:
+    tasks = generated_plan.get("tasks")
+
+    if not isinstance(tasks, list):
+        return False
+
+    return any(
+        isinstance(task, dict)
+        and _description_is_too_generic(str(task.get("description") or ""))
+        for task in tasks
+    )
+
+
+def _repair_generic_task_descriptions(
+    generated_plan: dict[str, Any],
+    project: Project,
+    input_prompt: str,
+) -> dict[str, Any]:
+    if not _generated_plan_has_generic_descriptions(generated_plan):
+        return generated_plan
+
+    tasks = generated_plan.get("tasks")
+
+    if not isinstance(tasks, list) or not tasks:
+        return generated_plan
+
+    prompt = _build_task_description_repair_prompt(
+        project=project,
+        input_prompt=input_prompt,
+        tasks=tasks,
+    )
+    provider_reply = generate_ai_reply_from_provider(prompt)
+
+    if provider_reply is None:
+        return generated_plan
+
+    parsed = _parse_json_object(provider_reply)
+
+    if parsed is None or not isinstance(parsed.get("tasks"), list):
+        return generated_plan
+
+    project_context = _extract_user_project_context(
+        project=project,
+        input_prompt=input_prompt,
+    )
+    repaired_by_order: dict[int, str] = {}
+
+    for raw_task in parsed["tasks"]:
+        if not isinstance(raw_task, dict):
+            continue
+
+        try:
+            suggested_order = int(raw_task.get("suggested_order"))
+        except (TypeError, ValueError):
+            continue
+
+        description = _clean_ai_text_field(
+            raw_task.get("description"),
+            fallback="",
+            max_length=2200,
+            preserve_newlines=True,
+        )
+
+        if not description:
+            continue
+
+        if not _is_actionable_task_description(description):
+            continue
+
+        if _description_repeats_project_idea(description, project_context):
+            continue
+
+        if _description_is_too_generic(description):
+            continue
+
+        repaired_by_order[suggested_order] = description
+
+    if not repaired_by_order:
+        return generated_plan
+
+    repaired_tasks: list[dict[str, Any]] = []
+
+    for task in tasks:
+        if not isinstance(task, dict):
+            repaired_tasks.append(task)
+            continue
+
+        suggested_order = int(task.get("suggested_order") or len(repaired_tasks) + 1)
+        repaired_description = repaired_by_order.get(suggested_order)
+
+        if repaired_description is None:
+            repaired_tasks.append(task)
+            continue
+
+        repaired_tasks.append(
+            {
+                **task,
+                "description": repaired_description,
+            }
+        )
+
+    source = str(generated_plan.get("source", "gemini_structured_v2"))
+
+    return {
+        **generated_plan,
+        "source": f"{source}_description_repaired",
+        "tasks": repaired_tasks,
+        "description_repair_applied": True,
+    }
 
 
 def _normalize_ai_plan_response(
@@ -1096,13 +1252,18 @@ def _normalize_ai_plan_response(
                 description=description,
                 project_context=project_context,
             )
+            or _description_is_too_generic(description)
             or description_key in seen_descriptions
         )
 
         if needs_description_rewrite:
+            fallback_domain = _detect_project_domain(project_context)
             description = _format_actionable_description(
                 title=title,
-                base_description="Complete this task with a clear practical result.",
+                base_description=_build_task_description_for_domain(
+                    domain=fallback_domain,
+                    title=title,
+                ),
                 project_context=project_context,
             )
             description_key = _description_key(description)
@@ -1114,9 +1275,13 @@ def _normalize_ai_plan_response(
             normalized_title_key = title.lower()
 
             if needs_description_rewrite:
+                fallback_domain = _detect_project_domain(project_context)
                 description = _format_actionable_description(
                     title=title,
-                    base_description="Complete this task with a clear practical result.",
+                    base_description=_build_task_description_for_domain(
+                        domain=fallback_domain,
+                        title=title,
+                    ),
                     project_context=project_context,
                 )
                 description_key = _description_key(description)
@@ -1234,7 +1399,7 @@ def _normalize_ai_plan_response(
         ]
 
     return {
-        "source": "gemini_structured_v2",      
+        "source": "gemini_structured_v3",
         "domain": domain,
         "summary": summary,
         "project": {
@@ -1273,12 +1438,21 @@ def _build_ai_generated_plan(
     if parsed is None:
         return None
 
-    return _normalize_ai_plan_response(
+    normalized_plan = _normalize_ai_plan_response(
         ai_data=parsed,
         project=project,
         input_prompt=input_prompt,
         task_count=task_count,
         include_milestones=include_milestones,
+    )
+
+    if normalized_plan is None:
+        return None
+
+    return _repair_generic_task_descriptions(
+        generated_plan=normalized_plan,
+        project=project,
+        input_prompt=input_prompt,
     )
 
 
@@ -1345,7 +1519,7 @@ def _build_local_generated_plan(
         )
 
     return {
-        "source": "local_dynamic_fallback_v3",
+        "source": "local_dynamic_fallback_v4",
         "domain": domain,
         "summary": (
             f"Generated a structured fallback plan for '{project.title}' with "
@@ -1417,7 +1591,7 @@ def build_generated_plan(
 
     return {
     **fallback_plan,
-    "source": "local_dynamic_fallback_v3",
+    "source": "local_dynamic_fallback_v4",
     "summary": (
         f"{fallback_summary} AI provider was unavailable or returned invalid JSON, "
         "so Planora used a safe fallback."
