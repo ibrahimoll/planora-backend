@@ -73,18 +73,17 @@ def login_with_google(db: Session, data: SocialLoginRequest) -> str:
         or google_user.email.split("@")[0]
     )
 
-    if data.username is None:
-        raise ValueError("Username is required for new Google accounts.")
+    username = data.username or generate_unique_username(db, google_user.email)
 
     existing_username = db.scalar(
-        select(User).where(User.username == data.username)
+        select(User).where(User.username == username)
     )
 
     if existing_username is not None:
         raise ValueError("Username is already taken.")
 
     user = User(
-        username=data.username,
+        username=username,
         email=google_user.email,
         password_hash=create_unusable_password_hash(),
         full_name=full_name,
@@ -109,3 +108,22 @@ def login_with_google(db: Session, data: SocialLoginRequest) -> str:
     db.refresh(user)
 
     return create_access_token(user.user_id)
+
+
+def generate_unique_username(db: Session, email: str) -> str:
+    base = email.split("@")[0].lower()
+    base = "".join(ch for ch in base if ch.isalnum() or ch == "_")
+
+    if len(base) < 3:
+        base = f"user{secrets.randbelow(9999):04d}"
+
+    candidate = base[:50]
+    suffix = 1
+
+    while db.scalar(select(User).where(User.username == candidate)) is not None:
+        suffix_text = str(suffix)
+        max_base_length = 50 - len(suffix_text) - 1
+        candidate = f"{base[:max_base_length]}_{suffix_text}"
+        suffix += 1
+
+    return candidate
