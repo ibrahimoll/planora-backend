@@ -23,7 +23,7 @@ SET row_security = off;
 -- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-INSERT INTO public.users (user_id, username, email, password_hash, full_name, role, is_active, profile_pic, created_at, is_email_verified) VALUES (2, 'iolleik', 'ibrahimolleik3@gmail.com', '$argon2id$v=19$m=65536,t=3,p=4$rx3bHZxrTaVGDTY7nqxoRA$5/03aheTsEtosELJKRS/hQGnODeQtQfBlrCMF1Q7EaA', 'Ibrahim Olleik', 'user', true, 'https://lh3.googleusercontent.com/a/ACg8ocJoArCZIhVodZBSW0gvQk_4u4DzMIRE0urZN2qJxMpNun48cA=s96-c', '2026-05-14 11:46:54.551637+03', true);
+INSERT INTO public.users (user_id, username, email, password_hash, full_name, role, is_active, profile_pic, created_at, is_email_verified) VALUES (2, 'iolleik', 'planora.verify@gmail.com', '$argon2id$v=19$m=65536,t=3,p=4$rx3bHZxrTaVGDTY7nqxoRA$5/03aheTsEtosELJKRS/hQGnODeQtQfBlrCMF1Q7EaA', 'Ibrahim Olleik', 'user', true, 'https://lh3.googleusercontent.com/a/ACg8ocJoArCZIhVodZBSW0gvQk_4u4DzMIRE0urZN2qJxMpNun48cA=s96-c', '2026-05-14 11:46:54.551637+03', true);
 INSERT INTO public.users (user_id, username, email, password_hash, full_name, role, is_active, profile_pic, created_at, is_email_verified) VALUES (1, 'admin', 'planora.verify@gmail.com', '$argon2id$v=19$m=65536,t=3,p=4$AoJZug4PzB3sA1Ta41nmWg$xF6Gaebb/d3C8V5OZm9f0t+d/kiJ3ONbUjRZXpl55Jg', 'Planora', 'admin', true, NULL, '2026-05-13 15:09:54.422676+03', true);
 INSERT INTO public.users (user_id, username, email, password_hash, full_name, role, is_active, profile_pic, created_at, is_email_verified) VALUES (6, 'Mirage', 'olliekhussien59@gmail.com', '$argon2id$v=19$m=65536,t=3,p=4$IizAMccyKRHIvsmkHdN9TA$miCa0tcE5x06EG2lW3hiBkrNkten0GhkbcaJyYcSXbg', 'Hussien Olliek', 'user', true, 'https://api.dicebear.com/9.x/initials/svg?seed=Hussien%20Olliek', '2026-05-20 17:02:40.39871+03', true);
 
@@ -386,7 +386,7 @@ INSERT INTO public.notifications (notification_id, user_id, title, message, is_r
 -- Data for Name: oauth_accounts; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-INSERT INTO public.oauth_accounts (oauth_account_id, user_id, provider, provider_user_id, provider_email, created_at) VALUES (1, 2, 'google', '108645349434868867222', 'ibrahimolleik3@gmail.com', '2026-05-14 11:46:54.551637+03');
+INSERT INTO public.oauth_accounts (oauth_account_id, user_id, provider, provider_user_id, provider_email, created_at) VALUES (1, 2, 'google', '108645349434868867222', 'planora.verify@gmail.com', '2026-05-14 11:46:54.551637+03');
 
 
 --
