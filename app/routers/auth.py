@@ -266,6 +266,11 @@ def google_login(
     data: SocialLoginRequest,
     db: DBSession,
 ) -> TokenResponse:
+    started_at = perf_counter()
+    client_host = request.client.host if request.client else "unknown"
+
+    logger.info("auth.google.start client_host=%s", client_host)
+
     check_rate_limit(
         request,
         "auth:google",
@@ -277,6 +282,13 @@ def google_login(
         access_token = login_with_google(db, data)
     except ValueError as e:
         error_message = str(e)
+        total_ms = (perf_counter() - started_at) * 1000
+
+        logger.info(
+            "auth.google.finish result=failure reason=%s total_ms=%.2f",
+            error_message,
+            total_ms,
+        )
 
         if error_message == "Invalid Google token.":
             raise HTTPException(
@@ -301,6 +313,9 @@ def google_login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=error_message,
         ) from e
+
+    total_ms = (perf_counter() - started_at) * 1000
+    logger.info("auth.google.finish result=success total_ms=%.2f", total_ms)
 
     return TokenResponse(
         access_token=access_token,

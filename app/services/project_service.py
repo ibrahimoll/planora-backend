@@ -413,6 +413,98 @@ def add_project_member(
     return member
 
 
+def convert_personal_project_to_team_and_invite(
+    db: Session,
+    project: Project,
+    current_user: User,
+    user_to_add: User,
+    role: ProjectAssignableRole,
+) -> Project:
+    existing_project_memberships = get_project_members(
+        db=db,
+        project_id=project.project_id,
+    )
+    team_name = f"{project.title} Team"
+    team = Team(
+        name=team_name[:100],
+        created_by=current_user.user_id,
+    )
+
+    db.add(team)
+    db.flush()
+
+    team_member_roles: dict[int, str] = {
+        current_user.user_id: "owner",
+        user_to_add.user_id: "member",
+    }
+
+    for membership in existing_project_memberships:
+        if membership.user_id == current_user.user_id:
+            team_member_roles[membership.user_id] = "owner"
+        elif membership.role == ProjectMemberRole.manager.value:
+            team_member_roles.setdefault(membership.user_id, "admin")
+        else:
+            team_member_roles.setdefault(membership.user_id, "member")
+
+    for user_id, team_role in team_member_roles.items():
+        db.add(
+            TeamMember(
+                team_id=team.team_id,
+                user_id=user_id,
+                role=team_role,
+            )
+        )
+
+    owner_project_membership = get_project_membership(
+        db=db,
+        project_id=project.project_id,
+        user_id=current_user.user_id,
+    )
+
+    if owner_project_membership is None:
+        db.add(
+            ProjectMember(
+                project_id=project.project_id,
+                user_id=current_user.user_id,
+                role=ProjectMemberRole.owner.value,
+            )
+        )
+    elif owner_project_membership.role != ProjectMemberRole.owner.value:
+        owner_project_membership.role = ProjectMemberRole.owner.value
+
+    invited_project_member = ProjectMember(
+        project_id=project.project_id,
+        user_id=user_to_add.user_id,
+        role=role.value,
+    )
+    db.add(invited_project_member)
+
+    project.team_id = team.team_id
+    project.project_type = "team"
+
+    create_activity_log(
+        db=db,
+        project=project,
+        actor=current_user,
+        event_type=ActivityLogEventType.PROJECT_UPDATED,
+        message=(
+            f"{current_user.full_name} converted project '{project.title}' "
+            "to a team project."
+        ),
+        metadata={
+            "project_type": project.project_type,
+            "team_id": team.team_id,
+            "invited_user_id": user_to_add.user_id,
+        },
+        commit=False,
+    )
+
+    db.commit()
+    db.refresh(project)
+
+    return project
+
+
 def get_project_membership(
     db: Session,
     project_id: int,

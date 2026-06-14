@@ -696,6 +696,102 @@ def test_generate_ai_plan_endpoint_does_not_overwrite_existing_tasks_by_default(
     assert len(tasks_response.json()) == 4
 
 
+def test_generate_ai_plan_endpoint_skips_duplicate_existing_tasks(
+    client: TestClient,
+    db: Session,
+    monkeypatch,
+):
+    _, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_generate_duplicate_skip",
+        email="ai_generate_duplicate_skip@example.com",
+    )
+
+    project = create_personal_project(
+        client=client,
+        token=token,
+        title="AI Duplicate Prevention",
+    )
+    existing_task = create_personal_task(
+        client=client,
+        token=token,
+        project_id=project["project_id"],
+        title="Define launch checklist",
+    )
+
+    def fake_generated_plan(**kwargs):
+        return {
+            "source": "test",
+            "domain": "general",
+            "summary": "Added only missing work.",
+            "tasks": [
+                {
+                    "suggested_order": 1,
+                    "title": "Define launch checklist",
+                    "description": "Duplicate exact title.",
+                    "priority": "medium",
+                    "estimated_hours": 1,
+                    "due_date": project["deadline"],
+                },
+                {
+                    "suggested_order": 2,
+                    "title": "Define the launch checklist",
+                    "description": "Duplicate similar title.",
+                    "priority": "medium",
+                    "estimated_hours": 1,
+                    "due_date": project["deadline"],
+                },
+                {
+                    "suggested_order": 3,
+                    "title": "Validate launch schedule",
+                    "description": "A genuinely complementary task.",
+                    "priority": "high",
+                    "estimated_hours": 2,
+                    "due_date": project["deadline"],
+                },
+            ],
+            "milestones": [],
+            "risks": [],
+            "recommendations": [],
+        }
+
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.build_generated_plan",
+        fake_generated_plan,
+    )
+
+    response = client.post(
+        f"/projects/{project['project_id']}/ai-plan/generate",
+        headers=auth_headers(token),
+        json={
+            "prompt": "Improve this plan without duplicate tasks.",
+            "generate_tasks": True,
+            "overwrite_existing_tasks": False,
+            "preferred_task_count": 3,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    data = response.json()
+    assert data["tasks_created"] == 1
+    assert data["tasks_skipped_as_duplicates"] == 2
+    assert data["improvement_summary"] == "Added only missing work."
+    assert data["tasks"][0]["title"] == "Validate launch schedule"
+    assert db.get(Task, existing_task["task_id"]) is not None
+
+    tasks_response = client.get(
+        f"/projects/{project['project_id']}/tasks",
+        headers=auth_headers(token),
+    )
+
+    assert tasks_response.status_code == 200, tasks_response.text
+    assert sorted(task["title"] for task in tasks_response.json()) == [
+        "Define launch checklist",
+        "Validate launch schedule",
+    ]
+
+
 def test_team_project_member_can_generate_ai_plan_endpoint(
     client: TestClient,
     db: Session,

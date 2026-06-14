@@ -243,6 +243,156 @@ def test_owner_invites_personal_project_collaborator(
     assert db.get(Project, project["project_id"]) is None
 
 
+def test_owner_invites_personal_project_collaborator_by_converting_to_team(
+    client: TestClient,
+    db: Session,
+) -> None:
+    owner_id, owner_token = create_verified_user_and_login(
+        client,
+        db,
+        username="convertpersonalowner",
+        email="convertpersonalowner@example.com",
+    )
+    member_id, member_token = create_verified_user_and_login(
+        client,
+        db,
+        username="convertpersonalmember",
+        email="convertpersonalmember@example.com",
+    )
+
+    project = create_personal_project(
+        client,
+        owner_token,
+        title="Convert Me",
+    )
+    task = create_personal_task(
+        client,
+        owner_token,
+        project_id=project["project_id"],
+        title="Task survives conversion",
+    )
+
+    response = client.post(
+        f"/projects/{project['project_id']}/members/invite-and-convert",
+        headers=auth_headers(owner_token),
+        json={
+            "email_or_username": "convertpersonalmember@example.com",
+            "role": "member",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    converted_project = response.json()
+    assert converted_project["project_id"] == project["project_id"]
+    assert converted_project["project_type"] == "team"
+    assert converted_project["team_id"] is not None
+
+    team_id = converted_project["team_id"]
+
+    owner_personal_response = client.get(
+        f"/projects/{project['project_id']}",
+        headers=auth_headers(owner_token),
+    )
+    assert owner_personal_response.status_code == 404
+
+    member_team_project_response = client.get(
+        f"/teams/{team_id}/projects/{project['project_id']}",
+        headers=auth_headers(member_token),
+    )
+    assert member_team_project_response.status_code == 200
+    assert member_team_project_response.json()["project_type"] == "team"
+
+    team_members_response = client.get(
+        f"/teams/{team_id}/members",
+        headers=auth_headers(owner_token),
+    )
+    assert team_members_response.status_code == 200
+    team_members = team_members_response.json()
+    assert any(
+        item["user_id"] == owner_id and item["role"] == "owner"
+        for item in team_members
+    )
+    assert any(
+        item["user_id"] == member_id and item["role"] == "member"
+        for item in team_members
+    )
+
+    project_members_response = client.get(
+        f"/teams/{team_id}/projects/{project['project_id']}/members",
+        headers=auth_headers(member_token),
+    )
+    assert project_members_response.status_code == 200
+    project_members = project_members_response.json()
+    assert any(
+        item["user_id"] == owner_id and item["role"] == "owner"
+        for item in project_members
+    )
+    assert any(
+        item["user_id"] == member_id and item["role"] == "member"
+        for item in project_members
+    )
+
+    member_tasks_response = client.get(
+        f"/teams/{team_id}/projects/{project['project_id']}/tasks",
+        headers=auth_headers(member_token),
+    )
+    assert member_tasks_response.status_code == 200
+    assert [item["task_id"] for item in member_tasks_response.json()] == [
+        task["task_id"]
+    ]
+
+
+def test_non_owner_cannot_convert_personal_project_while_inviting(
+    client: TestClient,
+    db: Session,
+) -> None:
+    _owner_id, owner_token = create_verified_user_and_login(
+        client,
+        db,
+        username="convertdeniedowner",
+        email="convertdeniedowner@example.com",
+    )
+    _manager_id, manager_token = create_verified_user_and_login(
+        client,
+        db,
+        username="convertdeniedmanager",
+        email="convertdeniedmanager@example.com",
+    )
+    _member_id, _member_token = create_verified_user_and_login(
+        client,
+        db,
+        username="convertdeniedinvitee",
+        email="convertdeniedinvitee@example.com",
+    )
+
+    project = create_personal_project(
+        client,
+        owner_token,
+        title="Owner Only Conversion",
+    )
+
+    add_manager_response = client.post(
+        f"/projects/{project['project_id']}/members/invite",
+        headers=auth_headers(owner_token),
+        json={
+            "email_or_username": "convertdeniedmanager@example.com",
+            "role": "manager",
+        },
+    )
+    assert add_manager_response.status_code == 201, add_manager_response.text
+
+    response = client.post(
+        f"/projects/{project['project_id']}/members/invite-and-convert",
+        headers=auth_headers(manager_token),
+        json={
+            "email_or_username": "convertdeniedinvitee@example.com",
+            "role": "member",
+        },
+    )
+
+    assert response.status_code == 403
+
+
 def test_deleting_personal_project_cascades_tasks(
     client: TestClient,
     db: Session,

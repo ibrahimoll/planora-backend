@@ -22,6 +22,7 @@ from app.schemas.project_schema import (
 from app.services.project_service import (
     add_project_member,
     can_manage_project,
+    convert_personal_project_to_team_and_invite,
     create_personal_project,
     delete_my_personal_project,
     get_manageable_personal_project_by_id,
@@ -254,6 +255,84 @@ def invite_personal_project_member(
         db=db,
         project=project,
         user=user_to_add,
+        role=member_data.role,
+    )
+
+
+@router.post(
+    "/{project_id}/members/invite-and-convert",
+    response_model=ProjectResponse,
+    status_code=http_status.HTTP_201_CREATED,
+)
+def invite_personal_project_member_and_convert_to_team(
+    project_id: int,
+    member_data: ProjectMemberInvite,
+    db: DBSession,
+    current_user: CurrentUser,
+):
+    project = get_my_personal_project_by_id(
+        db=db,
+        project_id=project_id,
+        current_user=current_user,
+    )
+
+    if project is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=PROJECT_NOT_FOUND,
+        )
+
+    current_membership = get_project_membership(
+        db=db,
+        project_id=project_id,
+        user_id=current_user.user_id,
+    )
+
+    if (
+        project.created_by != current_user.user_id
+        or current_membership is None
+        or not is_project_owner(current_membership)
+    ):
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail=NOT_ALLOWED,
+        )
+
+    user_to_add = get_user_by_email_or_username(
+        db=db,
+        email_or_username=member_data.email_or_username,
+    )
+
+    if (
+        user_to_add is None
+        or not user_to_add.is_active
+        or not user_to_add.is_email_verified
+    ):
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=USER_NOT_FOUND,
+        )
+
+    existing_project_membership = get_project_membership(
+        db=db,
+        project_id=project_id,
+        user_id=user_to_add.user_id,
+    )
+
+    if (
+        existing_project_membership is not None
+        or user_to_add.user_id == project.created_by
+    ):
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail=ALREADY_PROJECT_MEMBER,
+        )
+
+    return convert_personal_project_to_team_and_invite(
+        db=db,
+        project=project,
+        current_user=current_user,
+        user_to_add=user_to_add,
         role=member_data.role,
     )
 

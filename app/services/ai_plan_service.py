@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timedelta, timezone
+from difflib import SequenceMatcher
 from typing import Any
 
 from sqlalchemy import select
@@ -655,16 +656,26 @@ def _build_structured_ai_plan_prompt(
     input_prompt: str,
     task_count: int,
     include_milestones: bool,
+    existing_tasks: list[Task] | None = None,
+    overwrite_existing_tasks: bool = False,
 ) -> str:
     deadline_text = _to_utc(project.deadline).date().isoformat()
     description = project.description or "No description provided."
+    existing_tasks_text = _existing_tasks_context(existing_tasks or [])
+    improvement_mode = (
+        "Rebuild the plan and replace existing tasks with a stronger complete plan."
+        if overwrite_existing_tasks
+        else "Generate only new complementary tasks that do not duplicate existing work."
+    )
 
     return f"""
 You are Planora AI, an expert project planner.
 
 Your job:
-Create a practical task plan for the user's real idea.
+Improve the user's existing project plan.
 You must understand the idea first, then generate useful tasks that help the user move from idea to execution.
+Improve means add missing steps, break down vague work, identify gaps, adjust priorities, and add milestones or risks.
+{improvement_mode}
 
 Do not rely on fixed categories.
 Do not assume the project is software unless the user clearly asks for software, app, website, code, game, backend, frontend, or platform.
@@ -679,6 +690,8 @@ Critical output rules:
 - Task titles must start with an action verb.
 - Task titles must be specific to the user's idea.
 - Avoid vague titles like "Research", "Plan", "Prepare", "Improve", "Start marketing", or "Create content".
+- Do not duplicate existing task titles, descriptions, or the same intent.
+- If a current task already covers an idea, generate a different missing or follow-up task.
 - Priority must be one of: low, medium, high.
 - estimated_hours must be a number between 0.5 and 40.
 - suggested_order must start at 1 and increase by 1.
@@ -718,6 +731,10 @@ Project context:
 - description: {description}
 - project_type: {project.project_type}
 - deadline: {deadline_text}
+- status: {project.status}
+
+Current tasks to avoid duplicating:
+{existing_tasks_text}
 
 User idea and requirements:
 {input_prompt.strip()}
@@ -1436,12 +1453,16 @@ def _build_ai_generated_plan(
     input_prompt: str,
     task_count: int,
     include_milestones: bool,
+    existing_tasks: list[Task] | None = None,
+    overwrite_existing_tasks: bool = False,
 ) -> dict[str, Any] | None:
     prompt = _build_structured_ai_plan_prompt(
         project=project,
         input_prompt=input_prompt,
         task_count=task_count,
         include_milestones=include_milestones,
+        existing_tasks=existing_tasks,
+        overwrite_existing_tasks=overwrite_existing_tasks,
     )
 
     provider_reply = generate_ai_reply_from_provider(prompt)
@@ -1563,6 +1584,8 @@ def build_generated_plan(
     task_count: int,
     include_milestones: bool = True,
     project_members: list[ProjectMember] | None = None,
+    existing_tasks: list[Task] | None = None,
+    overwrite_existing_tasks: bool = False,
 ) -> dict[str, Any]:
     project_context = (
         input_prompt.strip()
@@ -1575,6 +1598,8 @@ def build_generated_plan(
         input_prompt=project_context,
         task_count=task_count,
         include_milestones=include_milestones,
+        existing_tasks=existing_tasks,
+        overwrite_existing_tasks=overwrite_existing_tasks,
     )
 
     if ai_generated_plan is not None:
@@ -1619,13 +1644,92 @@ def _parse_due_date(value: str) -> datetime:
     return datetime.fromisoformat(value)
 
 
+def _normalize_task_title(title: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", " ", title.lower())
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _task_titles_are_similar(first: str, second: str) -> bool:
+    first_normalized = _normalize_task_title(first)
+    second_normalized = _normalize_task_title(second)
+
+    if not first_normalized or not second_normalized:
+        return False
+
+    if first_normalized == second_normalized:
+        return True
+
+    return SequenceMatcher(
+        None,
+        first_normalized,
+        second_normalized,
+    ).ratio() >= 0.86
+
+
+def _task_is_duplicate_title(
+    title: str,
+    existing_titles: list[str],
+) -> bool:
+    return any(_task_titles_are_similar(title, existing) for existing in existing_titles)
+
+
+def _get_existing_project_tasks(
+    db: Session,
+    project: Project,
+) -> list[Task]:
+    return list(
+        db.execute(
+            select(Task)
+            .where(Task.project_id == project.project_id)
+            .order_by(Task.created_at.asc(), Task.task_id.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+
+def _existing_tasks_context(existing_tasks: list[Task]) -> str:
+    if not existing_tasks:
+        return "No current tasks."
+
+    lines: list[str] = []
+
+    for index, task in enumerate(existing_tasks[:40], start=1):
+        description = (task.description or "").strip().replace("\n", " ")
+        if len(description) > 220:
+            description = f"{description[:217].rstrip()}..."
+
+        pieces = [
+            f"{index}. {task.title}",
+            f"status={task.status}",
+            f"priority={task.priority}",
+        ]
+
+        if task.due_date is not None:
+            pieces.append(f"due={_to_utc(task.due_date).date().isoformat()}")
+
+        if description:
+            pieces.append(f"description={description}")
+
+        lines.append(" | ".join(pieces))
+
+    return "\n".join(lines)
+
+
 def _create_tasks_from_plan(
     db: Session,
     project: Project,
     current_user: User,
     generated_plan: dict[str, Any],
-) -> list[Task]:
+    existing_tasks: list[Task] | None = None,
+) -> tuple[list[Task], int]:
     created_tasks: list[Task] = []
+    skipped_duplicate_count = 0
+    existing_titles = [
+        task.title
+        for task in (existing_tasks or [])
+        if task.title and task.title.strip()
+    ]
 
     assigned_to = (
         current_user.user_id
@@ -1634,11 +1738,17 @@ def _create_tasks_from_plan(
     )
 
     for task_data in generated_plan["tasks"]:
+        task_title = str(task_data["title"])
+
+        if _task_is_duplicate_title(task_title, existing_titles):
+            skipped_duplicate_count += 1
+            continue
+
         task = Task(
             project_id=project.project_id,
             assigned_to=assigned_to,
             created_by=current_user.user_id,
-            title=str(task_data["title"]),
+            title=task_title,
             description=(
                 str(task_data["description"])
                 if task_data.get("description") is not None
@@ -1667,6 +1777,7 @@ def _create_tasks_from_plan(
         db.flush()
 
         created_tasks.append(task)
+        existing_titles.append(task.title)
 
         create_activity_log(
             db=db,
@@ -1683,20 +1794,14 @@ def _create_tasks_from_plan(
             commit=False,
         )
 
-    return created_tasks
+    return created_tasks, skipped_duplicate_count
 
 
 def _delete_existing_project_tasks(
     db: Session,
     project: Project,
 ) -> int:
-    existing_tasks = list(
-        db.execute(
-            select(Task).where(Task.project_id == project.project_id)
-        )
-        .scalars()
-        .all()
-    )
+    existing_tasks = _get_existing_project_tasks(db=db, project=project)
 
     for task in existing_tasks:
         db.delete(task)
@@ -1731,11 +1836,13 @@ def create_ai_plan_for_project(
     current_user: User,
     plan_data: AIPlanGenerateRequest,
 ) -> AIPlan:
-    ai_plan, _created_tasks = create_ai_plan_and_tasks_for_project(
-        db=db,
-        project=project,
-        current_user=current_user,
-        plan_data=plan_data,
+    ai_plan, _created_tasks, _skipped_duplicate_count = (
+        create_ai_plan_and_tasks_for_project(
+            db=db,
+            project=project,
+            current_user=current_user,
+            plan_data=plan_data,
+        )
     )
 
     return ai_plan
@@ -1746,7 +1853,7 @@ def create_ai_plan_and_tasks_for_project(
     project: Project,
     current_user: User,
     plan_data: AIPlanGenerateRequest,
-) -> tuple[AIPlan, list[Task]]:
+) -> tuple[AIPlan, list[Task], int]:
     input_prompt = (
         plan_data.input_prompt.strip()
         if plan_data.input_prompt
@@ -1756,6 +1863,7 @@ def create_ai_plan_and_tasks_for_project(
         db=db,
         project=project,
     )
+    existing_tasks = _get_existing_project_tasks(db=db, project=project)
 
     generated_plan = build_generated_plan(
         project=project,
@@ -1763,6 +1871,8 @@ def create_ai_plan_and_tasks_for_project(
         task_count=plan_data.task_count,
         include_milestones=plan_data.include_milestones,
         project_members=project_members,
+        existing_tasks=existing_tasks,
+        overwrite_existing_tasks=plan_data.overwrite_existing_tasks,
     )
 
     ai_plan = AIPlan(
@@ -1777,19 +1887,23 @@ def create_ai_plan_and_tasks_for_project(
 
     overwritten_task_count = 0
     created_tasks: list[Task] = []
+    skipped_duplicate_count = 0
 
     if plan_data.create_tasks:
+        duplicate_scope = [] if plan_data.overwrite_existing_tasks else existing_tasks
+
         if plan_data.overwrite_existing_tasks:
             overwritten_task_count = _delete_existing_project_tasks(
                 db=db,
                 project=project,
             )
 
-        created_tasks = _create_tasks_from_plan(
+        created_tasks, skipped_duplicate_count = _create_tasks_from_plan(
             db=db,
             project=project,
             current_user=current_user,
             generated_plan=generated_plan,
+            existing_tasks=duplicate_scope,
         )
 
     created_task_ids = [task.task_id for task in created_tasks]
@@ -1798,8 +1912,10 @@ def create_ai_plan_and_tasks_for_project(
         **generated_plan,
         "created_task_ids": created_task_ids,
         "tasks_created": len(created_task_ids),
+        "tasks_skipped_as_duplicates": skipped_duplicate_count,
         "overwrite_existing_tasks": plan_data.overwrite_existing_tasks,
         "overwritten_task_count": overwritten_task_count,
+        "improvement_summary": str(generated_plan.get("summary", "")),
     }
 
     create_activity_log(
@@ -1811,6 +1927,7 @@ def create_ai_plan_and_tasks_for_project(
         metadata={
             "plan_id": ai_plan.plan_id,
             "created_task_count": len(created_task_ids),
+            "tasks_skipped_as_duplicates": skipped_duplicate_count,
             "created_task_ids": created_task_ids,
             "overwrite_existing_tasks": plan_data.overwrite_existing_tasks,
             "overwritten_task_count": overwritten_task_count,
@@ -1825,7 +1942,7 @@ def create_ai_plan_and_tasks_for_project(
     for task in created_tasks:
         db.refresh(task)
 
-    return ai_plan, created_tasks
+    return ai_plan, created_tasks, skipped_duplicate_count
 
 
 def create_ai_plan_generation_response(
@@ -1834,7 +1951,7 @@ def create_ai_plan_generation_response(
     current_user: User,
     plan_data: AIPlanGenerateRequest,
 ) -> AIPlanGenerateResponse:
-    ai_plan, created_tasks = create_ai_plan_and_tasks_for_project(
+    ai_plan, created_tasks, skipped_duplicate_count = create_ai_plan_and_tasks_for_project(
         db=db,
         project=project,
         current_user=current_user,
@@ -1846,6 +1963,8 @@ def create_ai_plan_generation_response(
         plan_id=ai_plan.plan_id,
         summary=str(ai_plan.generated_plan.get("summary", "")),
         tasks_created=len(created_tasks),
+        tasks_skipped_as_duplicates=skipped_duplicate_count,
+        improvement_summary=str(ai_plan.generated_plan.get("improvement_summary", "")),
         tasks=[
             AIPlanGeneratedTaskResponse(
                 task_id=task.task_id,
@@ -2057,19 +2176,22 @@ def create_ai_plan_from_accepted_preview(
     db.add(ai_plan)
     db.flush()
 
-    created_tasks = _create_tasks_from_plan(
+    created_tasks, skipped_duplicate_count = _create_tasks_from_plan(
         db=db,
         project=project,
         current_user=current_user,
         generated_plan=generated_plan,
+        existing_tasks=[],
     )
     created_task_ids = [task.task_id for task in created_tasks]
     ai_plan.generated_plan = {
         **generated_plan,
         "created_task_ids": created_task_ids,
         "tasks_created": len(created_task_ids),
+        "tasks_skipped_as_duplicates": skipped_duplicate_count,
         "overwrite_existing_tasks": False,
         "overwritten_task_count": 0,
+        "improvement_summary": str(generated_plan.get("summary", "")),
     }
 
     create_activity_log(
@@ -2100,6 +2222,8 @@ def create_ai_plan_from_accepted_preview(
         plan_id=ai_plan.plan_id,
         summary=str(ai_plan.generated_plan.get("summary", "")),
         tasks_created=len(created_tasks),
+        tasks_skipped_as_duplicates=skipped_duplicate_count,
+        improvement_summary=str(ai_plan.generated_plan.get("improvement_summary", "")),
         tasks=[
             AIPlanGeneratedTaskResponse(
                 task_id=task.task_id,
