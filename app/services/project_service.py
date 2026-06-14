@@ -70,6 +70,11 @@ def get_my_personal_projects(
     current_user: User,
     status: ProjectStatus | None = None,
 ) -> list[Project]:
+    repair_accessible_personal_projects_with_multiple_members(
+        db=db,
+        current_user=current_user,
+    )
+
     member_exists = (
         select(ProjectMember.member_id)
         .where(
@@ -116,7 +121,12 @@ def get_my_personal_project_by_id(
         ),
     )
 
-    return db.execute(stmt).scalars().first()
+    project = db.execute(stmt).scalars().first()
+
+    if project is None:
+        return None
+
+    return repair_personal_project_with_multiple_members(db=db, project=project)
 
 
 def get_owned_personal_project_by_id(
@@ -145,6 +155,9 @@ def get_manageable_personal_project_by_id(
     )
 
     if project is None:
+        return None
+
+    if project.project_type != "personal":
         return None
 
     if project.created_by == current_user.user_id:
@@ -411,6 +424,142 @@ def add_project_member(
     db.refresh(member, attribute_names=["user"])
 
     return member
+
+
+def _team_role_for_project_membership(
+    membership: ProjectMember,
+    project_owner_id: int,
+) -> str:
+    if membership.user_id == project_owner_id:
+        return "owner"
+
+    if membership.role == ProjectMemberRole.owner.value:
+        return "admin"
+
+    if membership.role == ProjectMemberRole.manager.value:
+        return "admin"
+
+    return "member"
+
+
+def repair_personal_project_with_multiple_members(
+    db: Session,
+    project: Project,
+) -> Project:
+    if project.project_type != "personal":
+        return project
+
+    project_members = get_project_members(
+        db=db,
+        project_id=project.project_id,
+    )
+    unique_member_ids = {member.user_id for member in project_members}
+
+    if len(unique_member_ids) <= 1:
+        return project
+
+    owner_id = project.created_by
+    owner_membership = next(
+        (member for member in project_members if member.user_id == owner_id),
+        None,
+    )
+
+    if owner_membership is None:
+        owner_membership = ProjectMember(
+            project_id=project.project_id,
+            user_id=owner_id,
+            role=ProjectMemberRole.owner.value,
+        )
+        db.add(owner_membership)
+        db.flush()
+        project_members.append(owner_membership)
+    elif owner_membership.role != ProjectMemberRole.owner.value:
+        owner_membership.role = ProjectMemberRole.owner.value
+
+    team = Team(
+        name=f"{project.title} Team"[:100],
+        created_by=owner_id,
+    )
+    db.add(team)
+    db.flush()
+
+    team_member_roles: dict[int, str] = {}
+
+    for membership in project_members:
+        team_member_roles[membership.user_id] = _team_role_for_project_membership(
+            membership=membership,
+            project_owner_id=owner_id,
+        )
+
+    team_member_roles[owner_id] = "owner"
+
+    for user_id, team_role in team_member_roles.items():
+        db.add(
+            TeamMember(
+                team_id=team.team_id,
+                user_id=user_id,
+                role=team_role,
+            )
+        )
+
+    project.team_id = team.team_id
+    project.project_type = "team"
+
+    actor = db.get(User, owner_id)
+    if actor is not None:
+        create_activity_log(
+            db=db,
+            project=project,
+            actor=actor,
+            event_type=ActivityLogEventType.PROJECT_UPDATED,
+            message=(
+                f"{actor.full_name} converted project '{project.title}' "
+                "to a team project because it already had collaborators."
+            ),
+            metadata={
+                "project_type": project.project_type,
+                "team_id": team.team_id,
+                "repair": "personal_project_with_multiple_members",
+                "member_count": len(team_member_roles),
+            },
+            commit=False,
+        )
+
+    db.commit()
+    db.refresh(project)
+
+    return project
+
+
+def repair_accessible_personal_projects_with_multiple_members(
+    db: Session,
+    current_user: User,
+) -> None:
+    member_exists = (
+        select(ProjectMember.member_id)
+        .where(
+            ProjectMember.project_id == Project.project_id,
+            ProjectMember.user_id == current_user.user_id,
+        )
+        .exists()
+    )
+    member_count = (
+        select(func.count(ProjectMember.member_id))
+        .where(ProjectMember.project_id == Project.project_id)
+        .correlate(Project)
+        .scalar_subquery()
+    )
+    stmt = select(Project).where(
+        Project.project_type == "personal",
+        member_count > 1,
+        or_(
+            Project.created_by == current_user.user_id,
+            member_exists,
+        ),
+    )
+
+    for project in db.execute(stmt).scalars().all():
+        repair_personal_project_with_multiple_members(db=db, project=project)
 
 
 def convert_personal_project_to_team_and_invite(

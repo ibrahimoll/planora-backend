@@ -60,6 +60,7 @@ class AIPlanGenerateResponse(BaseModel):
     tasks_created: int
     tasks_skipped_as_duplicates: int = 0
     improvement_summary: str | None = None
+    rejected_generic_count: int = 0
     tasks: list[AIPlanGeneratedTaskResponse]
 
 

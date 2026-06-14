@@ -139,7 +139,7 @@ def test_user_cannot_access_other_users_personal_project(
     assert response.status_code == 404
 
 
-def test_owner_invites_personal_project_collaborator(
+def test_legacy_personal_project_with_collaborator_self_heals_to_team(
     client: TestClient,
     db: Session,
 ) -> None:
@@ -197,7 +197,7 @@ def test_owner_invites_personal_project_collaborator(
         },
     )
 
-    assert duplicate_response.status_code == 409
+    assert duplicate_response.status_code == 404
 
     member_projects_response = client.get(
         "/projects",
@@ -205,13 +205,31 @@ def test_owner_invites_personal_project_collaborator(
     )
 
     assert member_projects_response.status_code == 200
-    assert any(
+    assert not any(
         item["project_id"] == project["project_id"]
         for item in member_projects_response.json()
     )
 
+    converted_project = db.get(Project, project["project_id"])
+    assert converted_project is not None
+    db.refresh(converted_project)
+    assert converted_project.project_type == "team"
+    assert converted_project.team_id is not None
+
+    team_id = converted_project.team_id
+
+    member_teams_response = client.get(
+        "/teams",
+        headers=auth_headers(member_token),
+    )
+    assert member_teams_response.status_code == 200
+    assert any(
+        item["team_id"] == team_id
+        for item in member_teams_response.json()
+    )
+
     member_tasks_response = client.get(
-        f"/projects/{project['project_id']}/tasks",
+        f"/teams/{team_id}/projects/{project['project_id']}/tasks",
         headers=auth_headers(member_token),
     )
 
@@ -239,8 +257,7 @@ def test_owner_invites_personal_project_collaborator(
         headers=auth_headers(owner_token),
     )
 
-    assert owner_delete_response.status_code == 200
-    assert db.get(Project, project["project_id"]) is None
+    assert owner_delete_response.status_code == 404
 
 
 def test_owner_invites_personal_project_collaborator_by_converting_to_team(

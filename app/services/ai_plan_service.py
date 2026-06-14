@@ -31,18 +31,18 @@ from app.services.ai_provider_service import generate_ai_reply_from_provider
 
 
 TASK_TITLE_TEMPLATES = [
-    "Define scope and success criteria",
-    "Analyze requirements and constraints",
-    "Design the project structure",
-    "Prepare the implementation plan",
-    "Complete the core project work",
-    "Review and test the work",
-    "Fix issues and improve quality",
-    "Prepare final delivery and documentation",
-    "Evaluate risks and backup plan",
-    "Finalize presentation material",
-    "Collect feedback and adjust",
-    "Submit final version",
+    "Write the exact outcome and progress measure",
+    "Choose the first realistic checkpoint",
+    "Gather the tools and resources needed",
+    "Schedule focused work blocks",
+    "Complete the first practical action",
+    "Track progress for one week",
+    "Remove the biggest blocker",
+    "Review what worked and adjust",
+    "Prepare the next small milestone",
+    "Share progress with someone helpful",
+    "Finish the most important remaining step",
+    "Review results and plan next actions",
 ]
 
 BUSINESS_TASK_TITLE_TEMPLATES = [
@@ -73,6 +73,63 @@ SOFTWARE_TASK_TITLE_TEMPLATES = [
     "Finalize presentation material",
     "Collect feedback and iterate",
     "Submit final version",
+]
+
+FITNESS_TASK_TITLE_TEMPLATES = [
+    "Set a realistic daily step baseline",
+    "Choose walking time blocks",
+    "Track steps for 7 days",
+    "Increase step count gradually",
+    "Prepare recovery and hydration routine",
+    "Review weekly progress",
+    "Plan a bad-weather walking backup",
+    "Add a short mobility warmup",
+    "Pick routes that fit your schedule",
+    "Celebrate consistency and reset the target",
+]
+
+STUDY_TASK_TITLE_TEMPLATES = [
+    "List exam topics and weak areas",
+    "Build a weekly study timetable",
+    "Create active recall practice cards",
+    "Complete one focused practice session",
+    "Review mistakes and update notes",
+    "Take a timed mini mock test",
+    "Schedule spaced revision blocks",
+    "Prepare a final review checklist",
+]
+
+EVENT_TASK_TITLE_TEMPLATES = [
+    "Define the event goal and guest list",
+    "Set the budget and spending limits",
+    "Choose the venue or online format",
+    "Build the event schedule",
+    "Confirm vendors and materials",
+    "Send invitations and track replies",
+    "Prepare the day-of checklist",
+    "Collect feedback after the event",
+]
+
+CONTENT_TASK_TITLE_TEMPLATES = [
+    "Define the audience and content promise",
+    "Choose content pillars",
+    "Plan the first posting schedule",
+    "Draft the first three posts or videos",
+    "Prepare visuals and captions",
+    "Publish and track engagement",
+    "Review audience feedback",
+    "Adjust the next content batch",
+]
+
+PRODUCTIVITY_TASK_TITLE_TEMPLATES = [
+    "Choose the one measurable habit target",
+    "Break the habit into a daily action",
+    "Set reminders and friction reducers",
+    "Track completion for 7 days",
+    "Review missed days without judgment",
+    "Adjust the routine to fit real life",
+    "Add one accountability check",
+    "Plan the next weekly target",
 ]
 
 UNIVERSAL_TASK_PHASES = [
@@ -141,6 +198,84 @@ SOFTWARE_PATTERNS = (
     r"\b(?:build|create|develop|design|launch|make)\s+"
     r"(?:an?\s+)?(?:mobile\s+)?(?:app|game|website|platform|software)\b",
     r"\bapp\s+(?:for|to)\b",
+)
+
+FITNESS_PATTERNS = (
+    r"\bfitness\b",
+    r"\bhealth\b",
+    r"\bhabit\b",
+    r"\bdaily\s+goal\b",
+    r"\bwalk(?:ing)?\b",
+    r"\brun(?:ning)?\b",
+    r"\bworkout\b",
+    r"\bexercise\b",
+    r"\bsteps?\b",
+    r"\b10\s?k\s+steps?\b",
+    r"\bten\s+thousand\s+steps?\b",
+    r"\bhydration\b",
+    r"\brecovery\b",
+)
+
+STUDY_PATTERNS = (
+    r"\bstudy\b",
+    r"\blearn(?:ing)?\b",
+    r"\bexam\b",
+    r"\btest\b",
+    r"\bquiz\b",
+    r"\bcourse\b",
+    r"\bclass\b",
+    r"\bhomework\b",
+    r"\bpractice\s+questions?\b",
+    r"\brevision\b",
+)
+
+EVENT_PATTERNS = (
+    r"\bevent\b",
+    r"\bparty\b",
+    r"\bwedding\b",
+    r"\bconference\b",
+    r"\bworkshop\b",
+    r"\bmeetup\b",
+    r"\bceremony\b",
+    r"\bguests?\b",
+    r"\bvenue\b",
+)
+
+CONTENT_PATTERNS = (
+    r"\bcontent\b",
+    r"\bsocial\s+media\b",
+    r"\bpost(?:ing)?\b",
+    r"\breels?\b",
+    r"\bvideos?\b",
+    r"\byoutube\b",
+    r"\btiktok\b",
+    r"\binstagram\b",
+    r"\bnewsletter\b",
+    r"\bblog\b",
+    r"\bpodcast\b",
+)
+
+PRODUCTIVITY_PATTERNS = (
+    r"\bproductivity\b",
+    r"\borganize\b",
+    r"\broutine\b",
+    r"\bhabits?\b",
+    r"\bdeclutter\b",
+    r"\btime\s+management\b",
+    r"\bfocus\b",
+    r"\bpersonal\s+goal\b",
+)
+
+GENERIC_TASK_TITLE_PATTERNS = (
+    r"\bdefine\s+(?:the\s+)?scope\b",
+    r"\bscope\s+and\s+success\s+criteria\b",
+    r"\banaly[sz]e\s+requirements\b",
+    r"\brequirements\s+and\s+constraints\b",
+    r"\bdesign\s+(?:the\s+)?project\s+structure\b",
+    r"\bprepare\s+(?:the\s+)?implementation\s+plan\b",
+    r"\bcomplete\s+(?:the\s+)?core\s+project\s+work\b",
+    r"\bfix\s+issues\s+and\s+improve\s+quality\b",
+    r"\bprepare\s+final\s+delivery\b",
 )
 
 
@@ -300,6 +435,11 @@ def _extract_user_project_context(
 def _detect_project_domain(project_context: str) -> str:
     is_business = _matches_any_pattern(project_context, BUSINESS_PATTERNS)
     is_explicit_software = _matches_any_pattern(project_context, SOFTWARE_PATTERNS)
+    is_fitness = _matches_any_pattern(project_context, FITNESS_PATTERNS)
+    is_study = _matches_any_pattern(project_context, STUDY_PATTERNS)
+    is_event = _matches_any_pattern(project_context, EVENT_PATTERNS)
+    is_content = _matches_any_pattern(project_context, CONTENT_PATTERNS)
+    is_productivity = _matches_any_pattern(project_context, PRODUCTIVITY_PATTERNS)
 
     explicit_software_build = re.search(
         r"\b(?:build|create|develop|design|make|launch)\s+"
@@ -315,6 +455,21 @@ def _detect_project_domain(project_context: str) -> str:
     if is_business:
         return "business"
 
+    if is_fitness:
+        return "fitness"
+
+    if is_study:
+        return "study"
+
+    if is_event:
+        return "event"
+
+    if is_content:
+        return "content"
+
+    if is_productivity:
+        return "productivity"
+
     return "general"
 
 
@@ -324,6 +479,21 @@ def _select_task_title_templates(domain: str) -> list[str]:
 
     if domain == "software":
         return SOFTWARE_TASK_TITLE_TEMPLATES
+
+    if domain == "fitness":
+        return FITNESS_TASK_TITLE_TEMPLATES
+
+    if domain == "study":
+        return STUDY_TASK_TITLE_TEMPLATES
+
+    if domain == "event":
+        return EVENT_TASK_TITLE_TEMPLATES
+
+    if domain == "content":
+        return CONTENT_TASK_TITLE_TEMPLATES
+
+    if domain == "productivity":
+        return PRODUCTIVITY_TASK_TITLE_TEMPLATES
 
     return TASK_TITLE_TEMPLATES
 
@@ -452,6 +622,108 @@ def _software_task_description(
     )
 
 
+def _fitness_task_description(title: str) -> str:
+    normalized = title.lower()
+
+    if "baseline" in normalized:
+        return "Check your current step average so the 10k goal starts from a realistic point."
+
+    if "time blocks" in normalized or "routes" in normalized:
+        return "Choose walking windows and routes that fit your normal day instead of relying on motivation."
+
+    if "track" in normalized:
+        return "Record daily steps long enough to see patterns, easy days, and the times you fall short."
+
+    if "increase" in normalized:
+        return "Raise the target gradually so the habit grows without soreness or burnout."
+
+    if "recovery" in normalized or "hydration" in normalized:
+        return "Prepare water, shoes, stretching, and recovery habits that make daily walking sustainable."
+
+    return "Turn the health goal into one small, measurable habit action you can repeat this week."
+
+
+def _study_task_description(title: str) -> str:
+    normalized = title.lower()
+
+    if "topics" in normalized or "weak" in normalized:
+        return "Map what must be learned and identify the areas that need the most practice."
+
+    if "timetable" in normalized or "revision" in normalized:
+        return "Place study blocks on real calendar times so revision happens before the deadline."
+
+    if "recall" in normalized or "practice" in normalized:
+        return "Use active recall and exercises to test understanding instead of rereading passively."
+
+    if "mistakes" in normalized:
+        return "Turn wrong answers into a short review list that guides the next session."
+
+    if "mock" in normalized:
+        return "Practice under time pressure so the final test feels familiar."
+
+    return "Create a concrete learning output that proves progress on the topic."
+
+
+def _event_task_description(title: str) -> str:
+    normalized = title.lower()
+
+    if "goal" in normalized or "guest" in normalized:
+        return "Clarify who the event is for, what should happen, and who needs to attend."
+
+    if "budget" in normalized:
+        return "Set spending limits before booking vendors or buying materials."
+
+    if "venue" in normalized or "format" in normalized:
+        return "Choose the place or online setup that fits the guest count, budget, and event goal."
+
+    if "schedule" in normalized or "day-of" in normalized:
+        return "Create a timeline so setup, activities, and follow-up happen smoothly."
+
+    return "Prepare one visible piece of the event plan so the event becomes easier to run."
+
+
+def _content_task_description(title: str) -> str:
+    normalized = title.lower()
+
+    if "audience" in normalized or "promise" in normalized:
+        return "Decide who the content helps and what viewers should expect from your page."
+
+    if "pillars" in normalized:
+        return "Choose recurring themes so posts feel consistent and easier to plan."
+
+    if "schedule" in normalized:
+        return "Pick realistic publishing times and formats for the first batch."
+
+    if "posts" in normalized or "videos" in normalized:
+        return "Draft concrete content pieces that can be published or refined."
+
+    if "engagement" in normalized or "feedback" in normalized:
+        return "Review comments, saves, views, and questions to improve the next batch."
+
+    return "Create a specific content asset or publishing decision for the current audience."
+
+
+def _productivity_task_description(title: str) -> str:
+    normalized = title.lower()
+
+    if "target" in normalized:
+        return "Choose one measurable behavior so progress is easy to see."
+
+    if "daily action" in normalized:
+        return "Make the habit small enough to do on a normal busy day."
+
+    if "reminders" in normalized or "friction" in normalized:
+        return "Set up cues and remove obstacles so the habit is easier to start."
+
+    if "track" in normalized:
+        return "Record completion for a week to see what helps and what interrupts the routine."
+
+    if "accountability" in normalized:
+        return "Add a simple check-in that keeps the goal visible."
+
+    return "Make one practical change to the routine and measure whether it works."
+
+
 def _general_task_description(
     title: str,
 ) -> str:
@@ -489,6 +761,21 @@ def _build_task_description_for_domain(
 
     if domain == "software":
         return _software_task_description(title)
+
+    if domain == "fitness":
+        return _fitness_task_description(title)
+
+    if domain == "study":
+        return _study_task_description(title)
+
+    if domain == "event":
+        return _event_task_description(title)
+
+    if domain == "content":
+        return _content_task_description(title)
+
+    if domain == "productivity":
+        return _productivity_task_description(title)
 
     return _general_task_description(title)
 
@@ -538,20 +825,115 @@ def _build_milestones(
             },
         ]
 
+    if domain == "fitness":
+        return [
+            {
+                "name": "Baseline measured",
+                "description": "Current step average and walking windows are clear.",
+                "suggested_order": 1,
+            },
+            {
+                "name": "7-day consistency streak",
+                "description": "Steps are tracked for one full week with recovery habits in place.",
+                "suggested_order": 2,
+            },
+            {
+                "name": "Weekly target reviewed",
+                "description": "Progress is reviewed and the next step target is adjusted.",
+                "suggested_order": 3,
+            },
+        ]
+
+    if domain == "study":
+        return [
+            {
+                "name": "Study map completed",
+                "description": "Topics, weak areas, and schedule are clear.",
+                "suggested_order": 1,
+            },
+            {
+                "name": "Practice loop running",
+                "description": "Active recall, exercises, and mistake review are happening.",
+                "suggested_order": 2,
+            },
+            {
+                "name": "Exam readiness checked",
+                "description": "A timed review or mock test shows what remains to improve.",
+                "suggested_order": 3,
+            },
+        ]
+
+    if domain == "event":
+        return [
+            {
+                "name": "Event plan approved",
+                "description": "Goal, guest list, budget, and format are decided.",
+                "suggested_order": 1,
+            },
+            {
+                "name": "Logistics confirmed",
+                "description": "Schedule, vendors, materials, and invitations are ready.",
+                "suggested_order": 2,
+            },
+            {
+                "name": "Day-of checklist ready",
+                "description": "The event can run from a clear checklist.",
+                "suggested_order": 3,
+            },
+        ]
+
+    if domain == "content":
+        return [
+            {
+                "name": "Content direction set",
+                "description": "Audience, promise, and content pillars are clear.",
+                "suggested_order": 1,
+            },
+            {
+                "name": "First batch prepared",
+                "description": "Initial posts or videos are drafted with visuals and captions.",
+                "suggested_order": 2,
+            },
+            {
+                "name": "Performance reviewed",
+                "description": "Engagement and feedback inform the next batch.",
+                "suggested_order": 3,
+            },
+        ]
+
+    if domain == "productivity":
+        return [
+            {
+                "name": "Habit target selected",
+                "description": "The routine has one measurable target and daily action.",
+                "suggested_order": 1,
+            },
+            {
+                "name": "First week tracked",
+                "description": "Completion, missed days, and blockers are visible.",
+                "suggested_order": 2,
+            },
+            {
+                "name": "Routine adjusted",
+                "description": "The habit is updated to fit real life better.",
+                "suggested_order": 3,
+            },
+        ]
+
     return [
         {
-            "name": "Planning completed",
-            "description": "Scope, requirements, and structure are clear.",
+            "name": "Outcome clarified",
+            "description": "The exact target, first checkpoint, and resources are clear.",
             "suggested_order": 1,
         },
         {
-            "name": "Core work completed",
-            "description": "Main project work is finished.",
+            "name": "First progress cycle completed",
+            "description": "The first practical action has been completed and tracked.",
             "suggested_order": 2,
         },
         {
-            "name": "Final review completed",
-            "description": "Testing, cleanup, and final delivery are done.",
+            "name": "Next actions reviewed",
+            "description": "Results are reviewed and the next milestone is chosen.",
             "suggested_order": 3,
         },
     ]
@@ -582,14 +964,74 @@ def _build_risks(domain: str) -> list[dict[str, str]]:
             },
         ]
 
+    if domain == "fitness":
+        return [
+            {
+                "risk": "Starting too aggressively",
+                "recommendation": "Increase steps gradually and include recovery days when needed.",
+            },
+            {
+                "risk": "Schedule interruptions",
+                "recommendation": "Prepare short backup walks for busy or bad-weather days.",
+            },
+        ]
+
+    if domain == "study":
+        return [
+            {
+                "risk": "Passive studying without recall",
+                "recommendation": "Use practice questions and explain answers from memory.",
+            },
+            {
+                "risk": "Leaving weak topics too late",
+                "recommendation": "Review mistakes after every session and schedule extra practice.",
+            },
+        ]
+
+    if domain == "event":
+        return [
+            {
+                "risk": "Budget overruns",
+                "recommendation": "Set limits before booking and keep a simple spending tracker.",
+            },
+            {
+                "risk": "Missing day-of details",
+                "recommendation": "Use one checklist for setup, contacts, materials, and timing.",
+            },
+        ]
+
+    if domain == "content":
+        return [
+            {
+                "risk": "Inconsistent posting",
+                "recommendation": "Prepare a small batch before committing to a schedule.",
+            },
+            {
+                "risk": "Content does not match the audience",
+                "recommendation": "Review audience feedback and adjust the next batch.",
+            },
+        ]
+
+    if domain == "productivity":
+        return [
+            {
+                "risk": "Trying to change too many habits",
+                "recommendation": "Keep one target until it feels stable.",
+            },
+            {
+                "risk": "Missing days causes the plan to stop",
+                "recommendation": "Use missed days as data and restart with a smaller action.",
+            },
+        ]
+
     return [
         {
             "risk": "Deadline pressure",
             "recommendation": "Start high-priority tasks early and review progress daily.",
         },
         {
-            "risk": "Unclear requirements",
-            "recommendation": "Confirm project scope before implementation begins.",
+            "risk": "Target becomes too vague",
+            "recommendation": "Keep one measurable checkpoint and review it weekly.",
         },
     ]
 
@@ -609,10 +1051,45 @@ def _build_recommendations(domain: str) -> list[str]:
             "Test the main user flows before release.",
         ]
 
+    if domain == "fitness":
+        return [
+            "Start from your real step baseline, not the ideal number.",
+            "Use short walks when the day is busy.",
+            "Review consistency weekly before raising the target.",
+        ]
+
+    if domain == "study":
+        return [
+            "Practice recall before rereading notes.",
+            "Review mistakes after each session.",
+            "Use timed practice before the final deadline.",
+        ]
+
+    if domain == "event":
+        return [
+            "Confirm budget, people, and location before buying materials.",
+            "Keep one day-of checklist.",
+            "Track replies and vendor confirmations in one place.",
+        ]
+
+    if domain == "content":
+        return [
+            "Prepare a small content batch before publishing.",
+            "Track which topics earn useful engagement.",
+            "Adjust the next batch from real audience feedback.",
+        ]
+
+    if domain == "productivity":
+        return [
+            "Keep the first habit action small enough for busy days.",
+            "Track one week before changing the routine.",
+            "Restart with a smaller target after missed days.",
+        ]
+
     return [
-        "Review the generated tasks before starting.",
-        "Adjust due dates if the project deadline is very close.",
-        "Assign team tasks manually after generation.",
+        "Start with the first measurable checkpoint.",
+        "Track progress for one week before making the plan larger.",
+        "Adjust tasks based on what worked in real life.",
     ]
 
 
@@ -963,6 +1440,27 @@ def _is_low_quality_task_title(title: str) -> bool:
     return normalized in generic_titles or len(normalized) < 4
 
 
+def _is_disallowed_generic_task_title(title: str, domain: str) -> bool:
+    normalized = _normalize_comparison_text(title)
+
+    if domain == "software":
+        allowed_software_fragments = (
+            "define product scope",
+            "analyze user requirements",
+            "design the app architecture",
+            "design app architecture",
+        )
+
+        if any(fragment in normalized for fragment in allowed_software_fragments):
+            return False
+
+    return _matches_any_pattern(normalized, GENERIC_TASK_TITLE_PATTERNS)
+
+
+def _has_similar_seen_title(title: str, seen_titles: set[str]) -> bool:
+    return any(_task_titles_are_similar(title, seen_title) for seen_title in seen_titles)
+
+
 def _format_actionable_description(
     title: str,
     base_description: str,
@@ -1247,6 +1745,7 @@ def _normalize_ai_plan_response(
         project=project,
         input_prompt=input_prompt,
     )
+    detected_domain = _detect_project_domain(project_context)
 
     for index, raw_task in enumerate(raw_tasks):
         if not isinstance(raw_task, dict):
@@ -1273,6 +1772,9 @@ def _normalize_ai_plan_response(
         )
 
         if _is_bad_ai_task_text(title) or _is_bad_ai_task_text(description):
+            return None
+
+        if _is_disallowed_generic_task_title(title, detected_domain):
             return None
 
         if _is_low_quality_task_title(title):
@@ -1303,21 +1805,11 @@ def _normalize_ai_plan_response(
 
         normalized_title_key = title.lower()
 
-        if normalized_title_key in seen_titles:
-            title = f"{title} {index + 1}"
-            normalized_title_key = title.lower()
-
-            if needs_description_rewrite:
-                fallback_domain = _detect_project_domain(project_context)
-                description = _format_actionable_description(
-                    title=title,
-                    base_description=_build_task_description_for_domain(
-                        domain=fallback_domain,
-                        title=title,
-                    ),
-                    project_context=project_context,
-                )
-                description_key = _description_key(description)
+        if (
+            normalized_title_key in seen_titles
+            or _has_similar_seen_title(title, seen_titles)
+        ):
+            return None
 
         seen_titles.add(normalized_title_key)
         seen_descriptions.add(description_key)
@@ -1435,6 +1927,7 @@ def _normalize_ai_plan_response(
         "source": "gemini_structured_v3",
         "domain": domain,
         "summary": summary,
+        "rejected_generic_count": 0,
         "project": {
             "project_id": project.project_id,
             "title": project.title,
@@ -1562,6 +2055,7 @@ def _build_local_generated_plan(
             f"Generated a structured fallback plan for '{project.title}' with "
             f"{task_count} tasks before the project deadline."
         ),
+        "rejected_generic_count": 0,
         "project": {
             "project_id": project.project_id,
             "title": project.title,
@@ -1673,6 +2167,41 @@ def _task_is_duplicate_title(
     return any(_task_titles_are_similar(title, existing) for existing in existing_titles)
 
 
+def _task_descriptions_are_similar(first: str, second: str) -> bool:
+    first_normalized = _description_key(first)
+    second_normalized = _description_key(second)
+
+    if not first_normalized or not second_normalized:
+        return False
+
+    if first_normalized in second_normalized or second_normalized in first_normalized:
+        return min(len(first_normalized), len(second_normalized)) >= 80
+
+    return SequenceMatcher(
+        None,
+        first_normalized,
+        second_normalized,
+    ).ratio() >= 0.82
+
+
+def _task_is_duplicate_intent(
+    title: str,
+    description: str | None,
+    existing_titles: list[str],
+    existing_descriptions: list[str],
+) -> bool:
+    if _task_is_duplicate_title(title, existing_titles):
+        return True
+
+    if description:
+        return any(
+            _task_descriptions_are_similar(description, existing_description)
+            for existing_description in existing_descriptions
+        )
+
+    return False
+
+
 def _get_existing_project_tasks(
     db: Session,
     project: Project,
@@ -1730,6 +2259,11 @@ def _create_tasks_from_plan(
         for task in (existing_tasks or [])
         if task.title and task.title.strip()
     ]
+    existing_descriptions = [
+        task.description
+        for task in (existing_tasks or [])
+        if task.description and task.description.strip()
+    ]
 
     assigned_to = (
         current_user.user_id
@@ -1739,8 +2273,18 @@ def _create_tasks_from_plan(
 
     for task_data in generated_plan["tasks"]:
         task_title = str(task_data["title"])
+        task_description = (
+            str(task_data["description"])
+            if task_data.get("description") is not None
+            else None
+        )
 
-        if _task_is_duplicate_title(task_title, existing_titles):
+        if _task_is_duplicate_intent(
+            title=task_title,
+            description=task_description,
+            existing_titles=existing_titles,
+            existing_descriptions=existing_descriptions,
+        ):
             skipped_duplicate_count += 1
             continue
 
@@ -1749,11 +2293,7 @@ def _create_tasks_from_plan(
             assigned_to=assigned_to,
             created_by=current_user.user_id,
             title=task_title,
-            description=(
-                str(task_data["description"])
-                if task_data.get("description") is not None
-                else None
-            ),
+            description=task_description,
             priority=str(task_data["priority"]),
             estimated_hours=(
                 float(task_data["estimated_hours"])
@@ -1778,6 +2318,8 @@ def _create_tasks_from_plan(
 
         created_tasks.append(task)
         existing_titles.append(task.title)
+        if task.description:
+            existing_descriptions.append(task.description)
 
         create_activity_log(
             db=db,
@@ -1916,6 +2458,9 @@ def create_ai_plan_and_tasks_for_project(
         "overwrite_existing_tasks": plan_data.overwrite_existing_tasks,
         "overwritten_task_count": overwritten_task_count,
         "improvement_summary": str(generated_plan.get("summary", "")),
+        "rejected_generic_count": int(
+            generated_plan.get("rejected_generic_count") or 0
+        ),
     }
 
     create_activity_log(
@@ -1932,6 +2477,9 @@ def create_ai_plan_and_tasks_for_project(
             "overwrite_existing_tasks": plan_data.overwrite_existing_tasks,
             "overwritten_task_count": overwritten_task_count,
             "source": str(generated_plan.get("source", "unknown")),
+            "rejected_generic_count": int(
+                generated_plan.get("rejected_generic_count") or 0
+            ),
         },
         commit=False,
     )
@@ -1965,6 +2513,9 @@ def create_ai_plan_generation_response(
         tasks_created=len(created_tasks),
         tasks_skipped_as_duplicates=skipped_duplicate_count,
         improvement_summary=str(ai_plan.generated_plan.get("improvement_summary", "")),
+        rejected_generic_count=int(
+            ai_plan.generated_plan.get("rejected_generic_count") or 0
+        ),
         tasks=[
             AIPlanGeneratedTaskResponse(
                 task_id=task.task_id,
@@ -2192,6 +2743,9 @@ def create_ai_plan_from_accepted_preview(
         "overwrite_existing_tasks": False,
         "overwritten_task_count": 0,
         "improvement_summary": str(generated_plan.get("summary", "")),
+        "rejected_generic_count": int(
+            generated_plan.get("rejected_generic_count") or 0
+        ),
     }
 
     create_activity_log(
@@ -2205,6 +2759,9 @@ def create_ai_plan_from_accepted_preview(
             "created_task_count": len(created_task_ids),
             "created_task_ids": created_task_ids,
             "source": preview.source,
+            "rejected_generic_count": int(
+                generated_plan.get("rejected_generic_count") or 0
+            ),
         },
         commit=False,
     )
@@ -2224,6 +2781,9 @@ def create_ai_plan_from_accepted_preview(
         tasks_created=len(created_tasks),
         tasks_skipped_as_duplicates=skipped_duplicate_count,
         improvement_summary=str(ai_plan.generated_plan.get("improvement_summary", "")),
+        rejected_generic_count=int(
+            ai_plan.generated_plan.get("rejected_generic_count") or 0
+        ),
         tasks=[
             AIPlanGeneratedTaskResponse(
                 task_id=task.task_id,

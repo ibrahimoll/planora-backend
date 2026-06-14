@@ -559,6 +559,54 @@ def test_generate_ai_plan_uses_software_tasks_for_explicit_flutter_app(
     assert "build the core product features" in task_titles
 
 
+def test_generate_ai_plan_uses_fitness_tasks_for_10k_steps_goal(
+    client: TestClient,
+    db: Session,
+    monkeypatch,
+):
+    _, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_generate_fitness_owner",
+        email="ai_generate_fitness_owner@example.com",
+    )
+
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        lambda _prompt: None,
+    )
+
+    project = create_personal_project(
+        client=client,
+        token=token,
+        title="Complete 10k steps",
+    )
+
+    response = client.post(
+        f"/projects/{project['project_id']}/ai-plan/generate",
+        headers=auth_headers(token),
+        json={
+            "prompt": "Complete 10k steps every day as a healthy walking habit.",
+            "generate_tasks": True,
+            "preferred_task_count": 6,
+        },
+    )
+
+    assert response.status_code == 201, response.text
+
+    tasks = response.json()["tasks"]
+    task_titles = " ".join(task["title"].lower() for task in tasks)
+
+    assert "step baseline" in task_titles
+    assert "walking time blocks" in task_titles
+    assert "track steps for 7 days" in task_titles
+    assert "increase step count gradually" in task_titles
+    assert "hydration" in task_titles
+    assert "define scope" not in task_titles
+    assert "analyze requirements" not in task_titles
+    assert "design the project structure" not in task_titles
+
+
 def test_preview_from_idea_does_not_create_project_until_accepted(
     client: TestClient,
     db: Session,
