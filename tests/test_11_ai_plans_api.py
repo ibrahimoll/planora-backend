@@ -1,13 +1,16 @@
 ﻿from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+import re
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.ai_plan import AIPlan
 from app.models.project import Project
 from app.models.task import Task
+from app.services.ai_plan_service import build_generated_plan
 
 from tests.conftest import (
     auth_headers,
@@ -53,7 +56,7 @@ def test_generate_ai_plan_for_personal_project_creates_tasks(
     assert data["project_id"] == project["project_id"]
     assert data["generated_by"] == user_id
     assert data["input_prompt"] == "Plan my final year project backend."
-    assert data["generated_plan"]["source"] == "local_rule_based_v1"
+    assert data["generated_plan"]["source"] == "local_dynamic_fallback_v5"
     assert len(data["generated_plan"]["tasks"]) == 4
     assert len(data["generated_plan"]["created_task_ids"]) == 4
 
@@ -950,3 +953,270 @@ def test_non_member_cannot_generate_team_ai_plan_endpoint(
     )
 
     assert response.status_code == 403, response.text
+
+
+SMART_SECTIONS = (
+    "Goal:",
+    "Steps:",
+    "Deliverable:",
+    "Done when:",
+    "Customer benefit:",
+)
+
+ACTION_VERBS = {
+    "add",
+    "adjust",
+    "analyze",
+    "ask",
+    "build",
+    "celebrate",
+    "choose",
+    "collect",
+    "compare",
+    "complete",
+    "confirm",
+    "contact",
+    "create",
+    "define",
+    "draft",
+    "estimate",
+    "evaluate",
+    "find",
+    "fix",
+    "gather",
+    "identify",
+    "increase",
+    "improve",
+    "list",
+    "make",
+    "map",
+    "measure",
+    "pick",
+    "plan",
+    "prepare",
+    "publish",
+    "remove",
+    "review",
+    "schedule",
+    "send",
+    "set",
+    "share",
+    "sketch",
+    "submit",
+    "take",
+    "test",
+    "track",
+    "validate",
+    "write",
+}
+
+BAD_TITLE_EXAMPLES = {
+    "research",
+    "plan project",
+    "improve business",
+    "work on app",
+    "create content",
+    "start marketing",
+    "finish project",
+}
+
+
+def _quality_project(idea: str) -> Project:
+    return Project(
+        project_id=0,
+        created_by=1,
+        team_id=None,
+        title=idea[:80],
+        description=idea,
+        deadline=datetime.now(timezone.utc) + timedelta(days=14),
+        status="not_started",
+        project_type="personal",
+    )
+
+
+def _assert_smart_generated_tasks(
+    plan: dict,
+    *,
+    expected_count: int,
+) -> None:
+    tasks = plan["tasks"]
+
+    assert len(tasks) == expected_count
+    assert len({task["title"] for task in tasks}) == expected_count
+    assert len({task["description"] for task in tasks}) == expected_count
+
+    due_dates = [
+        datetime.fromisoformat(task["due_date"])
+        for task in tasks
+    ]
+    assert due_dates == sorted(due_dates)
+
+    for task in tasks:
+        title = task["title"]
+        description = task["description"]
+        first_word = title.split(" ", 1)[0].lower()
+
+        assert first_word in ACTION_VERBS
+        assert title.lower() not in BAD_TITLE_EXAMPLES
+        assert task["priority"] in {"low", "medium", "high"}
+        assert 0.5 <= float(task["estimated_hours"]) <= 12
+
+        for section in SMART_SECTIONS:
+            assert section in description
+
+        assert len(re.findall(r"(?:^|\n)\s*\d+\.", description)) >= 3
+        assert "return JSON" not in description
+        assert "Project context:" not in description
+        assert "Preferred task count" not in description
+
+
+@pytest.mark.parametrize(
+    ("idea", "expected_domain", "expected_title_fragments"),
+    [
+        (
+            "I want more customers",
+            "business",
+            ["ideal customer", "acquisition channels", "outreach message"],
+        ),
+        (
+            "I want to start a clothing brand in Lebanon with low budget",
+            "business",
+            ["clothing niche", "local clothing competitors", "startup costs"],
+        ),
+        (
+            "Build an app that helps students manage homework",
+            "software",
+            ["student homework app", "homework subjects", "homework dashboard"],
+        ),
+        (
+            "I need to study marketing for my exam next week",
+            "study",
+            ["marketing exam topics", "7-day marketing study schedule"],
+        ),
+        (
+            "Plan a small birthday event for 20 people",
+            "event",
+            ["birthday goal", "birthday budget", "event schedule"],
+        ),
+        (
+            "I want to grow a TikTok page about gaming",
+            "content",
+            ["gaming TikTok audience", "gaming content pillars", "5 short gaming video ideas"],
+        ),
+        (
+            "I want to start working out at home",
+            "fitness",
+            ["home workout goal", "beginner-friendly exercises", "home workout schedule"],
+        ),
+    ],
+)
+def test_local_ai_plan_generation_creates_smart_domain_specific_tasks(
+    monkeypatch,
+    idea: str,
+    expected_domain: str,
+    expected_title_fragments: list[str],
+):
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        lambda _prompt: None,
+    )
+
+    plan = build_generated_plan(
+        project=_quality_project(idea),
+        input_prompt=idea,
+        task_count=6,
+        include_milestones=True,
+    )
+    task_titles = " ".join(task["title"].lower() for task in plan["tasks"])
+
+    assert plan["source"] == "local_dynamic_fallback_v5"
+    assert plan["domain"] == expected_domain
+    _assert_smart_generated_tasks(plan, expected_count=6)
+
+    for expected_fragment in expected_title_fragments:
+        assert expected_fragment.lower() in task_titles
+
+
+def test_ai_provider_invalid_json_uses_smart_safe_fallback(monkeypatch):
+    idea = "Build an app that helps students manage homework"
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        lambda _prompt: "not valid json",
+    )
+
+    plan = build_generated_plan(
+        project=_quality_project(idea),
+        input_prompt=idea,
+        task_count=5,
+        include_milestones=True,
+    )
+
+    assert plan["source"] == "local_dynamic_fallback_v5"
+    assert plan["domain"] == "software"
+    _assert_smart_generated_tasks(plan, expected_count=5)
+    assert "homework" in " ".join(task["title"].lower() for task in plan["tasks"])
+
+
+def test_generic_ai_provider_output_is_rewritten_to_smart_tasks(monkeypatch):
+    idea = "I want more customers"
+
+    def fake_provider_reply(_prompt: str) -> str:
+        return """
+        {
+          "domain": "business",
+          "summary": "Generic plan",
+          "tasks": [
+            {"suggested_order": 1, "title": "Research", "description": "Research", "priority": "urgent", "estimated_hours": 0},
+            {"suggested_order": 2, "title": "Plan project", "description": "Plan project", "priority": "medium", "estimated_hours": 100},
+            {"suggested_order": 3, "title": "Create content", "description": "Create content", "priority": "medium", "estimated_hours": null},
+            {"suggested_order": 4, "title": "Start marketing", "description": "Start marketing", "priority": "low", "estimated_hours": 1}
+          ],
+          "milestones": [],
+          "risks": [],
+          "recommendations": []
+        }
+        """
+
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        fake_provider_reply,
+    )
+
+    plan = build_generated_plan(
+        project=_quality_project(idea),
+        input_prompt=idea,
+        task_count=4,
+        include_milestones=False,
+    )
+    task_titles = {task["title"].lower() for task in plan["tasks"]}
+
+    assert plan["source"] == "gemini_structured_v3"
+    assert plan["rejected_generic_count"] >= 4
+    assert task_titles.isdisjoint(BAD_TITLE_EXAMPLES)
+    _assert_smart_generated_tasks(plan, expected_count=4)
+
+
+def test_preview_from_idea_rejects_too_short_input(
+    client: TestClient,
+    db: Session,
+):
+    _, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_preview_short_input_owner",
+        email="ai_preview_short_input_owner@example.com",
+    )
+
+    response = client.post(
+        "/ai-plans/preview-from-idea",
+        headers=auth_headers(token),
+        json={
+            "project_idea": "Too short",
+            "deadline": "2026-08-01T12:00:00+00:00",
+            "project_type": "personal",
+            "available_hours_per_week": 8,
+            "preferred_task_count": 6,
+        },
+    )
+
+    assert response.status_code == 422, response.text

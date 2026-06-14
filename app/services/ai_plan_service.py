@@ -46,18 +46,40 @@ TASK_TITLE_TEMPLATES = [
 ]
 
 BUSINESS_TASK_TITLE_TEMPLATES = [
-    "Define product niche and target customer",
-    "Research competitors and market demand",
-    "Estimate startup budget and pricing",
+    "Define clothing niche and target customer",
+    "Compare 3 local clothing competitors and prices",
+    "Estimate low-budget startup costs and pricing",
     "Choose brand name and visual identity",
-    "Find suppliers or production options",
-    "Plan first product collection",
+    "Compare 3 suppliers or production options",
+    "Plan the first clothing product collection",
     "Create social media content plan",
     "Set up online sales channel",
     "Plan delivery, payment, and returns",
     "Prepare launch campaign",
     "Prepare inventory and order tracking",
     "Review launch readiness and backup plan",
+]
+
+GENERAL_BUSINESS_TASK_TITLE_TEMPLATES = [
+    "Define the customer problem and offer",
+    "Compare 3 competitors and their prices",
+    "Estimate startup costs and simple pricing",
+    "Choose the first sales channel",
+    "Write the first customer message",
+    "Contact 10 potential customers and track replies",
+    "Prepare the payment and delivery process",
+    "Improve the offer based on customer feedback",
+]
+
+CUSTOMER_ACQUISITION_TASK_TITLE_TEMPLATES = [
+    "Define the ideal customer and offer",
+    "Choose 3 customer acquisition channels",
+    "Write a simple outreach message",
+    "Contact 10 potential customers and track replies",
+    "Track responses and common objections",
+    "Improve the offer based on replies",
+    "Ask interested leads for the next step",
+    "Review the best channel and repeat",
 ]
 
 SOFTWARE_TASK_TITLE_TEMPLATES = [
@@ -75,6 +97,17 @@ SOFTWARE_TASK_TITLE_TEMPLATES = [
     "Submit final version",
 ]
 
+STUDENT_HOMEWORK_APP_TASK_TITLE_TEMPLATES = [
+    "Define student homework app users and success criteria",
+    "Map homework subjects, due dates, and reminder needs",
+    "Sketch the homework dashboard and task screens",
+    "Build the first homework tracking prototype",
+    "Test the add-homework and reminder flow",
+    "Collect feedback from 3 students",
+    "Prepare the student homework app launch checklist",
+    "Review feedback and choose the next feature",
+]
+
 FITNESS_TASK_TITLE_TEMPLATES = [
     "Set a realistic daily step baseline",
     "Choose walking time blocks",
@@ -88,6 +121,17 @@ FITNESS_TASK_TITLE_TEMPLATES = [
     "Celebrate consistency and reset the target",
 ]
 
+HOME_WORKOUT_TASK_TITLE_TEMPLATES = [
+    "Choose a realistic home workout goal",
+    "Pick 5 beginner-friendly exercises",
+    "Create a weekly home workout schedule",
+    "Prepare a safe warmup and cooldown routine",
+    "Complete the first 3 workout sessions",
+    "Track reps, effort, and recovery",
+    "Adjust the routine for the next week",
+    "Plan a busy-day backup workout",
+]
+
 STUDY_TASK_TITLE_TEMPLATES = [
     "List exam topics and weak areas",
     "Build a weekly study timetable",
@@ -97,6 +141,16 @@ STUDY_TASK_TITLE_TEMPLATES = [
     "Take a timed mini mock test",
     "Schedule spaced revision blocks",
     "Prepare a final review checklist",
+]
+
+MARKETING_EXAM_STUDY_TASK_TITLE_TEMPLATES = [
+    "List marketing exam topics and weak areas",
+    "Create a 7-day marketing study schedule",
+    "Make active recall cards for key marketing terms",
+    "Complete one focused marketing practice session",
+    "Review marketing mistakes and update notes",
+    "Take a timed marketing mini mock test",
+    "Prepare the final marketing review checklist",
 ]
 
 EVENT_TASK_TITLE_TEMPLATES = [
@@ -110,6 +164,17 @@ EVENT_TASK_TITLE_TEMPLATES = [
     "Collect feedback after the event",
 ]
 
+BIRTHDAY_EVENT_TASK_TITLE_TEMPLATES = [
+    "Confirm the birthday goal and guest list",
+    "Set the birthday budget and spending limits",
+    "Choose the venue or home setup",
+    "Build the birthday event schedule",
+    "Plan food, drinks, music, and activities",
+    "Send invitations and track replies",
+    "Prepare the day-of birthday checklist",
+    "Collect feedback and photos after the event",
+]
+
 CONTENT_TASK_TITLE_TEMPLATES = [
     "Define the audience and content promise",
     "Choose content pillars",
@@ -119,6 +184,17 @@ CONTENT_TASK_TITLE_TEMPLATES = [
     "Publish and track engagement",
     "Review audience feedback",
     "Adjust the next content batch",
+]
+
+GAMING_TIKTOK_TASK_TITLE_TEMPLATES = [
+    "Define the gaming TikTok audience and promise",
+    "Choose 3 gaming content pillars",
+    "Plan the first TikTok posting schedule",
+    "Draft 5 short gaming video ideas",
+    "Prepare hooks, clips, captions, and hashtags",
+    "Publish the first videos and track engagement",
+    "Review watch time, comments, and saves",
+    "Adjust the next gaming content batch",
 ]
 
 PRODUCTIVITY_TASK_TITLE_TEMPLATES = [
@@ -177,6 +253,16 @@ BUSINESS_PATTERNS = (
     r"\bonline\s+(?:business|store|shop|sales|brand)\b",
     r"\bproduct\s+collection\b",
     r"\bsocial\s+media\b",
+    r"\bcustomers?\b",
+    r"\bclients?\b",
+    r"\bleads?\b",
+    r"\bsales?\b",
+    r"\brevenue\b",
+    r"\bmarketing\b",
+    r"\boutreach\b",
+    r"\boffer\b",
+    r"\bservice(?:s)?\b",
+    r"\bbookings?\b",
 )
 
 SOFTWARE_PATTERNS = (
@@ -208,6 +294,7 @@ FITNESS_PATTERNS = (
     r"\bwalk(?:ing)?\b",
     r"\brun(?:ning)?\b",
     r"\bworkout\b",
+    r"\bworking\s+out\b",
     r"\bexercise\b",
     r"\bsteps?\b",
     r"\b10\s?k\s+steps?\b",
@@ -276,6 +363,61 @@ GENERIC_TASK_TITLE_PATTERNS = (
     r"\bcomplete\s+(?:the\s+)?core\s+project\s+work\b",
     r"\bfix\s+issues\s+and\s+improve\s+quality\b",
     r"\bprepare\s+final\s+delivery\b",
+)
+
+ACTION_VERBS = {
+    "add",
+    "adjust",
+    "analyze",
+    "ask",
+    "build",
+    "celebrate",
+    "choose",
+    "collect",
+    "compare",
+    "complete",
+    "confirm",
+    "contact",
+    "create",
+    "define",
+    "draft",
+    "estimate",
+    "evaluate",
+    "find",
+    "fix",
+    "gather",
+    "identify",
+    "increase",
+    "improve",
+    "list",
+    "make",
+    "map",
+    "measure",
+    "pick",
+    "plan",
+    "prepare",
+    "publish",
+    "remove",
+    "review",
+    "schedule",
+    "send",
+    "set",
+    "share",
+    "sketch",
+    "submit",
+    "take",
+    "test",
+    "track",
+    "validate",
+    "write",
+}
+
+SMART_DESCRIPTION_SECTIONS = (
+    "goal:",
+    "steps:",
+    "deliverable:",
+    "done when:",
+    "customer benefit:",
 )
 
 
@@ -452,9 +594,6 @@ def _detect_project_domain(project_context: str) -> str:
     if explicit_software_build or is_explicit_software:
         return "software"
 
-    if is_business:
-        return "business"
-
     if is_fitness:
         return "fitness"
 
@@ -464,8 +603,18 @@ def _detect_project_domain(project_context: str) -> str:
     if is_event:
         return "event"
 
+    if is_business and (
+        _is_clothing_business_context(project_context)
+        or _is_customer_acquisition_context(project_context)
+        or not is_content
+    ):
+        return "business"
+
     if is_content:
         return "content"
+
+    if is_business:
+        return "business"
 
     if is_productivity:
         return "productivity"
@@ -473,9 +622,81 @@ def _detect_project_domain(project_context: str) -> str:
     return "general"
 
 
-def _select_task_title_templates(domain: str) -> list[str]:
+def _is_clothing_business_context(project_context: str) -> bool:
+    return _matches_any_pattern(
+        project_context,
+        (
+            r"\bclothing\b",
+            r"\bfashion\b",
+            r"\bapparel\b",
+            r"\bbrand\b",
+            r"\bboutique\b",
+            r"\bshirts?\b",
+            r"\bhoodies?\b",
+            r"\bdresses?\b",
+            r"\bcollection\b",
+        ),
+    )
+
+
+def _is_customer_acquisition_context(project_context: str) -> bool:
+    return _matches_any_pattern(
+        project_context,
+        (
+            r"\bmore\s+customers?\b",
+            r"\bnew\s+customers?\b",
+            r"\battract\s+customers?\b",
+            r"\bget\s+(?:more\s+)?(?:clients?|leads?|customers?)\b",
+            r"\bleads?\b",
+            r"\boutreach\b",
+            r"\bacquisition\b",
+            r"\bsales?\b",
+        ),
+    )
+
+
+def _select_task_title_templates(
+    domain: str,
+    project_context: str = "",
+) -> list[str]:
     if domain == "business":
-        return BUSINESS_TASK_TITLE_TEMPLATES
+        if _is_customer_acquisition_context(project_context):
+            return CUSTOMER_ACQUISITION_TASK_TITLE_TEMPLATES
+
+        if _is_clothing_business_context(project_context):
+            return BUSINESS_TASK_TITLE_TEMPLATES
+
+        return GENERAL_BUSINESS_TASK_TITLE_TEMPLATES
+
+    if domain == "software" and _matches_any_pattern(
+        project_context,
+        (r"\bstudents?\b", r"\bhomework\b", r"\bassignments?\b"),
+    ):
+        return STUDENT_HOMEWORK_APP_TASK_TITLE_TEMPLATES
+
+    if domain == "study" and _matches_any_pattern(
+        project_context,
+        (r"\bmarketing\b",),
+    ):
+        return MARKETING_EXAM_STUDY_TASK_TITLE_TEMPLATES
+
+    if domain == "event" and _matches_any_pattern(
+        project_context,
+        (r"\bbirthday\b",),
+    ):
+        return BIRTHDAY_EVENT_TASK_TITLE_TEMPLATES
+
+    if domain == "content" and _matches_any_pattern(
+        project_context,
+        (r"\btiktok\b.*\bgaming\b", r"\bgaming\b.*\btiktok\b"),
+    ):
+        return GAMING_TIKTOK_TASK_TITLE_TEMPLATES
+
+    if domain == "fitness" and _matches_any_pattern(
+        project_context,
+        (r"\bhome\b", r"\bworkout\b", r"\bworking\s+out\b", r"\bexercise\b"),
+    ):
+        return HOME_WORKOUT_TASK_TITLE_TEMPLATES
 
     if domain == "software":
         return SOFTWARE_TASK_TITLE_TEMPLATES
@@ -503,10 +724,34 @@ def _business_task_description(
 ) -> str:
     normalized = title.lower()
 
+    if "ideal customer" in normalized or "customer problem" in normalized or "offer" in normalized:
+        return (
+            "Clarify who you want to help, what result you can offer, and why "
+            "they should care enough to reply."
+        )
+
     if "niche" in normalized or "target customer" in normalized:
         return (
             "Decide what product category you will start with, who your ideal "
             "customer is, your style or value angle, and why people would buy from you."
+        )
+
+    if "acquisition channel" in normalized:
+        return (
+            "Choose a few realistic ways to reach customers before spending time "
+            "on channels that do not match the offer."
+        )
+
+    if "outreach" in normalized or "message" in normalized:
+        return (
+            "Create a simple message that explains the offer clearly and makes "
+            "it easy for a potential customer to respond."
+        )
+
+    if "contact 10" in normalized or "potential customers" in normalized:
+        return (
+            "Talk to a small measurable number of real prospects so the plan is "
+            "based on replies, not guesses."
         )
 
     if "competitor" in normalized or "market" in normalized:
@@ -580,6 +825,12 @@ def _software_task_description(
 ) -> str:
     normalized = title.lower()
 
+    if "student homework" in normalized or "homework" in normalized:
+        return (
+            "Turn the homework app idea into a clear first version that helps "
+            "students track assignments, due dates, and reminders."
+        )
+
     if "scope" in normalized:
         return (
             "Define target users, core use cases, success metrics, and the first "
@@ -649,7 +900,7 @@ def _study_task_description(title: str) -> str:
     if "topics" in normalized or "weak" in normalized:
         return "Map what must be learned and identify the areas that need the most practice."
 
-    if "timetable" in normalized or "revision" in normalized:
+    if "timetable" in normalized or "revision" in normalized or "schedule" in normalized:
         return "Place study blocks on real calendar times so revision happens before the deadline."
 
     if "recall" in normalized or "practice" in normalized:
@@ -755,6 +1006,7 @@ def _general_task_description(
 def _build_task_description_for_domain(
     domain: str,
     title: str,
+    project_context: str = "",
 ) -> str:
     if domain == "business":
         return _business_task_description(title)
@@ -778,6 +1030,551 @@ def _build_task_description_for_domain(
         return _productivity_task_description(title)
 
     return _general_task_description(title)
+
+
+def _short_context_snippet(project_context: str, max_length: int = 170) -> str:
+    cleaned = re.sub(r"\s+", " ", project_context.strip())
+
+    if len(cleaned) <= max_length:
+        return cleaned
+
+    return cleaned[: max_length - 3].rstrip() + "..."
+
+
+def _sentence(value: str) -> str:
+    cleaned = re.sub(r"\s+", " ", value.strip())
+
+    if not cleaned:
+        return "This task turns the idea into one practical result."
+
+    if cleaned[-1] not in ".!?":
+        cleaned = f"{cleaned}."
+
+    return cleaned
+
+
+def _build_contextual_assumption(
+    project_context: str,
+    domain: str,
+) -> str | None:
+    if domain == "business" and _is_customer_acquisition_context(project_context):
+        if not _matches_any_pattern(
+            project_context,
+            (
+                r"\bproduct\b",
+                r"\bservice\b",
+                r"\boffer\b",
+                r"\bstore\b",
+                r"\bshop\b",
+                r"\bbrand\b",
+            ),
+        ):
+            return (
+                "You already have a basic product or service to offer; "
+                "adjust the offer details if you are still choosing one."
+            )
+
+    return None
+
+
+def _build_business_steps(title: str, project_context: str) -> list[str]:
+    normalized = title.lower()
+
+    if "ideal customer" in normalized or "target customer" in normalized:
+        return [
+            "Write the exact customer type, location, budget level, and problem you want to solve.",
+            "Describe your offer in one sentence with the result, price range, or main promise.",
+            "List 3 reasons this customer would choose you instead of another option.",
+        ]
+
+    if "acquisition channel" in normalized or "sales channel" in normalized:
+        return [
+            "List the channels where your customer already spends time, such as Instagram, referrals, local groups, or search.",
+            "Choose 3 channels you can start using this week with little or no cost.",
+            "Define one first action and one success number for each channel.",
+        ]
+
+    if "outreach" in normalized or "message" in normalized:
+        return [
+            "Write a short message that names the customer problem and the result you can help with.",
+            "Create 2 variations: one friendly direct message and one slightly more formal version.",
+            "Save the final message with blanks for the customer name, need, and follow-up date.",
+        ]
+
+    if "contact 10" in normalized or "potential customers" in normalized:
+        return [
+            "Create a list of 10 realistic leads with name, contact method, and why they fit your offer.",
+            "Send or prepare the outreach message for each lead without changing the core promise.",
+            "Record each reply, no-reply, objection, and next action in one tracker.",
+        ]
+
+    if "responses" in normalized or "objections" in normalized:
+        return [
+            "Create columns for lead name, reply status, objection, interest level, and next step.",
+            "Group replies into patterns such as price concern, timing, unclear offer, or not the right customer.",
+            "Choose the 2 most common patterns to fix in your offer or message.",
+        ]
+
+    if "improve the offer" in normalized:
+        return [
+            "Review the replies and write what people understood, liked, ignored, or questioned.",
+            "Change one part of the offer, such as price, bundle, proof, wording, or call to action.",
+            "Send the improved version to 3 new or interested leads and compare the response.",
+        ]
+
+    if "competitor" in normalized:
+        return [
+            "Find 3 realistic competitors in the same area, price range, or audience.",
+            "Record their prices, best-selling items or services, strongest posts, and customer comments.",
+            "Write one gap you can use, such as faster delivery, lower starting price, better style, or clearer service.",
+        ]
+
+    if "budget" in normalized or "pricing" in normalized or "cost" in normalized:
+        return [
+            "List every expected cost, including samples, tools, packaging, delivery, platform fees, and ads.",
+            "Set a low-budget starting limit and mark which costs can wait until demand is proven.",
+            "Calculate a simple price range that covers cost and leaves a realistic profit.",
+        ]
+
+    if "brand name" in normalized or "visual identity" in normalized:
+        return [
+            "Shortlist 5 brand names that match the customer, style, and budget position.",
+            "Check basic availability on social media and remove confusing or hard-to-spell names.",
+            "Choose colors, tone, and a simple logo direction that can work on posts and packaging.",
+        ]
+
+    if "supplier" in normalized or "production" in normalized:
+        return [
+            "List 3 supplier or production options you can contact without committing money yet.",
+            "Ask each option for price, minimum quantity, sample cost, delivery time, and quality proof.",
+            "Compare the answers in one table and choose the safest first sample option.",
+        ]
+
+    if "collection" in normalized:
+        return [
+            "Choose 3 to 5 first products that match the customer and can be produced on a low budget.",
+            "Define size, color, quantity, target price, and sample needs for each product.",
+            "Remove items that are expensive, hard to deliver, or not needed for the first demand test.",
+        ]
+
+    if "social media" in normalized or "content" in normalized:
+        return [
+            "Pick the main platform and list the product photos, short videos, and customer questions needed for launch.",
+            "Write 5 post ideas with a hook, product angle, and clear order or inquiry action.",
+            "Schedule the posts around the launch date and prepare captions before publishing.",
+        ]
+
+    if "delivery" in normalized or "payment" in normalized or "returns" in normalized:
+        return [
+            "Choose payment methods, delivery areas, fees, and expected delivery times.",
+            "Write simple return and exchange rules that are fair and easy to explain.",
+            "Create the customer confirmation message for order, payment, delivery, and follow-up.",
+        ]
+
+    return [
+        "Write the concrete decision or output this business task must produce.",
+        "Add numbers, names, prices, customer details, or dates so the task is not vague.",
+        "Save the result in a document, tracker, checklist, message, or simple plan you can use next.",
+    ]
+
+
+def _build_software_steps(title: str, project_context: str) -> list[str]:
+    normalized = title.lower()
+    homework_context = _matches_any_pattern(
+        project_context,
+        (r"\bstudents?\b", r"\bhomework\b", r"\bassignments?\b"),
+    )
+
+    if homework_context:
+        if "users" in normalized or "success" in normalized or "scope" in normalized:
+            return [
+                "Write who will use the homework app and what problem it solves during a school week.",
+                "Choose the success measure, such as assignments added, overdue work reduced, or reminders used.",
+                "Define the smallest first version that helps one student manage one week of homework.",
+            ]
+
+        if "subjects" in normalized or "due dates" in normalized or "reminder" in normalized:
+            return [
+                "List the homework details a student must enter, such as subject, task name, due date, priority, and notes.",
+                "Decide when reminders should appear and what the reminder should say.",
+                "Separate must-have fields from optional fields so the first version stays simple.",
+            ]
+
+        if "dashboard" in normalized or "screens" in normalized:
+            return [
+                "Sketch the main dashboard with homework due today, upcoming work, and completed work.",
+                "Sketch the add-homework screen with only the fields needed for the first version.",
+                "Draw how a student moves from dashboard to add, edit, complete, and filter homework.",
+            ]
+
+        if "prototype" in normalized:
+            return [
+                "Build or mock the add-homework flow with subject, due date, priority, and completion status.",
+                "Add sample homework items so the dashboard looks realistic.",
+                "Save notes for missing features, confusing parts, and what needs to be tested next.",
+            ]
+
+        if "test" in normalized or "flow" in normalized:
+            return [
+                "Add one normal homework item, one urgent item, and one completed item.",
+                "Check that the dashboard, due dates, reminder state, and completion status update correctly.",
+                "Record every confusing step or broken behavior with the screen name and expected result.",
+            ]
+
+        if "feedback" in normalized:
+            return [
+                "Show the homework flow to 3 students or people who understand student routines.",
+                "Ask what feels useful, confusing, missing, or too much for a first version.",
+                "Group their feedback into must-fix, later, and ignore for now.",
+            ]
+
+    if "requirements" in normalized or "needs" in normalized:
+        return [
+            "Write 3 to 5 user stories from the user's point of view.",
+            "Add acceptance checks for each story so you know when it works.",
+            "Mark must-have features separately from nice-to-have ideas that can wait.",
+        ]
+
+    if "screen" in normalized or "dashboard" in normalized or "architecture" in normalized:
+        return [
+            "Sketch the main screens or modules needed for the first usable workflow.",
+            "List the data each screen needs to show, save, edit, or delete.",
+            "Connect the screens or modules in the order a real user would use them.",
+        ]
+
+    if "prototype" in normalized or "build" in normalized or "features" in normalized:
+        return [
+            "Build or mock the smallest complete workflow that proves the main idea.",
+            "Use real-looking sample data so the result can be tested honestly.",
+            "Save notes for missing pieces, bugs, and decisions needed before the next build step.",
+        ]
+
+    if "test" in normalized:
+        return [
+            "List the 3 most important user flows that must work before release.",
+            "Run each flow with normal data and one edge case.",
+            "Record every issue with the expected result, actual result, and fix priority.",
+        ]
+
+    return [
+        "Define the specific user result this software task must create.",
+        "Break the work into screens, data, logic, or test checks that can be completed now.",
+        "Create or update the smallest usable version and verify it with sample data.",
+    ]
+
+
+def _build_study_steps(title: str, project_context: str) -> list[str]:
+    normalized = title.lower()
+
+    if "topics" in normalized or "weak" in normalized:
+        return [
+            "List every topic, chapter, slide deck, or question type expected in the exam.",
+            "Mark each topic as strong, medium, or weak based on your current confidence.",
+            "Choose the 3 weakest topics to study first because they can raise your score fastest.",
+        ]
+
+    if "schedule" in normalized or "timetable" in normalized:
+        return [
+            "Count the days until the exam and block realistic study sessions on your calendar.",
+            "Assign weak topics, practice questions, and review sessions to specific time blocks.",
+            "Leave one short buffer session for missed work or final review.",
+        ]
+
+    if "cards" in normalized or "recall" in normalized:
+        return [
+            "Turn key definitions, formulas, examples, or frameworks into question-and-answer cards.",
+            "Add one example question for each difficult topic.",
+            "Review the cards without looking at notes and mark the ones you miss.",
+        ]
+
+    if "practice" in normalized or "mock" in normalized:
+        return [
+            "Choose a small set of realistic questions or past exercises.",
+            "Answer them under a timer without checking notes.",
+            "Score your answers and write exactly what to review next.",
+        ]
+
+    return [
+        "Choose the exact study output this task must create.",
+        "Practice actively instead of only rereading notes.",
+        "Review mistakes and update your next study block from what you missed.",
+    ]
+
+
+def _build_event_steps(title: str, project_context: str) -> list[str]:
+    normalized = title.lower()
+
+    if "guest" in normalized or "goal" in normalized:
+        return [
+            "Write the event purpose, guest count, and the experience you want people to have.",
+            "Create the guest list with names, contact method, and invite status.",
+            "Mark must-invite people and anyone who needs special timing, seating, or food notes.",
+        ]
+
+    if "budget" in normalized:
+        return [
+            "Set the maximum amount you can spend without stress.",
+            "Split the budget across venue, food, cake, decoration, music, transport, and backup costs.",
+            "Remove or reduce anything that is nice to have but not needed for the event goal.",
+        ]
+
+    if "venue" in normalized or "home setup" in normalized:
+        return [
+            "Choose the location option that fits the guest count, budget, weather, and setup time.",
+            "Check seating, food space, music rules, parking, and cleanup needs.",
+            "Confirm the chosen setup with one backup option in case something changes.",
+        ]
+
+    if "schedule" in normalized or "day-of" in normalized:
+        return [
+            "Write the event timeline from setup to guest arrival, activities, food, cake, and cleanup.",
+            "Assign each activity a time, owner, and needed material.",
+            "Prepare a final checklist you can follow on the event day.",
+        ]
+
+    return [
+        "Write the exact event decision or material this task must produce.",
+        "Add names, times, quantities, vendors, or materials so the plan is usable.",
+        "Confirm the result with anyone who depends on it before moving to the next task.",
+    ]
+
+
+def _build_content_steps(title: str, project_context: str) -> list[str]:
+    normalized = title.lower()
+
+    if "audience" in normalized or "promise" in normalized:
+        return [
+            "Describe the viewer you want to attract, including interest level, platform habits, and what they enjoy.",
+            "Write the page promise in one sentence so people know why to follow.",
+            "Choose one style, such as tips, reactions, rankings, challenges, reviews, or short stories.",
+        ]
+
+    if "pillars" in normalized:
+        return [
+            "Choose 3 repeatable topics that match your audience and are easy to produce.",
+            "Write 5 example ideas under each pillar.",
+            "Remove ideas that need expensive tools, too much editing, or do not match the page promise.",
+        ]
+
+    if "video" in normalized or "post" in normalized or "clips" in normalized:
+        return [
+            "Write each content idea with a hook, main moment, caption angle, and call to action.",
+            "Prepare the clips, screenshots, captions, hashtags, or visuals needed for the first batch.",
+            "Check that every piece can be created with your current time, tools, and skill level.",
+        ]
+
+    if "publish" in normalized or "engagement" in normalized or "feedback" in normalized:
+        return [
+            "Publish or schedule the content at realistic times for your audience.",
+            "Track views, watch time, comments, saves, shares, and repeated questions.",
+            "Choose what to repeat, stop, or change in the next content batch.",
+        ]
+
+    return [
+        "Choose the exact content output this task must produce.",
+        "Add hook, format, topic, caption, and publishing details.",
+        "Save the result so it can be published, reviewed, or reused in the next batch.",
+    ]
+
+
+def _build_fitness_steps(title: str, project_context: str) -> list[str]:
+    normalized = title.lower()
+
+    if "goal" in normalized or "baseline" in normalized:
+        return [
+            "Write your current fitness level, available days, space, equipment, and any limits.",
+            "Choose one starting goal that can be completed at home this week.",
+            "Set a simple progress measure, such as sessions completed, minutes, reps, or step count.",
+        ]
+
+    if "exercise" in normalized:
+        return [
+            "Pick safe beginner exercises that match your space and equipment.",
+            "Write sets, reps, rest time, and easier alternatives for each exercise.",
+            "Test the routine once at low intensity and remove anything painful or unrealistic.",
+        ]
+
+    if "schedule" in normalized:
+        return [
+            "Choose 3 realistic workout days and times for the coming week.",
+            "Assign a short routine to each day with estimated minutes and needed equipment.",
+            "Add one rest or recovery day so the plan is easier to keep.",
+        ]
+
+    if "warmup" in normalized or "cooldown" in normalized:
+        return [
+            "Choose 3 warmup moves that prepare the body without tiring you out.",
+            "Choose 3 cooldown or stretching moves that help recovery.",
+            "Write when to stop or reduce intensity if something feels unsafe.",
+        ]
+
+    if "sessions" in normalized:
+        return [
+            "Complete the planned sessions at a beginner effort level.",
+            "Write what exercises you completed, what you skipped, and why.",
+            "Mark each session as done only after cooldown and recovery notes are recorded.",
+        ]
+
+    if "track" in normalized or "recovery" in normalized:
+        return [
+            "Record each session date, exercises, reps, effort, and how your body felt afterward.",
+            "Note what made the workout easier or harder, such as time of day, sleep, or soreness.",
+            "Adjust the next week by adding only one small increase or one helpful recovery change.",
+        ]
+
+    if "adjust" in normalized:
+        return [
+            "Review the first week and mark which exercises felt too easy, too hard, or just right.",
+            "Change only one variable, such as reps, sets, rest time, or workout length.",
+            "Write the updated routine for the next week before starting it.",
+        ]
+
+    return [
+        "Choose the smallest fitness action you can repeat this week.",
+        "Prepare the space, time, and equipment before the session starts.",
+        "Track completion and adjust the next step from real energy and recovery.",
+    ]
+
+
+def _build_productivity_steps(title: str, project_context: str) -> list[str]:
+    normalized = title.lower()
+
+    if "target" in normalized or "daily action" in normalized:
+        return [
+            "Choose one behavior you can measure without guessing.",
+            "Make the action small enough to do on a busy day.",
+            "Write where, when, and how you will record completion.",
+        ]
+
+    if "track" in normalized or "review" in normalized:
+        return [
+            "Record completion daily for one week without changing the target midway.",
+            "Mark missed days and write the real reason they happened.",
+            "Choose one adjustment that makes the habit easier next week.",
+        ]
+
+    return [
+        "Write the exact routine change this task must create.",
+        "Set reminders, cues, or friction reducers that make the action easier.",
+        "Track the result and use it to choose the next small improvement.",
+    ]
+
+
+def _build_general_steps(title: str, project_context: str) -> list[str]:
+    context = _short_context_snippet(project_context, max_length=120)
+    context_hint = f" for this idea: {context}" if context else ""
+
+    return [
+        f"Write the exact output needed for '{title}'{context_hint}.",
+        "List the concrete people, numbers, resources, dates, or decisions needed to complete it.",
+        "Create the smallest usable version of the output and save it where you can reuse it.",
+        "Check the output against the original goal and remove anything that belongs to a later version.",
+    ]
+
+
+def _build_task_steps(
+    domain: str,
+    title: str,
+    project_context: str,
+) -> list[str]:
+    if domain == "business":
+        return _build_business_steps(title=title, project_context=project_context)
+
+    if domain == "software":
+        return _build_software_steps(title=title, project_context=project_context)
+
+    if domain == "study":
+        return _build_study_steps(title=title, project_context=project_context)
+
+    if domain == "event":
+        return _build_event_steps(title=title, project_context=project_context)
+
+    if domain == "content":
+        return _build_content_steps(title=title, project_context=project_context)
+
+    if domain == "fitness":
+        return _build_fitness_steps(title=title, project_context=project_context)
+
+    if domain == "productivity":
+        return _build_productivity_steps(title=title, project_context=project_context)
+
+    return _build_general_steps(title=title, project_context=project_context)
+
+
+def _build_task_deliverable(title: str, domain: str) -> str:
+    normalized = title.lower()
+
+    if "message" in normalized or "outreach" in normalized:
+        return "A ready-to-send outreach message with a clear offer and follow-up note."
+
+    if "contact 10" in normalized or "potential customers" in normalized:
+        return "A lead tracker with at least 10 contacts, message status, replies, and next actions."
+
+    if "track" in normalized or "responses" in normalized:
+        return "A tracker that shows progress, replies, blockers, and the next decision."
+
+    if "schedule" in normalized or "timetable" in normalized:
+        return "A dated schedule with specific sessions, topics, or actions assigned to real time blocks."
+
+    if "prototype" in normalized or "screen" in normalized or "app" in normalized:
+        return "A saved prototype, sketch, or working first version that can be tested by a real user."
+
+    if "budget" in normalized or "pricing" in normalized or "cost" in normalized:
+        return "A simple budget and price table with totals, limits, and decisions clearly marked."
+
+    if "guest" in normalized:
+        return "A guest list with invite status, contact details, and important notes."
+
+    if "content" in normalized or "post" in normalized or "video" in normalized:
+        return "A prepared content batch or publishing plan with hooks, formats, captions, and dates."
+
+    if domain == "fitness":
+        return "A written workout or habit tracker with sessions, measures, and recovery notes."
+
+    return f"A saved checklist, document, tracker, prototype, or plan for '{title}'."
+
+
+def _build_task_done_when(title: str) -> str:
+    normalized = title.lower()
+
+    if "contact 10" in normalized:
+        return "10 potential customers are listed, contacted or ready to contact, and every reply field is tracked."
+
+    if "choose 3" in normalized:
+        return "3 options are selected, each with one first action and one measurable success number."
+
+    if "5" in normalized and ("posts" in normalized or "video" in normalized):
+        return "5 content ideas are written with hook, format, caption angle, and publishing notes."
+
+    if "3 students" in normalized:
+        return "3 students have reviewed the idea or prototype and their feedback is recorded."
+
+    return "The deliverable is saved, includes at least 3 concrete details, and can guide the next task."
+
+
+def _build_task_customer_benefit(domain: str, title: str) -> str:
+    if domain == "business":
+        return "This helps turn the idea into customer-facing actions that can create real replies or sales."
+
+    if domain == "software":
+        return "This helps the customer build the useful first version instead of getting stuck in vague app ideas."
+
+    if domain == "study":
+        return "This makes study progress visible and focuses effort on the exam work that matters most."
+
+    if domain == "event":
+        return "This reduces last-minute stress by turning the event idea into confirmed details."
+
+    if domain == "content":
+        return "This helps the customer publish consistently and learn what the audience actually wants."
+
+    if domain == "fitness":
+        return "This makes the habit realistic enough to start and keep doing at home."
+
+    if domain == "productivity":
+        return "This makes progress measurable without making the routine too heavy."
+
+    return "This gives the customer a concrete result that moves the original goal forward."
 
 
 def _build_milestones(
@@ -1157,6 +1954,7 @@ Improve means add missing steps, break down vague work, identify gaps, adjust pr
 Do not rely on fixed categories.
 Do not assume the project is software unless the user clearly asks for software, app, website, code, game, backend, frontend, or platform.
 Do not assume the project is a business unless the user clearly wants to sell, launch, earn money, attract customers, or operate a service.
+Handle any practical idea type, including business ideas, software/app ideas, study plans, personal productivity, events, content creation, fitness or habit goals, services, small local businesses, vague customer goals, spelling mistakes, and missing details.
 
 Critical output rules:
 - Return valid JSON only.
@@ -1166,11 +1964,11 @@ Critical output rules:
 - Generate exactly {task_count} tasks.
 - Task titles must start with an action verb.
 - Task titles must be specific to the user's idea.
-- Avoid vague titles like "Research", "Plan", "Prepare", "Improve", "Start marketing", or "Create content".
+- Avoid vague titles like "Research", "Plan project", "Improve business", "Work on app", "Create content", "Start marketing", or "Finish project".
 - Do not duplicate existing task titles, descriptions, or the same intent.
 - If a current task already covers an idea, generate a different missing or follow-up task.
 - Priority must be one of: low, medium, high.
-- estimated_hours must be a number between 0.5 and 40.
+- estimated_hours must be realistic: small tasks 0.5-2 hours, medium tasks 2-5 hours, larger tasks 5-12 hours. Avoid 20+ hour tasks.
 - suggested_order must start at 1 and increase by 1.
 
 Universal task quality rules:
@@ -1189,7 +1987,10 @@ Deliverable:
 Explain exactly what the user should have after finishing the task.
 
 Done when:
-Explain how the user knows the task is complete.
+Give a measurable condition that proves the task is complete.
+
+Customer benefit:
+Explain in one short sentence how the task helps the customer reach the original goal.
 
 Important:
 - The task must teach the user what to do.
@@ -1197,11 +1998,24 @@ Important:
 - The task must not be generic.
 - The task must be understandable by a beginner.
 - The task must move the project forward.
+- The task must produce a visible result, such as a checklist, tracker, schedule, message, prototype, budget, content batch, customer list, or completed practice set.
+- If information is missing, make a safe assumption and include a short "Assumption:" line only inside the relevant task description.
 - If the idea is about selling something, include tasks about offer, audience, pricing, cost, sales, and delivery.
 - If the idea is about creating something, include tasks about requirements, materials/tools, first version, testing, feedback, and final delivery.
 - If the idea is about learning, include tasks about topics, practice, review, exercises, and progress checks.
 - If the idea is about an event, include tasks about goal, people, budget, location, schedule, materials, and follow-up.
 - If the idea is about content, include tasks about audience, content pillars, first posts/videos, publishing schedule, and feedback.
+- If the idea is "I want more customers" or similarly vague, generate a first achievable customer acquisition plan: define the ideal customer and offer, choose 3 channels, write outreach, contact a small measurable number of leads, track responses, and improve the offer from replies.
+
+Priority rules:
+- high: tasks that unblock the project, define direction, validate demand, or finish delivery.
+- medium: normal execution work.
+- low: polish, optional improvements, cleanup, or non-critical extras.
+
+Ordering and due-date intent:
+- Earlier tasks should clarify, validate, research, or set up.
+- Middle tasks should execute the plan.
+- Final tasks should test, review, launch, deliver, or collect feedback.
 
 Project context:
 - title: {project.title}
@@ -1224,7 +2038,7 @@ Return JSON in exactly this shape:
     {{
       "suggested_order": 1,
       "title": "specific action-based task title",
-      "description": "Goal: Explain why this task matters.\\n\\nSteps:\\n1. First practical action.\\n2. Second practical action.\\n3. Third practical action.\\n\\nDeliverable: The exact output the user should have.\\n\\nDone when: How the user knows this task is finished.",
+      "description": "Goal: One sentence explaining why this exact task matters.\\n\\nSteps:\\n1. First practical action.\\n2. Second practical action.\\n3. Third practical action.\\n\\nDeliverable: The exact output the user should have.\\n\\nDone when: A measurable completion condition.\\n\\nCustomer benefit: One short sentence explaining how this helps the original goal.",
       "priority": "high",
       "estimated_hours": 2.5
     }}
@@ -1310,6 +2124,11 @@ def _is_bad_ai_task_text(value: str) -> bool:
         "return valid json",
         "project context:",
         "user idea and requirements:",
+        "return json",
+        "return a practical plan",
+        "every task description must",
+        "universal task quality rules",
+        "you are planora ai",
         "do not add",
         "$1",
     ]
@@ -1317,20 +2136,79 @@ def _is_bad_ai_task_text(value: str) -> bool:
     return any(fragment in lowered for fragment in bad_fragments)
 
 
+def _extract_description_section(
+    value: str,
+    label: str,
+    next_labels: tuple[str, ...],
+) -> str:
+    stop_pattern = "|".join(re.escape(next_label) for next_label in next_labels)
+    pattern = rf"{re.escape(label)}\s*(.*?)(?:\n\s*(?:{stop_pattern})|$)"
+    match = re.search(pattern, value, flags=re.IGNORECASE | re.DOTALL)
+
+    if match is None:
+        return ""
+
+    return match.group(1).strip()
+
+
+def _description_has_visible_result(value: str) -> bool:
+    deliverable = _extract_description_section(
+        value=value,
+        label="Deliverable:",
+        next_labels=("Done when:", "Customer benefit:"),
+    )
+    normalized = _normalize_comparison_text(deliverable)
+
+    if not normalized:
+        return False
+
+    generic_deliverables = {
+        "a finished result for this task",
+        "a clear finished output for this task",
+        "a project specific output for this task",
+        "the exact output the user should have",
+    }
+
+    if normalized in generic_deliverables:
+        return False
+
+    visible_terms = (
+        "budget",
+        "calendar",
+        "checklist",
+        "content",
+        "document",
+        "draft",
+        "guest list",
+        "lead tracker",
+        "list",
+        "message",
+        "plan",
+        "post",
+        "practice",
+        "price",
+        "prototype",
+        "schedule",
+        "screen",
+        "table",
+        "tracker",
+        "video",
+    )
+
+    return any(term in normalized for term in visible_terms)
+
+
 def _is_actionable_task_description(value: str) -> bool:
     lowered = value.lower()
 
-    required_sections = [
-        "goal:",
-        "steps:",
-        "deliverable:",
-        "done when:",
-    ]
-
-    has_all_sections = all(section in lowered for section in required_sections)
+    has_all_sections = all(section in lowered for section in SMART_DESCRIPTION_SECTIONS)
     numbered_steps = len(re.findall(r"(?:^|\n)\s*\d+\.", value))
 
-    return has_all_sections and numbered_steps >= 3
+    return (
+        has_all_sections
+        and numbered_steps >= 3
+        and _description_has_visible_result(value)
+    )
 
 
 
@@ -1398,6 +2276,7 @@ def _description_key(description: str) -> str:
     cleaned = re.sub(r"steps:\s*", "", cleaned)
     cleaned = re.sub(r"deliverable:\s*", "", cleaned)
     cleaned = re.sub(r"done when:\s*", "", cleaned)
+    cleaned = re.sub(r"customer benefit:\s*", "", cleaned)
 
     return cleaned[:500]
 
@@ -1416,6 +2295,10 @@ def _description_is_too_generic(description: str) -> bool:
         "create the smallest useful version of that output",
         "remove anything that belongs to a later version",
         "save the result so it can be used in the next task",
+        "understand what this task requires",
+        "complete the smallest useful version",
+        "review the result before moving forward",
+        "a finished result for this task",
     ]
 
     matches = sum(fragment in lowered for fragment in generic_fragments)
@@ -1425,6 +2308,7 @@ def _description_is_too_generic(description: str) -> bool:
 
 def _is_low_quality_task_title(title: str) -> bool:
     normalized = _normalize_comparison_text(title)
+    first_word = normalized.split(" ", 1)[0] if normalized else ""
     generic_titles = {
         "research",
         "planning",
@@ -1435,9 +2319,24 @@ def _is_low_quality_task_title(title: str) -> bool:
         "improve",
         "start",
         "task",
+        "plan project",
+        "improve business",
+        "work on app",
+        "create content",
+        "start marketing",
+        "finish project",
+        "complete project step",
+        "complete project step 1",
+        "complete project step 2",
+        "complete project step 3",
     }
 
-    return normalized in generic_titles or len(normalized) < 4
+    return (
+        normalized in generic_titles
+        or len(normalized) < 4
+        or re.fullmatch(r"complete project step \d+", normalized) is not None
+        or first_word not in ACTION_VERBS
+    )
 
 
 def _is_disallowed_generic_task_title(title: str, domain: str) -> bool:
@@ -1461,37 +2360,50 @@ def _has_similar_seen_title(title: str, seen_titles: set[str]) -> bool:
     return any(_task_titles_are_similar(title, seen_title) for seen_title in seen_titles)
 
 
+def _fallback_task_title_for_index(
+    domain: str,
+    project_context: str,
+    index: int,
+) -> str:
+    templates = _select_task_title_templates(
+        domain=domain,
+        project_context=project_context,
+    )
+
+    return templates[index % len(templates)]
+
+
 def _format_actionable_description(
     title: str,
     base_description: str,
     project_context: str,
+    domain: str = "general",
+    assumption: str | None = None,
 ) -> str:
     clean_title = title.strip() or "Complete this task"
-    clean_base = (
-        base_description.strip()
-        or f"Complete '{clean_title}' with one clear practical result."
+    clean_base = _sentence(
+        base_description
+        or f"Complete '{clean_title}' with one clear practical result"
     )
-    clean_context = re.sub(r"\s+", " ", project_context.strip())
-
-    if len(clean_context) > 180:
-        clean_context = clean_context[:177].rstrip() + "..."
-
-    context_line = (
-        f" Use this project context while doing it: {clean_context}"
-        if clean_context
-        else ""
+    steps = _build_task_steps(
+        domain=domain,
+        title=clean_title,
+        project_context=project_context,
+    )[:5]
+    assumption_text = f"\n\nAssumption: {assumption}" if assumption else ""
+    numbered_steps = "\n".join(
+        f"{index}. {_sentence(step)}"
+        for index, step in enumerate(steps, start=1)
     )
 
     return (
-        f"Goal: {clean_base}\n\n"
+        f"Goal: {clean_base}"
+        f"{assumption_text}\n\n"
         "Steps:\n"
-        f"1. Write what '{clean_title}' means for this exact project, not for a generic project.{context_line}\n"
-        "2. List the concrete items, fields, screens, products, people, or actions needed for this task.\n"
-        "3. Create the smallest usable output for this task using those concrete details.\n"
-        "4. Remove anything that belongs to a later version so the task stays easy to finish.\n"
-        "5. Check that the output can be used directly in the next task.\n\n"
-        f"Deliverable: A project-specific output for '{clean_title}' that can be used immediately.\n\n"
-        "Done when: The output is clear, specific to this idea, and ready to guide the next step."
+        f"{numbered_steps}\n\n"
+        f"Deliverable: {_build_task_deliverable(clean_title, domain)}\n\n"
+        f"Done when: {_build_task_done_when(clean_title)}\n\n"
+        f"Customer benefit: {_build_task_customer_benefit(domain, clean_title)}"
     )
 
 
@@ -1510,11 +2422,14 @@ def _coerce_ai_estimated_hours(value: Any, fallback: float) -> float:
     except (TypeError, ValueError):
         return fallback
 
-    if hours < 0.5:
-        return 0.5
+    if hours <= 0:
+        return fallback
 
-    if hours > 40:
-        return 40.0
+    if hours < 0.5:
+        return max(0.5, fallback)
+
+    if hours > 12:
+        return 12.0
 
     return round(hours, 2)
 
@@ -1580,13 +2495,15 @@ Deliverable: The exact output the user should have after finishing this task.
 
 Done when: A clear condition that proves this task is complete.
 
+Customer benefit: One short sentence explaining how this task helps the original goal.
+
 Return valid JSON only in this exact shape:
 {{
   "tasks": [
     {{
       "suggested_order": 1,
       "title": "same title",
-      "description": "Goal: ...\n\nSteps:\n1. ...\n2. ...\n3. ...\n\nDeliverable: ...\n\nDone when: ..."
+      "description": "Goal: ...\n\nSteps:\n1. ...\n2. ...\n3. ...\n\nDeliverable: ...\n\nDone when: ...\n\nCustomer benefit: ..."
     }}
   ]
 }}
@@ -1601,7 +2518,10 @@ def _generated_plan_has_generic_descriptions(generated_plan: dict[str, Any]) -> 
 
     return any(
         isinstance(task, dict)
-        and _description_is_too_generic(str(task.get("description") or ""))
+        and (
+            _description_is_too_generic(str(task.get("description") or ""))
+            or not _is_actionable_task_description(str(task.get("description") or ""))
+        )
         for task in tasks
     )
 
@@ -1732,15 +2652,14 @@ def _normalize_ai_plan_response(
     if not isinstance(raw_tasks, list):
         return None
 
-    raw_tasks = raw_tasks[:task_count]
-
-    if len(raw_tasks) < max(3, min(task_count, 3)):
+    if len(raw_tasks) != task_count:
         return None
 
-    due_dates = _build_ai_due_dates(project=project, task_count=len(raw_tasks))
+    due_dates = _build_ai_due_dates(project=project, task_count=task_count)
     tasks: list[dict[str, Any]] = []
     seen_titles: set[str] = set()
     seen_descriptions: set[str] = set()
+    rejected_generic_count = 0
     project_context = _extract_user_project_context(
         project=project,
         input_prompt=input_prompt,
@@ -1778,7 +2697,12 @@ def _normalize_ai_plan_response(
             return None
 
         if _is_low_quality_task_title(title):
-            title = f"Complete project step {index + 1}"
+            title = _fallback_task_title_for_index(
+                domain=detected_domain,
+                project_context=project_context,
+                index=index,
+            )
+            rejected_generic_count += 1
 
         description_key = _description_key(description)
         needs_description_rewrite = (
@@ -1798,10 +2722,22 @@ def _normalize_ai_plan_response(
                 base_description=_build_task_description_for_domain(
                     domain=fallback_domain,
                     title=title,
+                    project_context=project_context,
                 ),
                 project_context=project_context,
+                domain=fallback_domain,
+                assumption=_build_contextual_assumption(
+                    project_context=project_context,
+                    domain=fallback_domain,
+                )
+                if index == 0
+                else None,
             )
             description_key = _description_key(description)
+            rejected_generic_count += 1
+
+        if description_key in seen_descriptions:
+            return None
 
         normalized_title_key = title.lower()
 
@@ -1813,6 +2749,10 @@ def _normalize_ai_plan_response(
 
         seen_titles.add(normalized_title_key)
         seen_descriptions.add(description_key)
+        estimated_hours = _coerce_ai_estimated_hours(
+            raw_task.get("estimated_hours"),
+            fallback=_estimated_hours_for_index(index),
+        )
 
         tasks.append(
             {
@@ -1823,10 +2763,7 @@ def _normalize_ai_plan_response(
                     raw_task.get("priority"),
                     fallback=_priority_for_index(index=index, task_count=len(raw_tasks)),
                 ),
-                "estimated_hours": _coerce_ai_estimated_hours(
-                    raw_task.get("estimated_hours"),
-                    fallback=_estimated_hours_for_index(index),
-                ),
+                "estimated_hours": estimated_hours,
                 "due_date": due_dates[index],
                 "assigned_to": raw_task.get("assigned_to"),
             }
@@ -1927,7 +2864,7 @@ def _normalize_ai_plan_response(
         "source": "gemini_structured_v3",
         "domain": domain,
         "summary": summary,
-        "rejected_generic_count": 0,
+        "rejected_generic_count": rejected_generic_count,
         "project": {
             "project_id": project.project_id,
             "title": project.title,
@@ -2008,7 +2945,10 @@ def _build_local_generated_plan(
         input_prompt=project_context,
     )
     domain = _detect_project_domain(user_project_context)
-    task_title_templates = _select_task_title_templates(domain)
+    task_title_templates = _select_task_title_templates(
+        domain=domain,
+        project_context=user_project_context,
+    )
 
     tasks: list[dict[str, Any]] = []
     assignable_member_ids = [
@@ -2035,8 +2975,16 @@ def _build_local_generated_plan(
                     base_description=_build_task_description_for_domain(
                         domain=domain,
                         title=title_template,
+                        project_context=user_project_context,
                     ),
                     project_context=user_project_context,
+                    domain=domain,
+                    assumption=_build_contextual_assumption(
+                        project_context=user_project_context,
+                        domain=domain,
+                    )
+                    if index == 0
+                    else None,
                 ),
                 "priority": _priority_for_index(
                     index=index,
@@ -2049,7 +2997,7 @@ def _build_local_generated_plan(
         )
 
     return {
-        "source": "local_dynamic_fallback_v4",
+        "source": "local_dynamic_fallback_v5",
         "domain": domain,
         "summary": (
             f"Generated a structured fallback plan for '{project.title}' with "
@@ -2126,7 +3074,7 @@ def build_generated_plan(
 
     return {
     **fallback_plan,
-    "source": "local_dynamic_fallback_v4",
+    "source": "local_dynamic_fallback_v5",
     "summary": (
         f"{fallback_summary} AI provider was unavailable or returned invalid JSON, "
         "so Planora used a safe fallback."
