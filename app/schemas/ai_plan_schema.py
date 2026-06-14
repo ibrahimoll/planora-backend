@@ -56,11 +56,15 @@ class AIPlanGeneratedTaskResponse(BaseModel):
 class AIPlanGenerateResponse(BaseModel):
     project_id: int
     plan_id: int
+    success: bool = True
+    message: str = ""
     summary: str
     tasks_created: int
     tasks_skipped_as_duplicates: int = 0
     improvement_summary: str | None = None
     rejected_generic_count: int = 0
+    rejected_unrelated_count: int = 0
+    ai_generation_status: str = "generated"
     tasks: list[AIPlanGeneratedTaskResponse]
 
 
@@ -87,6 +91,9 @@ class AIPlanPreviewTaskResponse(BaseModel):
 
 
 class AIPlanPreviewResponse(BaseModel):
+    success: bool = True
+    message: str = ""
+    ai_generation_status: str = "generated"
     source: str
     domain: str
     project_title: str
@@ -103,6 +110,8 @@ class AIPlanPreviewResponse(BaseModel):
     requirements: str | None = None
     available_hours_per_week: int
     preferred_task_count: int
+    rejected_generic_count: int = 0
+    rejected_unrelated_count: int = 0
 
 
 class AIPlanAcceptPreviewRequest(BaseModel):
