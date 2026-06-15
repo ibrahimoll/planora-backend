@@ -184,7 +184,7 @@ def _extract_gemini_text(response_data: dict[str, Any]) -> str | None:
 
     if not candidates:
         logger.warning(
-            "Gemini response did not include candidates. response_keys=%s",
+            "Gemini provider returned empty content. reason=no_candidates response_keys=%s",
             sorted(response_data.keys()),
         )
         return None
@@ -198,24 +198,15 @@ def _extract_gemini_text(response_data: dict[str, Any]) -> str | None:
         if isinstance(text, str) and text.strip():
             return _clean_ai_text(text)
 
-    logger.warning("Gemini response did not include text parts.")
+    logger.warning("Gemini provider returned empty content. reason=no_text_parts")
 
     return None
 
 
-def _generate_with_gemini(
+def _build_gemini_payload(
     prompt: str,
     response_mime_type: str | None = None,
-) -> str | None:
-    if not settings.gemini_api_key:
-        logger.warning("Gemini API key is missing.")
-        return None
-
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{settings.gemini_model}:generateContent"
-    )
-
+) -> dict[str, Any]:
     generation_config: dict[str, Any] = {
         "temperature": 0.25,
         "maxOutputTokens": 8192,
@@ -224,7 +215,7 @@ def _generate_with_gemini(
     if response_mime_type:
         generation_config["responseMimeType"] = response_mime_type
 
-    payload: dict[str, Any] = {
+    return {
         "contents": [
             {
                 "role": "user",
@@ -238,41 +229,143 @@ def _generate_with_gemini(
         "generationConfig": generation_config,
     }
 
-    params = {
-        "key": settings.gemini_api_key,
+
+def _gemini_json_mime_fallback_prompt(prompt: str) -> str:
+    return (
+        f"{prompt}\n\n"
+        "Return valid JSON only. Do not use Markdown, code fences, comments, "
+        "or text outside the JSON object."
+    )
+
+
+def _generate_with_gemini(
+    prompt: str,
+    response_mime_type: str | None = None,
+) -> str | None:
+    logger.info(
+        "Gemini provider configuration. ai_provider=%s gemini_api_key_exists=%s gemini_model=%s gemini_timeout_seconds=%s response_mime_type=%s",
+        settings.ai_provider,
+        bool(settings.gemini_api_key),
+        settings.gemini_model,
+        settings.gemini_timeout_seconds,
+        response_mime_type or "text/plain",
+    )
+
+    if not settings.gemini_api_key:
+        logger.warning("Gemini provider unavailable. reason=missing_api_key")
+        return None
+
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{settings.gemini_model}:generateContent"
+    )
+    params: dict[str, str] = {}
+    headers = {
+        "x-goog-api-key": settings.gemini_api_key,
     }
+    attempts: list[tuple[str, dict[str, Any]]] = [
+        (
+            response_mime_type or "text/plain",
+            _build_gemini_payload(
+                prompt=prompt,
+                response_mime_type=response_mime_type,
+            ),
+        )
+    ]
+
+    if response_mime_type == "application/json":
+        attempts.append(
+            (
+                "text/plain",
+                _build_gemini_payload(
+                    prompt=_gemini_json_mime_fallback_prompt(prompt),
+                    response_mime_type=None,
+                ),
+            )
+        )
 
     try:
         with httpx.Client(timeout=settings.gemini_timeout_seconds) as client:
-            response = client.post(
-                url,
-                params=params,
-                json=payload,
-            )
+            last_error_status: int | None = None
 
-        logger.info("Gemini API response. status=%s", response.status_code)
+            for attempt_index, (attempt_mime_type, payload) in enumerate(
+                attempts,
+                start=1,
+            ):
+                logger.info(
+                    "Gemini provider call started. model=%s timeout_seconds=%s response_mime_type=%s attempt=%s",
+                    settings.gemini_model,
+                    settings.gemini_timeout_seconds,
+                    attempt_mime_type,
+                    attempt_index,
+                )
 
-        if response.status_code >= 400:
-            logger.warning(
-                "Gemini API error. status=%s body=%s",
-                response.status_code,
-                response.text[:800],
-            )
-            return None
+                response = client.post(
+                    url,
+                    params=params,
+                    headers=headers,
+                    json=payload,
+                )
 
-        return _extract_gemini_text(response.json())
+                logger.info(
+                    "Gemini provider response status. status=%s response_mime_type=%s attempt=%s",
+                    response.status_code,
+                    attempt_mime_type,
+                    attempt_index,
+                )
+
+                if response.status_code < 400:
+                    text = _extract_gemini_text(response.json())
+
+                    if text is None:
+                        logger.warning(
+                            "Gemini provider returned empty/None. status=%s response_mime_type=%s attempt=%s",
+                            response.status_code,
+                            attempt_mime_type,
+                            attempt_index,
+                        )
+
+                    return text
+
+                last_error_status = response.status_code
+                logger.warning(
+                    "Gemini API error. status=%s response_mime_type=%s body=%s",
+                    response.status_code,
+                    attempt_mime_type,
+                    response.text[:800],
+                )
+
+                if (
+                    response.status_code == 400
+                    and response_mime_type == "application/json"
+                    and attempt_index == 1
+                    and len(attempts) > 1
+                ):
+                    logger.warning(
+                        "Gemini JSON MIME request failed. Retrying without responseMimeType. status=%s",
+                        response.status_code,
+                    )
+                    continue
+
+                return None
+
+        logger.warning(
+            "Gemini provider returned empty/None. reason=all_attempts_failed last_status=%s",
+            last_error_status,
+        )
+        return None
 
     except httpx.TimeoutException as exc:
-        logger.warning("Gemini API timeout: %s", type(exc).__name__)
+        logger.warning("Gemini provider failed. reason=timeout error_type=%s", type(exc).__name__)
         return None
 
     except httpx.HTTPError as exc:
-        logger.warning("Gemini HTTP error: %s", type(exc).__name__)
+        logger.warning("Gemini provider failed. reason=http_error error_type=%s", type(exc).__name__)
         return None
 
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         logger.warning(
-            "Gemini response parsing error: %s",
+            "Gemini provider failed. reason=response_parse_error error_type=%s",
             type(exc).__name__,
         )
         return None
@@ -1226,9 +1319,13 @@ def generate_ai_reply_from_provider(
 ) -> str | None:
     provider = settings.ai_provider.strip().lower()
     logger.info(
-        "AI provider selected. provider=%s response_mime_type=%s",
+        "AI provider selected. ai_provider=%s gemini_api_key_exists=%s gemini_model=%s gemini_timeout_seconds=%s response_mime_type=%s use_local_fallback=%s",
         provider or "local",
+        bool(settings.gemini_api_key),
+        settings.gemini_model,
+        settings.gemini_timeout_seconds,
         response_mime_type or "text/plain",
+        use_local_fallback,
     )
 
     if provider == "gemini":
@@ -1241,14 +1338,25 @@ def generate_ai_reply_from_provider(
             return gemini_reply
 
         if not use_local_fallback:
-            logger.warning("Gemini reply unavailable. Local provider fallback disabled.")
+            logger.warning(
+                "Gemini provider returned empty/None. Local provider fallback disabled."
+            )
             return None
 
-        logger.warning("Gemini reply unavailable. Using local planner fallback.")
+        logger.warning(
+            "Gemini provider returned empty/None. Using local planner fallback."
+        )
         return _generate_with_local_planner(prompt)
 
     if provider in {"", "local", "fallback"}:
+        logger.warning(
+            "AI provider is local. reason=ai_provider_not_gemini ai_provider=%s",
+            provider or "local",
+        )
         return _generate_with_local_planner(prompt)
 
-    logger.warning("Unsupported AI provider '%s'. Using local planner fallback.", provider)
+    logger.warning(
+        "Unsupported AI provider. reason=unsupported_ai_provider ai_provider=%s",
+        provider,
+    )
     return _generate_with_local_planner(prompt)

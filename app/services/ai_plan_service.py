@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.ai_plan import AIPlan
 from app.models.project import Project
 from app.models.project_member import ProjectMember
@@ -109,6 +110,8 @@ ACTION_VERBS = {
     "prioritize",
     "publish",
     "record",
+    "reduce",
+    "repeat",
     "remove",
     "reward",
     "review",
@@ -121,9 +124,11 @@ ACTION_VERBS = {
     "split",
     "submit",
     "take",
+    "teach",
     "test",
     "track",
     "validate",
+    "warm",
     "write",
 }
 
@@ -397,6 +402,80 @@ def _quality_tokens(value: str) -> set[str]:
     return tokens
 
 
+def _expanded_semantic_quality_tokens(tokens: set[str]) -> set[str]:
+    expanded = set(tokens)
+
+    if {"squat", "squats"} & tokens:
+        expanded.update(
+            {
+                "baseline",
+                "exercise",
+                "form",
+                "mobility",
+                "progression",
+                "recovery",
+                "rep",
+                "reps",
+                "set",
+                "sets",
+                "strength",
+                "workout",
+            }
+        )
+
+    if {"pushup", "pushups", "push-up", "push-ups"} & tokens:
+        expanded.update(
+            {
+                "baseline",
+                "form",
+                "progression",
+                "recovery",
+                "rep",
+                "reps",
+                "set",
+                "sets",
+                "soreness",
+                "volume",
+                "workout",
+            }
+        )
+
+    if {"dog", "dogs"} & tokens:
+        expanded.update(
+            {
+                "behavior",
+                "command",
+                "commands",
+                "consistency",
+                "distraction",
+                "leash",
+                "recall",
+                "reward",
+                "rewards",
+                "session",
+                "sessions",
+                "stay",
+                "treat",
+                "treats",
+            }
+        )
+
+    if {"run", "running", "5k"} & tokens:
+        expanded.update(
+            {
+                "distance",
+                "pace",
+                "route",
+                "mileage",
+                "warmup",
+                "recovery",
+                "endurance",
+            }
+        )
+
+    return expanded
+
+
 def _token_overlap_score(source: str, candidate: str) -> float:
     source_tokens = _quality_tokens(source)
     candidate_tokens = _quality_tokens(candidate)
@@ -404,14 +483,23 @@ def _token_overlap_score(source: str, candidate: str) -> float:
     if not source_tokens or not candidate_tokens:
         return 0.0
 
-    return len(source_tokens & candidate_tokens) / max(1, min(len(source_tokens), 8))
+    expanded_source_tokens = _expanded_semantic_quality_tokens(source_tokens)
+    expanded_candidate_tokens = _expanded_semantic_quality_tokens(candidate_tokens)
+
+    return len(expanded_source_tokens & expanded_candidate_tokens) / max(
+        1,
+        min(len(source_tokens), 8),
+    )
 
 
 def _has_meaningful_idea_token_overlap(source: str, candidate: str) -> bool:
     source_tokens = _quality_tokens(source) - GENERIC_CONTEXT_TOKENS
     candidate_tokens = _quality_tokens(candidate) - GENERIC_CONTEXT_TOKENS
 
-    return bool(source_tokens & candidate_tokens)
+    expanded_source_tokens = _expanded_semantic_quality_tokens(source_tokens)
+    expanded_candidate_tokens = _expanded_semantic_quality_tokens(candidate_tokens)
+
+    return bool(expanded_source_tokens & expanded_candidate_tokens)
 
 
 def _specificity_score(title: str, description: str) -> float:
@@ -643,20 +731,37 @@ def _generate_ai_plan_reply_from_provider(prompt: str) -> str | None:
     supports_json_mode = "response_mime_type" in parameters or supports_kwargs
     supports_fallback_flag = "use_local_fallback" in parameters or supports_kwargs
 
+    logger.info(
+        "AI Planner provider call started. ai_provider=%s gemini_api_key_exists=%s gemini_model=%s gemini_timeout_seconds=%s response_mime_type=%s",
+        settings.ai_provider,
+        bool(settings.gemini_api_key),
+        settings.gemini_model,
+        settings.gemini_timeout_seconds,
+        "application/json" if supports_json_mode else "text/plain",
+    )
+
     if supports_json_mode and supports_fallback_flag:
-        return generate_ai_reply_from_provider(
+        reply = generate_ai_reply_from_provider(
             prompt,
             response_mime_type="application/json",
             use_local_fallback=False,
         )
-
-    if supports_json_mode:
-        return generate_ai_reply_from_provider(
+    elif supports_json_mode:
+        reply = generate_ai_reply_from_provider(
             prompt,
             response_mime_type="application/json",
         )
+    else:
+        reply = generate_ai_reply_from_provider(prompt)
 
-    return generate_ai_reply_from_provider(prompt)
+    if reply is None:
+        logger.warning(
+            "AI Planner provider returned empty/None. ai_provider=%s gemini_api_key_exists=%s",
+            settings.ai_provider,
+            bool(settings.gemini_api_key),
+        )
+
+    return reply
 
 
 def _fallback_user_idea_text(
@@ -775,6 +880,22 @@ def _clean_display_phrase_from_idea(idea_text: str, fallback: str) -> str:
         cleaned = fallback
 
     lowered = cleaned[:1].lower() + cleaned[1:]
+    lowered = re.sub(
+        r"^be\s+able\s+to\s+(?:do|perform|complete|finish)?\s*",
+        "",
+        lowered,
+        flags=re.IGNORECASE,
+    ).strip()
+    lowered = re.sub(
+        r"^able\s+to\s+(?:do|perform|complete|finish)?\s*",
+        "",
+        lowered,
+        flags=re.IGNORECASE,
+    ).strip()
+
+    if not lowered:
+        lowered = fallback.lower()
+
     words = lowered.split(" ", 1)
     first_word = words[0].lower()
 
@@ -1057,10 +1178,14 @@ def _build_local_fallback_generated_plan(
     reason: str,
 ) -> dict[str, Any]:
     logger.warning(
-        "AI Planner using local fallback. reason=%s project_id=%s task_count=%s",
+        "AI Planner final fallback reason. reason=%s project_id=%s task_count=%s ai_provider=%s gemini_api_key_exists=%s gemini_model=%s gemini_timeout_seconds=%s",
         reason,
         project.project_id,
         task_count,
+        settings.ai_provider,
+        bool(settings.gemini_api_key),
+        settings.gemini_model,
+        settings.gemini_timeout_seconds,
     )
 
     tasks = _build_adaptive_fallback_tasks(
@@ -1070,17 +1195,18 @@ def _build_local_fallback_generated_plan(
     )
 
     logger.info(
-        "AI Planner fallback used. source=adaptive_fallback_v1 task_count=%s",
+        "AI Planner fallback used as last resort. source=adaptive_fallback_v1 task_count=%s reason=%s",
         len(tasks),
+        reason,
     )
     return {
         "success": True,
-        "message": "Generated a fallback plan from the idea.",
+        "message": "Using a fallback plan from the idea.",
         "ai_generation_status": "fallback",
         "source": "adaptive_fallback_v1",
         "domain": "adaptive_plan",
         "summary": (
-            f"Generated an adaptive plan for '{project.title}' with {len(tasks)} tasks."
+            f"Using an adaptive fallback plan for '{project.title}' with {len(tasks)} tasks."
         ),
         "rejected_generic_count": 0,
         "rejected_unrelated_count": 0,
@@ -1112,10 +1238,14 @@ def _build_failed_or_fallback_generated_plan(
     rejected_tasks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     logger.warning(
-        "AI Planner provider failed. reason=%s project_id=%s allow_fallback=%s",
+        "AI Planner provider failed. reason=%s project_id=%s allow_fallback=%s ai_provider=%s gemini_api_key_exists=%s gemini_model=%s gemini_timeout_seconds=%s",
         reason,
         project.project_id,
         allow_local_fallback,
+        settings.ai_provider,
+        bool(settings.gemini_api_key),
+        settings.gemini_model,
+        settings.gemini_timeout_seconds,
     )
 
     if allow_local_fallback:
@@ -1390,27 +1520,38 @@ def _description_has_visible_result(value: str) -> bool:
         return False
 
     visible_terms = (
+        "assessment",
+        "baseline",
         "budget",
         "calendar",
         "checklist",
+        "command",
         "content",
+        "cue",
         "document",
         "draft",
+        "form",
         "guest list",
         "lead tracker",
         "list",
         "log",
+        "mobility",
         "message",
         "plan",
         "post",
         "practice",
         "price",
+        "program",
+        "progression",
         "prototype",
+        "rep",
         "review",
         "routine",
         "rule",
         "schedule",
         "screen",
+        "session",
+        "set",
         "table",
         "target",
         "tracker",
@@ -1537,7 +1678,8 @@ def _description_is_too_generic(description: str) -> bool:
 
 def _is_low_quality_task_title(title: str) -> bool:
     normalized = _normalize_comparison_text(title)
-    first_word = normalized.split(" ", 1)[0] if normalized else ""
+    words = normalized.split()
+    first_word = words[0] if words else ""
     generic_titles = {
         "research",
         "planning",
@@ -1562,7 +1704,7 @@ def _is_low_quality_task_title(title: str) -> bool:
         normalized in generic_titles
         or len(normalized) < 4
         or re.fullmatch(r"complete project step \d+", normalized) is not None
-        or first_word not in ACTION_VERBS
+        or (len(words) <= 2 and first_word not in ACTION_VERBS)
     )
 
 
@@ -1786,7 +1928,7 @@ def _try_regenerate_concrete_ai_plan(
         include_milestones=include_milestones,
     )
     logger.info(
-        "AI Planner provider attempted. reason=quality_regeneration project_id=%s requested_task_count=%s",
+        "AI Planner regeneration attempted. reason=quality_regeneration project_id=%s requested_task_count=%s",
         project.project_id,
         task_count,
     )
@@ -1794,7 +1936,7 @@ def _try_regenerate_concrete_ai_plan(
 
     if regeneration_reply is None:
         logger.warning(
-            "AI Planner regeneration provider failed. reason=provider_unavailable project_id=%s",
+            "AI Planner regeneration failed. reason=provider_unavailable project_id=%s",
             project.project_id,
         )
         return None
@@ -1803,7 +1945,7 @@ def _try_regenerate_concrete_ai_plan(
 
     if regeneration_data is None:
         logger.warning(
-            "AI Planner regeneration parse failed. project_id=%s",
+            "AI Planner regeneration failed. reason=json_parse_failed project_id=%s",
             project.project_id,
         )
         return None
@@ -1820,7 +1962,7 @@ def _try_regenerate_concrete_ai_plan(
 
     if regenerated_plan is None or len(regenerated_plan["tasks"]) < task_count:
         logger.warning(
-            "AI Planner regeneration failed quality validation. project_id=%s accepted_task_count=%s requested_task_count=%s",
+            "AI Planner regeneration failed. reason=quality_validation_failed project_id=%s accepted_task_count=%s requested_task_count=%s",
             project.project_id,
             len(regenerated_plan["tasks"]) if regenerated_plan is not None else 0,
             task_count,
@@ -2084,6 +2226,13 @@ def _normalize_ai_plan_response(
             else:
                 rejected_generic_count += 1
 
+            logger.warning(
+                "AI Planner task quality rejected. project_id=%s task_index=%s reasons=%s scores=%s",
+                project.project_id,
+                index + 1,
+                ",".join(reasons),
+                scores,
+            )
             rejected_tasks.append(
                 {
                     "index": index + 1,

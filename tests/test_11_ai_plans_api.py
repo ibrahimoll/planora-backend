@@ -14,6 +14,7 @@ from app.models.project import Project
 from app.models.task import Task
 from app.schemas.ai_plan_schema import AIPlanPreviewRequest
 from app.schemas.project_schema import ProjectType
+from app.services import ai_provider_service
 from app.services.ai_plan_service import build_generated_plan, create_ai_plan_preview
 
 from tests.conftest import (
@@ -1388,6 +1389,27 @@ def _pushup_training_plan() -> str:
     )
 
 
+def _squat_training_plan() -> str:
+    return _activity_plan_from_titles(
+        titles=[
+            "Test your current squat baseline",
+            "Set a safe 100-squat progression target",
+            "Split squats into manageable sets",
+            "Practice squat form and depth",
+            "Warm up hips and ankles before training",
+            "Add mobility and recovery rules",
+            "Track reps, sets, and soreness",
+            "Review progress and adjust volume",
+        ],
+        focus="squat training",
+        domain="squat training",
+        vocabulary=(
+            "squats, reps, sets, form, mobility, progression, recovery, "
+            "soreness, depth, volume, tracker"
+        ),
+    )
+
+
 def _bad_generic_plan() -> str:
     return _activity_plan_from_titles(
         titles=[
@@ -1550,6 +1572,60 @@ def test_preview_uses_gemini_json_for_train_dog(monkeypatch):
     for concept in ("dog", "command", "treat", "reward", "leash", "behavior"):
         assert concept in all_text.lower()
 
+    _assert_no_forbidden_planner_language(all_text)
+    _assert_no_generic_template_phrases(all_text)
+
+
+def test_preview_uses_gemini_json_for_100_squat_without_fallback(monkeypatch):
+    calls: list[str] = []
+
+    def provider_reply(prompt: str) -> str:
+        calls.append(prompt)
+        return _squat_training_plan()
+
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        provider_reply,
+    )
+
+    preview = create_ai_plan_preview(
+        AIPlanPreviewRequest(
+            project_idea="Be able to do 100 squat",
+            deadline=datetime.now(timezone.utc) + timedelta(days=30),
+            project_type=ProjectType.personal,
+            available_hours_per_week=5,
+            preferred_task_count=8,
+        ),
+        _PreviewUser(),
+    )
+    all_text = " ".join(
+        [preview.summary, *(task.title for task in preview.tasks), *(task.description or "" for task in preview.tasks)]
+    )
+    summary_count = re.search(r"\b(\d+)\s+tasks?\b", preview.summary)
+
+    assert len(calls) == 1
+    assert preview.success is True
+    assert preview.ai_generation_status == "generated"
+    assert preview.source == "ai_provider"
+    assert [task.title for task in preview.tasks] == [
+        "Test your current squat baseline",
+        "Set a safe 100-squat progression target",
+        "Split squats into manageable sets",
+        "Practice squat form and depth",
+        "Warm up hips and ankles before training",
+        "Add mobility and recovery rules",
+        "Track reps, sets, and soreness",
+        "Review progress and adjust volume",
+    ]
+    assert preview.preferred_task_count == len(preview.tasks)
+    assert summary_count is not None
+    assert int(summary_count.group(1)) == len(preview.tasks)
+
+    for concept in ("squat", "reps", "sets", "form", "mobility", "progression"):
+        assert concept in all_text.lower()
+
+    assert "able squat" not in all_text.lower()
+    assert "adaptive_fallback_v1" not in preview.source
     _assert_no_forbidden_planner_language(all_text)
     _assert_no_generic_template_phrases(all_text)
 
@@ -1718,6 +1794,49 @@ def test_preview_local_fallback_when_gemini_unavailable_is_valid(monkeypatch):
     assert "training a dog" in all_text.lower()
     _assert_no_generic_template_phrases(all_text)
     _assert_no_forbidden_planner_language(all_text)
+
+
+def test_preview_gemini_timeout_uses_fallback_with_logged_reason(monkeypatch, caplog):
+    class TimeoutClient:
+        def __init__(self, timeout: int):
+            self.timeout = timeout
+
+        def __enter__(self) -> "TimeoutClient":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def post(self, *_args: object, **_kwargs: object) -> object:
+            raise ai_provider_service.httpx.TimeoutException("test timeout")
+
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        ai_provider_service.generate_ai_reply_from_provider,
+    )
+    monkeypatch.setattr(ai_provider_service.settings, "ai_provider", "gemini")
+    monkeypatch.setattr(ai_provider_service.settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(ai_provider_service.httpx, "Client", TimeoutClient)
+
+    caplog.set_level("WARNING")
+
+    preview = create_ai_plan_preview(
+        AIPlanPreviewRequest(
+            project_idea="Train a dog",
+            deadline=datetime.now(timezone.utc) + timedelta(days=30),
+            project_type=ProjectType.personal,
+            preferred_task_count=5,
+        ),
+        _PreviewUser(),
+    )
+
+    assert preview.success is True
+    assert preview.ai_generation_status == "fallback"
+    assert preview.source == "adaptive_fallback_v1"
+    assert len(preview.tasks) == 5
+    assert "reason=timeout" in caplog.text
+    assert "AI Planner final fallback reason" in caplog.text
+    assert "provider_unavailable_after_retry" in caplog.text
 
 
 def test_preview_uses_provider_json_when_available(monkeypatch):
