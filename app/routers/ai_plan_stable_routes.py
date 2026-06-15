@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
@@ -48,176 +48,25 @@ STOPWORDS = {
     "with",
 }
 
-TASK_BLUEPRINTS = [
-    {
-        "title": "Define {topic} success criteria",
-        "goal": "Set the exact first-version outcome for {topic} so the project has a clear finish line.",
-        "steps": (
-            "Write the main result the user should get from {topic}.",
-            "List the must-have features or actions that prove the idea works.",
-            "Choose 3 measurable checks that decide if the first version is successful.",
-        ),
-        "deliverable": "A success criteria document for {topic}.",
-        "done_when": "The document has one goal, 3 success checks, and a clear first-version scope.",
-        "benefit": "The user knows exactly what must be delivered first.",
-        "priority": "high",
-        "estimated_hours": 1.5,
-    },
-    {
-        "title": "Map {topic} requirements",
-        "goal": "Turn the idea into practical requirements before building or executing anything.",
-        "steps": (
-            "Separate must-have requirements, optional improvements, and constraints.",
-            "Mark each requirement as simple, medium, or complex.",
-            "Remove anything that does not support the first useful version.",
-        ),
-        "deliverable": "A prioritized requirements checklist for {topic}.",
-        "done_when": "Every requirement has a priority and the first version has no unclear items.",
-        "benefit": "The user can start with the highest-value work instead of guessing.",
-        "priority": "high",
-        "estimated_hours": 2.0,
-    },
-    {
-        "title": "Create {topic} execution plan",
-        "goal": "Break {topic} into ordered work that can be followed step by step.",
-        "steps": (
-            "Group the requirements into setup, build, test, and release work.",
-            "Put the groups in dependency order so each step supports the next one.",
-            "Estimate the time needed for each work group.",
-        ),
-        "deliverable": "A step-by-step execution plan for {topic}.",
-        "done_when": "The plan shows what starts first, what depends on it, and what finishes the project.",
-        "benefit": "The user can begin execution without confusion.",
-        "priority": "medium",
-        "estimated_hours": 2.5,
-    },
-    {
-        "title": "Build {topic} first version",
-        "goal": "Create a small usable version of {topic} that proves the core idea works.",
-        "steps": (
-            "Choose only the minimum features needed for a working first version.",
-            "Build, draft, or prepare those features without adding polish yet.",
-            "Write down anything blocked, missing, or unclear while building.",
-        ),
-        "deliverable": "A working first version or prototype plan for {topic}.",
-        "done_when": "The core flow can be shown, tested, or explained from start to finish.",
-        "benefit": "The user gets a real result instead of staying in planning mode.",
-        "priority": "medium",
-        "estimated_hours": 5.0,
-    },
-    {
-        "title": "Test {topic} core flow",
-        "goal": "Find problems in {topic} before relying on it or presenting it.",
-        "steps": (
-            "Run through the main flow from the first action to the final result.",
-            "Write every bug, missing detail, confusing step, or weak point in a tracker.",
-            "Choose the fixes that block the first useful version.",
-        ),
-        "deliverable": "A test results tracker for {topic}.",
-        "done_when": "The tracker lists tested steps, found issues, and required fixes before release.",
-        "benefit": "The user improves reliability before anyone depends on the result.",
-        "priority": "medium",
-        "estimated_hours": 3.0,
-    },
-    {
-        "title": "Prepare {topic} release checklist",
-        "goal": "Confirm that {topic} is ready to share, submit, launch, or continue safely.",
-        "steps": (
-            "List final checks for content, functionality, quality, and presentation.",
-            "Confirm that all high-priority issues are finished or documented.",
-            "Write the next action after release, such as feedback collection or improvement work.",
-        ),
-        "deliverable": "A final release checklist and next-step plan for {topic}.",
-        "done_when": "The checklist is complete and there is a clear decision to release, submit, or improve.",
-        "benefit": "The user finishes with fewer last-minute surprises.",
-        "priority": "high",
-        "estimated_hours": 2.0,
-    },
-    {
-        "title": "Collect {topic} feedback",
-        "goal": "Use real feedback to improve {topic} instead of guessing what matters.",
-        "steps": (
-            "Choose 2 or 3 people who match the expected user, customer, or reviewer.",
-            "Ask them to review the first version and answer specific questions.",
-            "Sort the feedback into must-fix, should-fix, and optional ideas.",
-        ),
-        "deliverable": "A feedback table for {topic}.",
-        "done_when": "At least 3 useful feedback points are recorded and prioritized.",
-        "benefit": "The user improves the project based on evidence.",
-        "priority": "low",
-        "estimated_hours": 2.0,
-    },
-    {
-        "title": "Improve {topic} weak points",
-        "goal": "Fix the parts of {topic} that most affect usefulness, reliability, or quality.",
-        "steps": (
-            "Pick the highest-impact issues from testing and feedback.",
-            "Fix one issue at a time and record what changed.",
-            "Retest the changed parts to confirm each fix worked.",
-        ),
-        "deliverable": "An improvement log for {topic}.",
-        "done_when": "The most important weak points are fixed and retested.",
-        "benefit": "The user gets a cleaner and more dependable final result.",
-        "priority": "medium",
-        "estimated_hours": 4.0,
-    },
-    {
-        "title": "Write {topic} documentation",
-        "goal": "Make {topic} easier to understand, maintain, present, or hand off.",
-        "steps": (
-            "Write what the project does and who it helps.",
-            "Document the main setup, usage, or handoff steps.",
-            "Add known limitations and future improvements.",
-        ),
-        "deliverable": "A clear documentation page for {topic}.",
-        "done_when": "Someone else can understand the purpose and basic usage from the document.",
-        "benefit": "The user can explain or continue the project with less confusion.",
-        "priority": "low",
-        "estimated_hours": 2.5,
-    },
-    {
-        "title": "Review {topic} final quality",
-        "goal": "Check that {topic} matches the original goal before closing the work.",
-        "steps": (
-            "Compare the final result against the success criteria document.",
-            "Check that the deliverables are complete and easy to find.",
-            "Write the remaining improvements for the next version.",
-        ),
-        "deliverable": "A final quality review checklist for {topic}.",
-        "done_when": "All success criteria are marked passed, failed, or moved to a future version.",
-        "benefit": "The user finishes with a clear view of quality and next steps.",
-        "priority": "high",
-        "estimated_hours": 1.5,
-    },
-    {
-        "title": "Schedule {topic} work sessions",
-        "goal": "Protect focused time so {topic} keeps moving forward before the deadline.",
-        "steps": (
-            "Estimate the remaining hours for each unfinished task.",
-            "Place the work into realistic calendar sessions before the deadline.",
-            "Reserve short review sessions after major tasks.",
-        ),
-        "deliverable": "A calendar schedule for completing {topic}.",
-        "done_when": "Each major task has a planned work session and review slot.",
-        "benefit": "The user reduces delay by knowing when the work will happen.",
-        "priority": "medium",
-        "estimated_hours": 1.0,
-    },
-    {
-        "title": "Track {topic} progress",
-        "goal": "Keep progress visible so delays and blockers are caught early.",
-        "steps": (
-            "Create a tracker with task, status, blocker, and next action columns.",
-            "Update the tracker after every work session.",
-            "Move blocked items into a separate urgent list.",
-        ),
-        "deliverable": "A progress tracker for {topic}.",
-        "done_when": "Every active task has a status, blocker note, and next action.",
-        "benefit": "The user can control the project instead of losing track of details.",
-        "priority": "low",
-        "estimated_hours": 1.5,
-    },
-]
+FITNESS_KEYWORDS = {
+    "calories",
+    "cardio",
+    "exercise",
+    "fitness",
+    "gym",
+    "lose weight",
+    "muscle",
+    "push-up",
+    "pushup",
+    "run",
+    "running",
+    "strength",
+    "workout",
+}
+STUDY_KEYWORDS = {"course", "exam", "homework", "learn", "lesson", "study"}
+SOFTWARE_KEYWORDS = {"api", "app", "backend", "frontend", "mobile", "software", "website"}
+BUSINESS_KEYWORDS = {"business", "campaign", "customer", "marketing", "sales", "shop"}
+HABIT_KEYWORDS = {"daily", "habit", "journal", "routine", "sleep", "wake"}
 
 
 def _to_utc(value: datetime) -> datetime:
@@ -227,10 +76,41 @@ def _to_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
+def _contains_any(value: str, keywords: set[str]) -> bool:
+    lowered = value.lower()
+    return any(keyword in lowered for keyword in keywords)
+
+
+def _classify_idea(project_idea: str, requirements: str | None) -> str:
+    source = f"{project_idea} {requirements or ''}"
+
+    if _contains_any(source, FITNESS_KEYWORDS):
+        return "fitness_health"
+
+    if _contains_any(source, STUDY_KEYWORDS):
+        return "study_learning"
+
+    if _contains_any(source, SOFTWARE_KEYWORDS):
+        return "software_app"
+
+    if _contains_any(source, BUSINESS_KEYWORDS):
+        return "business_marketing"
+
+    if _contains_any(source, HABIT_KEYWORDS):
+        return "personal_habit"
+
+    return "generic_project"
+
+
 def _derive_project_title(project_idea: str) -> str:
     title = re.split(r"[\n.!?]", project_idea.strip(), maxsplit=1)[0].strip()
     title = re.sub(r"^\s*i\s+(want|need)\s+to\s+", "", title, flags=re.IGNORECASE)
-    title = re.sub(r"^\s*(build|create|start|launch|make)\s+", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(
+        r"^\s*(build|create|start|launch|make)\s+",
+        "",
+        title,
+        flags=re.IGNORECASE,
+    ).strip()
 
     if not title:
         return "AI Generated Plan"
@@ -256,23 +136,25 @@ def _topic_from_idea(project_idea: str, requirements: str | None) -> str:
         if len(words) >= 4:
             break
 
-    return " ".join(words) if words else "project"
+    return " ".join(words) if words else "the goal"
 
 
-def _build_description(blueprint: dict[str, object], topic: str) -> str:
-    steps = blueprint["steps"]
-    assert isinstance(steps, tuple)
+def _fitness_focus(project_idea: str) -> str:
+    lowered = project_idea.lower()
 
-    return (
-        f"Goal: {blueprint['goal']}\n\n"
-        "Steps:\n"
-        f"1. {steps[0]}\n"
-        f"2. {steps[1]}\n"
-        f"3. {steps[2]}\n\n"
-        f"Deliverable: {blueprint['deliverable']}\n\n"
-        f"Done when: {blueprint['done_when']}\n\n"
-        f"Customer benefit: {blueprint['benefit']}"
-    ).replace("{topic}", topic)
+    if "push-up" in lowered or "pushup" in lowered:
+        return "pushups"
+
+    if "run" in lowered or "running" in lowered:
+        return "running"
+
+    if "lose weight" in lowered:
+        return "weight loss"
+
+    if "muscle" in lowered:
+        return "muscle building"
+
+    return "fitness"
 
 
 def _build_due_dates(deadline: datetime, task_count: int) -> list[datetime]:
@@ -290,6 +172,240 @@ def _build_due_dates(deadline: datetime, task_count: int) -> list[datetime]:
     return [now + timedelta(seconds=step_seconds * (index + 1)) for index in range(task_count)]
 
 
+def _description(
+    *,
+    goal: str,
+    steps: tuple[str, str, str],
+    deliverable: str,
+    done_when: str,
+    why_it_matters: str,
+) -> str:
+    return (
+        f"Goal: {goal}\n\n"
+        "Steps:\n"
+        f"1. {steps[0]}\n"
+        f"2. {steps[1]}\n"
+        f"3. {steps[2]}\n\n"
+        f"Deliverable: {deliverable}\n\n"
+        f"Done when: {done_when}\n\n"
+        f"Why it matters: {why_it_matters}"
+    )
+
+
+def _fitness_blueprints(focus: str) -> list[dict[str, Any]]:
+    if focus != "pushups":
+        focus = "training"
+
+    return [
+        {
+            "title": "Test your current max pushups",
+            "goal": "Find your safe starting point before increasing daily pushup volume.",
+            "steps": (
+                "Warm up your shoulders, wrists, and chest for 5 minutes.",
+                "Do one controlled max-rep set with clean form and stop before form breaks.",
+                "Record total reps, effort level, and any discomfort.",
+            ),
+            "deliverable": "A baseline pushup result log.",
+            "done_when": "Your max clean reps and difficulty rating are recorded.",
+            "why_it_matters": "A baseline keeps the plan challenging without starting too aggressively.",
+            "priority": "high",
+            "estimated_hours": 0.5,
+        },
+        {
+            "title": "Set a safe daily starting volume",
+            "goal": "Choose a daily rep target that builds consistency without overloading your joints.",
+            "steps": (
+                "Start with 40-60% of your clean max reps spread across the day.",
+                "Keep the first week below failure so soreness stays manageable.",
+                "Write the exact daily target and when each set will happen.",
+            ),
+            "deliverable": "A safe first-week pushup target.",
+            "done_when": "Your daily reps and set schedule are written down.",
+            "why_it_matters": "A conservative start makes the habit easier to sustain.",
+            "priority": "high",
+            "estimated_hours": 0.5,
+        },
+        {
+            "title": "Split pushups into manageable sets",
+            "goal": "Break the daily total into sets you can complete with good form.",
+            "steps": (
+                "Choose set sizes that feel like effort level 6-7 out of 10.",
+                "Place sets at least 30-60 minutes apart if needed.",
+                "Keep two reps in reserve on most sets during the first week.",
+            ),
+            "deliverable": "A set-by-set pushup schedule.",
+            "done_when": "The daily target is divided into realistic sets.",
+            "why_it_matters": "Smaller sets reduce form breakdown and make 100 reps more realistic.",
+            "priority": "high",
+            "estimated_hours": 0.5,
+        },
+        {
+            "title": "Practice correct pushup form",
+            "goal": "Make each rep useful and reduce shoulder, wrist, and lower-back strain.",
+            "steps": (
+                "Keep your body in a straight line from shoulders to ankles.",
+                "Lower with control until your chest is near the floor.",
+                "Stop or switch to incline pushups when your hips sag or elbows flare.",
+            ),
+            "deliverable": "A short form checklist for every set.",
+            "done_when": "You can name and check the main form cues before training.",
+            "why_it_matters": "Good form turns volume into strength instead of avoidable pain.",
+            "priority": "high",
+            "estimated_hours": 0.75,
+        },
+        {
+            "title": "Create a 2-week progression schedule",
+            "goal": "Move toward 100 daily pushups gradually instead of jumping there at once.",
+            "steps": (
+                "Increase daily reps by 5-10 only after two comfortable days.",
+                "Use incline or knee pushups when full pushups become sloppy.",
+                "Plan one lighter day after every 3-4 harder days.",
+            ),
+            "deliverable": "A 14-day pushup progression calendar.",
+            "done_when": "Each day has a rep target, set plan, and easier variation if needed.",
+            "why_it_matters": "Progression lets your muscles and joints adapt safely.",
+            "priority": "medium",
+            "estimated_hours": 1.0,
+        },
+        {
+            "title": "Add recovery and pain rules",
+            "goal": "Know when to rest, reduce reps, or stop before a small issue becomes an injury.",
+            "steps": (
+                "Schedule at least one lighter recovery day each week.",
+                "Stop the session if you feel sharp pain in wrists, elbows, shoulders, or chest.",
+                "Reduce volume by 30-50% if soreness changes your form the next day.",
+            ),
+            "deliverable": "A recovery and pain decision checklist.",
+            "done_when": "You have clear stop, reduce, and rest rules.",
+            "why_it_matters": "Recovery rules protect consistency and lower injury risk.",
+            "priority": "high",
+            "estimated_hours": 0.5,
+        },
+        {
+            "title": "Track reps, sets, and difficulty",
+            "goal": "Measure whether the pushup habit is getting easier or too intense.",
+            "steps": (
+                "Record each set with reps completed and effort level.",
+                "Note soreness, pain, sleep, and missed sets.",
+                "Highlight days where form or recovery felt worse than expected.",
+            ),
+            "deliverable": "A daily pushup tracking table.",
+            "done_when": "Every training day has reps, sets, effort, and notes recorded.",
+            "why_it_matters": "Tracking shows when to progress and when to back off.",
+            "priority": "medium",
+            "estimated_hours": 0.5,
+        },
+        {
+            "title": "Review progress after 14 days",
+            "goal": "Check whether the plan is moving you toward 100 pushups safely.",
+            "steps": (
+                "Compare day 1 and day 14 reps, effort, and soreness notes.",
+                "Retest one clean max set only if your joints feel good.",
+                "Choose whether to increase, hold, or reduce the next 2-week target.",
+            ),
+            "deliverable": "A 14-day progress review.",
+            "done_when": "You have a clear next target based on recorded progress.",
+            "why_it_matters": "A checkpoint prevents blindly chasing volume when your body needs adjustment.",
+            "priority": "high",
+            "estimated_hours": 0.75,
+        },
+    ]
+
+
+def _generic_blueprints(domain: str, topic: str) -> list[dict[str, Any]]:
+    if domain == "software_app":
+        return [
+            {
+                "title": f"Define {topic} core user flow",
+                "goal": f"Clarify the main user path for {topic}.",
+                "steps": (
+                    "Write the primary user action from start to finish.",
+                    "List the screens, data, and decisions needed for that path.",
+                    "Remove anything that is not needed for the first release.",
+                ),
+                "deliverable": "A core flow outline.",
+                "done_when": "The main user path can be explained in ordered steps.",
+                "why_it_matters": "A clear flow prevents scattered development work.",
+                "priority": "high",
+                "estimated_hours": 2.0,
+            },
+            {
+                "title": f"Prioritize {topic} first-release features",
+                "goal": f"Choose the smallest feature set that makes {topic} usable.",
+                "steps": (
+                    "List must-have, should-have, and later features.",
+                    "Mark dependencies between must-have features.",
+                    "Pick the first release scope.",
+                ),
+                "deliverable": "A prioritized feature list.",
+                "done_when": "Every first-release feature has a clear reason to exist.",
+                "why_it_matters": "Feature priority keeps the software work focused.",
+                "priority": "high",
+                "estimated_hours": 2.0,
+            },
+        ]
+
+    return [
+        {
+            "title": f"Clarify the next outcome for {topic}",
+            "goal": f"Decide what concrete result should come next for {topic}.",
+            "steps": (
+                "Write the result you want in one sentence.",
+                "List constraints, resources, and open questions.",
+                "Choose the next action that creates visible progress.",
+            ),
+            "deliverable": "A clear next-outcome note.",
+            "done_when": "The next result and first action are written down.",
+            "why_it_matters": "Clear outcomes make the work easier to start.",
+            "priority": "high",
+            "estimated_hours": 1.0,
+        },
+        {
+            "title": f"Break {topic} into action steps",
+            "goal": f"Turn {topic} into ordered work you can complete.",
+            "steps": (
+                "List every action needed for the next outcome.",
+                "Put the actions in dependency order.",
+                "Estimate the effort for each action.",
+            ),
+            "deliverable": "An ordered action list.",
+            "done_when": "Each action has an order and estimate.",
+            "why_it_matters": "Ordered actions reduce guessing and delay.",
+            "priority": "medium",
+            "estimated_hours": 1.5,
+        },
+    ]
+
+
+def _blueprints_for_domain(domain: str, project_idea: str, topic: str, task_count: int) -> list[dict[str, Any]]:
+    blueprints = (
+        _fitness_blueprints(_fitness_focus(project_idea))
+        if domain == "fitness_health"
+        else _generic_blueprints(domain, topic)
+    )
+
+    while len(blueprints) < task_count:
+        index = len(blueprints) + 1
+        blueprints.append(
+            {
+                "title": f"Review {topic} checkpoint {index}",
+                "goal": f"Use recent progress to choose the next practical step for {topic}.",
+                "steps": (
+                    "Review what was completed since the last checkpoint.",
+                    "Write what is blocked, unclear, or too difficult.",
+                    "Choose one adjustment for the next work session.",
+                ),
+                "deliverable": f"A checkpoint note for {topic}.",
+                "done_when": "The next adjustment is written and ready to follow.",
+                "why_it_matters": "Regular checkpoints keep the plan realistic.",
+                "priority": "medium",
+                "estimated_hours": 0.75,
+            }
+        )
+
+    return blueprints
+
+
 def _build_project_description(preview_data: AIPlanPreviewRequest) -> str:
     pieces = [
         "AI planning brief",
@@ -302,23 +418,33 @@ def _build_project_description(preview_data: AIPlanPreviewRequest) -> str:
     requirements = (preview_data.requirements or "").strip()
 
     if requirements:
-        pieces.append(f"Requirements and constraints: {requirements}")
+        pieces.append(f"Notes and constraints: {requirements}")
 
     return "\n".join(pieces)
 
 
-def _build_preview_tasks(preview_data: AIPlanPreviewRequest, topic: str) -> list[AIPlanPreviewTaskResponse]:
+def _build_preview_tasks(
+    preview_data: AIPlanPreviewRequest,
+    domain: str,
+    topic: str,
+) -> list[AIPlanPreviewTaskResponse]:
     task_count = max(3, min(12, preview_data.preferred_task_count))
     due_dates = _build_due_dates(preview_data.deadline, task_count)
+    blueprints = _blueprints_for_domain(domain, preview_data.project_idea, topic, task_count)
     tasks: list[AIPlanPreviewTaskResponse] = []
 
-    for index, blueprint in enumerate(TASK_BLUEPRINTS[:task_count]):
-        title = str(blueprint["title"]).replace("{topic}", topic)
+    for index, blueprint in enumerate(blueprints[:task_count]):
         tasks.append(
             AIPlanPreviewTaskResponse(
                 suggested_order=index + 1,
-                title=title,
-                description=_build_description(blueprint, topic),
+                title=str(blueprint["title"]),
+                description=_description(
+                    goal=str(blueprint["goal"]),
+                    steps=blueprint["steps"],
+                    deliverable=str(blueprint["deliverable"]),
+                    done_when=str(blueprint["done_when"]),
+                    why_it_matters=str(blueprint["why_it_matters"]),
+                ),
                 priority=str(blueprint["priority"]),
                 estimated_hours=float(blueprint["estimated_hours"]),
                 status=TaskStatus.todo.value,
@@ -328,6 +454,88 @@ def _build_preview_tasks(preview_data: AIPlanPreviewRequest, topic: str) -> list
         )
 
     return tasks
+
+
+def _build_milestones(domain: str, topic: str, include_milestones: bool) -> list[dict[str, Any]]:
+    if not include_milestones:
+        return []
+
+    if domain == "fitness_health":
+        return [
+            {
+                "name": "Baseline recorded",
+                "description": "The starting pushup level is measured safely.",
+                "suggested_order": 1,
+            },
+            {
+                "name": "Routine started",
+                "description": "The first week of pushup training is scheduled and tracked.",
+                "suggested_order": 2,
+            },
+            {
+                "name": "Progress reviewed",
+                "description": "Training volume, form, and recovery are reviewed after 14 days.",
+                "suggested_order": 3,
+            },
+        ]
+
+    return [
+        {
+            "name": "Direction confirmed",
+            "description": f"The next outcome for {topic} is clear.",
+            "suggested_order": 1,
+        },
+        {
+            "name": "Execution underway",
+            "description": f"The main actions for {topic} are started and tracked.",
+            "suggested_order": 2,
+        },
+        {
+            "name": "Progress reviewed",
+            "description": f"The current result for {topic} is reviewed and adjusted.",
+            "suggested_order": 3,
+        },
+    ]
+
+
+def _build_risks(domain: str) -> list[dict[str, str]]:
+    if domain == "fitness_health":
+        return [
+            {
+                "risk": "Doing too many reps too soon can irritate wrists, elbows, or shoulders.",
+                "recommendation": "Increase volume gradually and stop if sharp pain appears.",
+            },
+            {
+                "risk": "Poor form can turn daily pushups into strain instead of progress.",
+                "recommendation": "Use easier variations whenever full pushups lose control.",
+            },
+        ]
+
+    return [
+        {
+            "risk": "The plan may be too broad to finish comfortably.",
+            "recommendation": "Keep the next outcome small enough to complete and review.",
+        },
+        {
+            "risk": "Progress may stall without tracking.",
+            "recommendation": "Record the result of each work session before moving on.",
+        },
+    ]
+
+
+def _build_recommendations(domain: str) -> list[str]:
+    if domain == "fitness_health":
+        return [
+            "Start below your maximum and build volume gradually.",
+            "Prioritize clean form over hitting the daily number at any cost.",
+            "Use pain, soreness, and effort notes to adjust the next target.",
+        ]
+
+    return [
+        "Start with the highest-priority action before adding optional work.",
+        "Keep every task tied to a visible result.",
+        "Review the plan after the first checkpoint and adjust it.",
+    ]
 
 
 def _validate_team_preview_access(
@@ -381,63 +589,39 @@ def stable_preview_ai_plan_from_idea(
         current_user=current_user,
     )
 
-    topic = _topic_from_idea(preview_data.project_idea, preview_data.requirements)
+    domain = _classify_idea(preview_data.project_idea, preview_data.requirements)
+    topic = (
+        _fitness_focus(preview_data.project_idea)
+        if domain == "fitness_health"
+        else _topic_from_idea(preview_data.project_idea, preview_data.requirements)
+    )
     project_title = _derive_project_title(preview_data.project_idea)
-    tasks = _build_preview_tasks(preview_data, topic)
-
-    milestones = []
-    if preview_data.include_milestones:
-        milestones = [
-            {
-                "name": "Scope confirmed",
-                "description": f"The first-version direction for {topic} is clear and ready for execution.",
-                "suggested_order": 1,
-            },
-            {
-                "name": "First version completed",
-                "description": f"The main usable version of {topic} is built or drafted.",
-                "suggested_order": 2,
-            },
-            {
-                "name": "Quality reviewed",
-                "description": f"The core flow, checklist, and final issues for {topic} are reviewed.",
-                "suggested_order": 3,
-            },
-        ]
+    tasks = _build_preview_tasks(
+        preview_data=preview_data,
+        domain=domain,
+        topic=topic,
+    )
 
     return AIPlanPreviewResponse(
         success=True,
-        message="Generated a structured project plan.",
+        message="Generated a structured plan.",
         ai_generation_status="generated",
-        source="stable_ai_planner_v1",
-        domain=topic,
+        source="stable_ai_planner_v2",
+        domain=domain,
         project_title=project_title,
         description=_build_project_description(preview_data),
         project_type=preview_data.project_type,
         team_id=preview_data.team_id,
         deadline=preview_data.deadline,
-        summary=f"Generated a practical plan for {project_title} with {len(tasks)} focused tasks.",
+        summary=f"Generated a practical {domain.replace('_', ' ')} plan for {project_title} with {len(tasks)} tasks.",
         tasks=tasks,
-        milestones=milestones,
-        risks=[
-            {
-                "risk": "The idea may still be too broad for the first version.",
-                "recommendation": "Keep only the requirements that directly support the first usable result.",
-            },
-            {
-                "risk": "Testing may reveal missing details late in the process.",
-                "recommendation": "Test the core flow before adding polish or optional work.",
-            },
-        ],
-        recommendations=[
-            "Start with the success criteria task before building anything large.",
-            "Keep every task tied to a visible deliverable.",
-            "Review the generated plan and adjust wording before accepting it.",
-        ],
+        milestones=_build_milestones(domain, topic, preview_data.include_milestones),
+        risks=_build_risks(domain),
+        recommendations=_build_recommendations(domain),
         project_idea=preview_data.project_idea,
         requirements=preview_data.requirements,
         available_hours_per_week=preview_data.available_hours_per_week,
-        preferred_task_count=preview_data.preferred_task_count,
+        preferred_task_count=len(tasks),
         rejected_generic_count=0,
         rejected_unrelated_count=0,
     )
