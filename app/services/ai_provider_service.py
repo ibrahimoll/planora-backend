@@ -83,7 +83,10 @@ def _extract_gemini_text(response_data: dict[str, Any]) -> str | None:
     return None
 
 
-def _generate_with_gemini(prompt: str) -> str | None:
+def _generate_with_gemini(
+    prompt: str,
+    response_mime_type: str | None = None,
+) -> str | None:
     if not settings.gemini_api_key:
         logger.warning("Gemini API key is missing. Using local planner fallback.")
         return None
@@ -92,6 +95,14 @@ def _generate_with_gemini(prompt: str) -> str | None:
         "https://generativelanguage.googleapis.com/v1beta/models/"
         f"{settings.gemini_model}:generateContent"
     )
+
+    generation_config: dict[str, Any] = {
+        "temperature": 0.25,
+        "maxOutputTokens": 8192,
+    }
+
+    if response_mime_type:
+        generation_config["responseMimeType"] = response_mime_type
 
     payload: dict[str, Any] = {
         "contents": [
@@ -104,15 +115,7 @@ def _generate_with_gemini(prompt: str) -> str | None:
                 ],
             }
         ],
-        "generationConfig": {
-            "temperature": 0.25,
-            "maxOutputTokens": 8192,
-            "responseFormat": {
-                "text": {
-                    "mimeType": "application/json",
-                },
-            },
-        },
+        "generationConfig": generation_config,
     }
 
     params = {
@@ -126,6 +129,8 @@ def _generate_with_gemini(prompt: str) -> str | None:
                 params=params,
                 json=payload,
             )
+
+        logger.info("Gemini API response. status=%s", response.status_code)
 
         if response.status_code >= 400:
             logger.warning(
@@ -587,15 +592,36 @@ def _generate_with_local_planner(prompt: str) -> str:
     return json.dumps(plan, ensure_ascii=False)
 
 
-def generate_ai_reply_from_provider(prompt: str) -> str | None:
+def generate_local_planner_reply(prompt: str) -> str:
+    return _generate_with_local_planner(prompt)
+
+
+def generate_ai_reply_from_provider(
+    prompt: str,
+    response_mime_type: str | None = None,
+    use_local_fallback: bool = True,
+) -> str | None:
     provider = settings.ai_provider.strip().lower()
+    logger.info(
+        "AI provider selected. provider=%s response_mime_type=%s",
+        provider or "local",
+        response_mime_type or "text/plain",
+    )
 
     if provider == "gemini":
-        gemini_reply = _generate_with_gemini(prompt)
+        gemini_reply = _generate_with_gemini(
+            prompt,
+            response_mime_type=response_mime_type,
+        )
 
         if gemini_reply is not None:
             return gemini_reply
 
+        if not use_local_fallback:
+            logger.warning("Gemini reply unavailable. Local provider fallback disabled.")
+            return None
+
+        logger.warning("Gemini reply unavailable. Using local planner fallback.")
         return _generate_with_local_planner(prompt)
 
     if provider in {"", "local", "fallback"}:
