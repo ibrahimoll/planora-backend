@@ -86,12 +86,15 @@ ACTION_VERBS = {
     "increase",
     "improve",
     "list",
+    "log",
     "make",
     "map",
     "measure",
     "pick",
     "plan",
+    "practice",
     "prepare",
+    "prioritize",
     "publish",
     "remove",
     "review",
@@ -100,6 +103,7 @@ ACTION_VERBS = {
     "set",
     "share",
     "sketch",
+    "split",
     "submit",
     "take",
     "test",
@@ -113,7 +117,12 @@ SMART_DESCRIPTION_SECTIONS = (
     "steps:",
     "deliverable:",
     "done when:",
+)
+
+SMART_DESCRIPTION_BENEFIT_SECTIONS = (
     "customer benefit:",
+    "why it matters:",
+    "benefit:",
 )
 
 QUALITY_STOPWORDS = {
@@ -295,9 +304,25 @@ def _extract_user_project_context(
             lines=lines,
             start_label="project idea and goal:",
             stop_labels=(
+                "extra notes, constraints, or preferences:",
+                "user idea and context:",
                 "requirements, features, constraints, and notes:",
                 "requirements and constraints:",
             ),
+        )
+    )
+    pieces.extend(
+        _extract_section_lines(
+            lines=lines,
+            start_label="extra notes, constraints, or preferences:",
+            stop_labels=(),
+        )
+    )
+    pieces.extend(
+        _extract_section_lines(
+            lines=lines,
+            start_label="user idea and context:",
+            stop_labels=(),
         )
     )
     pieces.extend(
@@ -325,11 +350,18 @@ def _extract_user_project_context(
 
 
 def _quality_tokens(value: str) -> set[str]:
-    return {
-        token
-        for token in re.findall(r"[a-zA-Z0-9][a-zA-Z0-9'-]{2,}", value.lower())
-        if token not in QUALITY_STOPWORDS
-    }
+    tokens: set[str] = set()
+
+    for token in re.findall(r"[a-zA-Z0-9][a-zA-Z0-9'-]{2,}", value.lower()):
+        if token in QUALITY_STOPWORDS:
+            continue
+
+        tokens.add(token)
+
+        if len(token) > 4 and token.endswith("s"):
+            tokens.add(token[:-1])
+
+    return tokens
 
 
 def _token_overlap_score(source: str, candidate: str) -> float:
@@ -364,6 +396,10 @@ def _actionability_score(description: str) -> float:
         section in description.lower()
         for section in SMART_DESCRIPTION_SECTIONS
     )
+    has_benefit_section = any(
+        section in description.lower()
+        for section in SMART_DESCRIPTION_BENEFIT_SECTIONS
+    )
     action_words = len(
         re.findall(
             r"\b(write|create|choose|send|test|record|measure|compare|"
@@ -376,7 +412,11 @@ def _actionability_score(description: str) -> float:
     return min(
         1.0,
         (numbered_steps / 3 * 0.45)
-        + (required_sections / len(SMART_DESCRIPTION_SECTIONS) * 0.35)
+        + (
+            (required_sections + int(has_benefit_section))
+            / (len(SMART_DESCRIPTION_SECTIONS) + 1)
+            * 0.35
+        )
         + min(action_words, 5) / 5 * 0.2,
     )
 
@@ -409,7 +449,7 @@ def _description_restates_title(title: str, description: str) -> bool:
         return True
 
     stripped = description_text
-    for section in SMART_DESCRIPTION_SECTIONS:
+    for section in (*SMART_DESCRIPTION_SECTIONS, *SMART_DESCRIPTION_BENEFIT_SECTIONS):
         stripped = stripped.replace(section, "")
 
     stripped = re.sub(r"\d+\.", "", stripped)
@@ -424,6 +464,82 @@ def _description_restates_title(title: str, description: str) -> bool:
 def _contains_robotic_description(description: str) -> bool:
     lowered = description.lower()
     return any(fragment in lowered for fragment in ROBOTIC_DESCRIPTION_FRAGMENTS)
+
+
+def _classify_planning_domain(project_context: str) -> str:
+    lowered = project_context.lower()
+
+    if any(
+        keyword in lowered
+        for keyword in (
+            "pushup",
+            "push-up",
+            "workout",
+            "fitness",
+            "exercise",
+            "gym",
+            "run",
+            "running",
+            "5k",
+            "5 km",
+            "muscle",
+            "lose weight",
+            "weight loss",
+            "reps",
+            "sets",
+            "squat",
+            "plank",
+        )
+    ):
+        return "fitness_health"
+
+    if any(
+        keyword in lowered
+        for keyword in ("study", "learn", "exam", "course", "homework", "quiz")
+    ):
+        return "study_learning"
+
+    if any(
+        keyword in lowered
+        for keyword in ("app", "software", "website", "api", "backend", "frontend")
+    ):
+        return "software_app"
+
+    if any(
+        keyword in lowered
+        for keyword in ("habit", "routine", "daily", "journal", "sleep", "wake")
+    ):
+        return "personal_habit"
+
+    return "generic_project"
+
+
+def _uses_wrong_domain_product_language(
+    *,
+    project_context: str,
+    task_text: str,
+) -> bool:
+    domain = _classify_planning_domain(project_context)
+
+    if domain not in {"fitness_health", "personal_habit", "study_learning"}:
+        return False
+
+    lowered = task_text.lower()
+    forbidden_fragments = (
+        "features",
+        "requirements",
+        "mvp",
+        "minimum viable",
+        "first useful version",
+        "first-version",
+        "customer benefit",
+        "idea goal",
+        "user flow",
+        "first release",
+        "product",
+    )
+
+    return any(fragment in lowered for fragment in forbidden_fragments)
 
 
 def _strip_json_code_fence(value: str) -> str:
@@ -543,16 +659,72 @@ def _build_minimum_local_fallback_tasks(
         fallback=project.title,
         max_length=48,
     )
+    domain = _classify_planning_domain(project_context)
+    due_dates = _build_ai_due_dates(project=project, task_count=task_count)
+
+    if domain == "fitness_health":
+        fitness_titles = [
+            "Test your current max pushups",
+            "Set a safe daily starting volume",
+            "Split pushups into manageable sets",
+            "Practice correct pushup form",
+            "Create a 2-week progression schedule",
+            "Add recovery and pain rules",
+            "Track reps, sets, and difficulty",
+            "Review progress after 14 days",
+        ]
+        fitness_goals = [
+            "Find your safe starting point before increasing daily pushup volume.",
+            "Choose a daily rep target that builds consistency without overloading your joints.",
+            "Break the daily total into sets you can complete with good form.",
+            "Make each rep useful and reduce shoulder, wrist, and lower-back strain.",
+            "Move toward the target gradually instead of jumping there at once.",
+            "Know when to rest, reduce reps, or stop before a small issue becomes an injury.",
+            "Measure whether the habit is getting easier or too intense.",
+            "Check whether the plan is moving you toward the goal safely.",
+        ]
+        tasks: list[dict[str, Any]] = []
+
+        for index in range(task_count):
+            title = fitness_titles[index % len(fitness_titles)]
+            goal = fitness_goals[index % len(fitness_goals)]
+            tasks.append(
+                {
+                    "suggested_order": index + 1,
+                    "title": title,
+                    "description": (
+                        f"Goal: {goal}\n\n"
+                        "Steps:\n"
+                        "1. Record the current reps, sets, effort, or form cue for this task.\n"
+                        "2. Choose the safest next training action based on that record.\n"
+                        "3. Stop or reduce volume if pain or form breakdown appears.\n\n"
+                        f"Deliverable: A pushup training note for {title.lower()}.\n\n"
+                        "Done when: The note has reps, effort, and the next safe action.\n\n"
+                        "Why it matters: This keeps pushup progress practical and safer to repeat."
+                    ),
+                    "priority": _priority_for_index(index=index, task_count=task_count),
+                    "estimated_hours": _estimated_hours_for_index(index),
+                    "due_date": (
+                        due_dates[index].isoformat()
+                        if index < len(due_dates)
+                        else None
+                    ),
+                    "assigned_to": None,
+                }
+            )
+
+        return tasks
+
     blueprints = [
         (
             "Define {topic} success criteria",
-            "Write the exact outcome, must-have scope, and measurable checks for the first useful version.",
+            "Write the exact outcome, must-have scope, and measurable checks for the next result.",
             "A success criteria checklist",
         ),
         (
-            "Map {topic} requirements",
+            "Map {topic} constraints",
             "Separate required work, optional improvements, constraints, and open questions before execution.",
-            "A prioritized requirements table",
+            "A prioritized constraints table",
         ),
         (
             "Create {topic} execution plan",
@@ -560,9 +732,9 @@ def _build_minimum_local_fallback_tasks(
             "An ordered execution plan",
         ),
         (
-            "Build {topic} first version",
-            "Complete the smallest useful version that proves the main idea can work.",
-            "A usable first version or prototype",
+            "Create {topic} first result",
+            "Complete the smallest useful result that proves the main idea can work.",
+            "A usable first result",
         ),
         (
             "Test {topic} core flow",
@@ -575,7 +747,6 @@ def _build_minimum_local_fallback_tasks(
             "A delivery checklist",
         ),
     ]
-    due_dates = _build_ai_due_dates(project=project, task_count=task_count)
     tasks: list[dict[str, Any]] = []
 
     for index in range(task_count):
@@ -593,7 +764,7 @@ def _build_minimum_local_fallback_tasks(
                     "3. Check that the output can be used by the next task without extra explanation.\n\n"
                     f"Deliverable: {deliverable} for {topic}.\n\n"
                     f"Done when: The deliverable has at least three concrete items tied to {topic}.\n\n"
-                    f"Customer benefit: This turns {topic} into visible progress instead of a vague next step."
+                    f"Why it matters: This turns {topic} into visible progress instead of a vague next step."
                 ),
                 "priority": _priority_for_index(index=index, task_count=task_count),
                 "estimated_hours": _estimated_hours_for_index(index),
@@ -775,6 +946,26 @@ Understand the user's exact idea, even if it is unusual, personal, vague, or mis
 Do not assume a different goal from the one the user gave.
 Handle any practical idea type by reasoning from the provided context only.
 
+First classify the user idea into exactly one domain:
+- fitness_health
+- study_learning
+- software_app
+- business_marketing
+- content_creator
+- event_trip
+- personal_habit
+- generic_project
+
+Generate a plan that fits that domain.
+- Use software/product wording only when the idea is actually an app, website, software tool, or product build.
+- For fitness_health and personal_habit goals, write like a practical coach: baseline, safe starting volume, form, progression, recovery, warning rules, tracking, and review.
+- For study_learning goals, write like a tutor or study coach.
+- For event_trip goals, write like an event/travel organizer.
+- For content_creator goals, write like an editor/producer.
+- For business_marketing goals, write like an operator/marketer.
+- Do not force every idea into features, requirements, MVPs, user flows, releases, or customer language.
+- If the domain is not software_app or business_marketing, do not use: features, requirements, MVP, first useful version, customer benefit, idea goal, or user flow.
+
 Critical output rules:
 - Return valid JSON only.
 - No Markdown.
@@ -808,8 +999,8 @@ Explain exactly what the user should have after finishing the task.
 Done when:
 Give a measurable condition that proves the task is complete.
 
-Customer benefit:
-Explain in one short sentence how the task helps the customer reach the original goal.
+Why it matters:
+Explain in one short sentence why this task helps the user reach the original goal.
 
 Important:
 - The task must teach the user what to do.
@@ -841,7 +1032,7 @@ Project context:
 Current tasks to avoid duplicating:
 {existing_tasks_text}
 
-User idea and requirements:
+User idea and context:
 {input_prompt.strip()}
 
 Return JSON in exactly this shape:
@@ -852,7 +1043,7 @@ Return JSON in exactly this shape:
     {{
       "suggested_order": 1,
       "title": "specific action-based task title",
-      "description": "Goal: One sentence explaining why this exact task matters.\\n\\nSteps:\\n1. First practical action.\\n2. Second practical action.\\n3. Third practical action.\\n\\nDeliverable: The exact output the user should have.\\n\\nDone when: A measurable completion condition.\\n\\nCustomer benefit: One short sentence explaining how this helps the original goal.",
+      "description": "Goal: One sentence explaining why this exact task matters.\\n\\nSteps:\\n1. First practical action.\\n2. Second practical action.\\n3. Third practical action.\\n\\nDeliverable: The exact output the user should have.\\n\\nDone when: A measurable completion condition.\\n\\nWhy it matters: One short sentence explaining how this helps the original goal.",
       "priority": "high",
       "estimated_hours": 2.5
     }}
@@ -969,7 +1160,7 @@ def _description_has_visible_result(value: str) -> bool:
     deliverable = _extract_description_section(
         value=value,
         label="Deliverable:",
-        next_labels=("Done when:", "Customer benefit:"),
+        next_labels=("Done when:", "Customer benefit:", "Why it matters:", "Benefit:"),
     )
     normalized = _normalize_comparison_text(deliverable)
 
@@ -996,15 +1187,20 @@ def _description_has_visible_result(value: str) -> bool:
         "guest list",
         "lead tracker",
         "list",
+        "log",
         "message",
         "plan",
         "post",
         "practice",
         "price",
         "prototype",
+        "review",
+        "routine",
+        "rule",
         "schedule",
         "screen",
         "table",
+        "target",
         "tracker",
         "video",
     )
@@ -1016,10 +1212,15 @@ def _is_actionable_task_description(value: str) -> bool:
     lowered = value.lower()
 
     has_all_sections = all(section in lowered for section in SMART_DESCRIPTION_SECTIONS)
+    has_benefit_section = any(
+        section in lowered
+        for section in SMART_DESCRIPTION_BENEFIT_SECTIONS
+    )
     numbered_steps = len(re.findall(r"(?:^|\n)\s*\d+\.", value))
 
     return (
         has_all_sections
+        and has_benefit_section
         and numbered_steps >= 3
         and _description_has_visible_result(value)
     )
@@ -1040,7 +1241,7 @@ def _extract_project_context_phrases(project_context: str) -> list[str]:
             continue
 
         line = re.sub(
-            r"^(idea|project idea|project idea and goal|requirements|requirements and constraints|requirements, features, constraints, and notes)\s*:\s*",
+            r"^(idea|project idea|project idea and goal|user idea and context|extra notes, constraints, or preferences|requirements|requirements and constraints|requirements, features, constraints, and notes)\s*:\s*",
             "",
             line,
             flags=re.IGNORECASE,
@@ -1091,6 +1292,8 @@ def _description_key(description: str) -> str:
     cleaned = re.sub(r"deliverable:\s*", "", cleaned)
     cleaned = re.sub(r"done when:\s*", "", cleaned)
     cleaned = re.sub(r"customer benefit:\s*", "", cleaned)
+    cleaned = re.sub(r"why it matters:\s*", "", cleaned)
+    cleaned = re.sub(r"benefit:\s*", "", cleaned)
 
     return cleaned[:500]
 
@@ -1258,7 +1461,7 @@ Rules:
     {{
       "suggested_order": 1,
       "title": "specific action title",
-      "description": "Goal: ...\\n\\nSteps:\\n1. ...\\n2. ...\\n3. ...\\n\\nDeliverable: ...\\n\\nDone when: ...\\n\\nCustomer benefit: ...",
+      "description": "Goal: ...\\n\\nSteps:\\n1. ...\\n2. ...\\n3. ...\\n\\nDeliverable: ...\\n\\nDone when: ...\\n\\nWhy it matters: ...",
       "priority": "high",
       "estimated_hours": 2
     }}
@@ -1284,6 +1487,8 @@ def _task_quality_rejection_reasons(
     relevance_score = _token_overlap_score(project_context, combined_task_text)
     specificity_score = _specificity_score(title, description)
     actionability_score = _actionability_score(description)
+    project_domain = _classify_planning_domain(project_context)
+    task_domain = _classify_planning_domain(combined_task_text)
     duplicate_score = _duplicate_score(
         title=title,
         description=description,
@@ -1303,6 +1508,12 @@ def _task_quality_rejection_reasons(
     if _is_bad_ai_task_text(title) or _is_bad_ai_task_text(description):
         reasons.append("instruction_leak")
 
+    if _uses_wrong_domain_product_language(
+        project_context=project_context,
+        task_text=combined_task_text,
+    ):
+        reasons.append("wrong_domain_language")
+
     if _is_low_quality_task_title(title) or _is_disallowed_generic_task_title(title):
         reasons.append("generic_title")
 
@@ -1317,7 +1528,7 @@ def _task_quality_rejection_reasons(
     if _description_repeats_project_idea(description, project_context):
         reasons.append("description_repeats_idea")
 
-    if relevance_score < 0.18:
+    if relevance_score < 0.18 and task_domain != project_domain:
         reasons.append("unrelated_to_idea")
 
     if specificity_score < 0.35:
@@ -2333,7 +2544,7 @@ def _build_preview_description(
     requirements = (preview_data.requirements or "").strip()
 
     if requirements:
-        pieces.append(f"Requirements and constraints: {requirements}")
+        pieces.append(f"Notes and constraints: {requirements}")
 
     return "\n".join(pieces)
 
@@ -2348,7 +2559,7 @@ def _build_preview_prompt(
     requirements = (preview_data.requirements or "").strip()
 
     if requirements:
-        pieces.append(f"Requirements, features, constraints, and notes:\n{requirements}")
+        pieces.append(f"Extra notes, constraints, or preferences:\n{requirements}")
 
     return "\n\n".join(pieces)
 
@@ -2372,6 +2583,35 @@ def _preview_task_response_from_plan_task(
         else None,
         assigned_to=task_data.get("assigned_to"),
     )
+
+
+def _preview_summary_with_task_count(
+    *,
+    summary: str,
+    project_title: str,
+    task_count: int,
+) -> str:
+    cleaned = summary.strip()
+
+    if not cleaned:
+        return f"Generated a practical plan for {project_title} with {task_count} tasks."
+
+    replacement = f"{task_count} tasks"
+    updated = re.sub(
+        r"\b\d+\s+(?:focused\s+)?tasks?\b",
+        replacement,
+        cleaned,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+
+    if updated != cleaned:
+        return updated
+
+    if "task" in cleaned.lower():
+        return cleaned
+
+    return f"{cleaned} Plan includes {task_count} tasks."
 
 
 def create_ai_plan_preview(
@@ -2403,6 +2643,15 @@ def create_ai_plan_preview(
 
     if ai_generation_status not in {"generated", "fallback"}:
         ai_generation_status = "generated"
+    tasks = [
+        _preview_task_response_from_plan_task(task)
+        for task in generated_plan["tasks"]
+    ]
+    summary = _preview_summary_with_task_count(
+        summary=str(generated_plan["summary"]),
+        project_title=project.title,
+        task_count=len(tasks),
+    )
 
     return AIPlanPreviewResponse(
         success=bool(generated_plan.get("success", True)),
@@ -2415,11 +2664,8 @@ def create_ai_plan_preview(
         project_type=preview_data.project_type,
         team_id=preview_data.team_id,
         deadline=preview_data.deadline,
-        summary=str(generated_plan["summary"]),
-        tasks=[
-            _preview_task_response_from_plan_task(task)
-            for task in generated_plan["tasks"]
-        ],
+        summary=summary,
+        tasks=tasks,
         milestones=list(generated_plan["milestones"]),
         risks=list(generated_plan["risks"]),
         recommendations=list(generated_plan["recommendations"]),

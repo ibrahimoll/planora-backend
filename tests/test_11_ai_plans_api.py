@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 from app.models.ai_plan import AIPlan
 from app.models.project import Project
 from app.models.task import Task
-from app.services.ai_plan_service import build_generated_plan
+from app.schemas.ai_plan_schema import AIPlanPreviewRequest
+from app.schemas.project_schema import ProjectType
+from app.services.ai_plan_service import build_generated_plan, create_ai_plan_preview
 
 from tests.conftest import (
     auth_headers,
@@ -101,7 +103,7 @@ def _provider_description(*, title: str, index: int, focus: str) -> str:
         f"3. Create a {deliverable} that supports the next {focus} action.\n\n"
         f"Deliverable: A {focus} {deliverable} for '{title}'.\n\n"
         f"Done when: The {deliverable} has at least three concrete items tied to {focus}.\n\n"
-        f"Customer benefit: This keeps the original {focus} goal moving through '{title}'."
+        f"Why it matters: This keeps the original {focus} goal moving through '{title}'."
     )
 
 
@@ -1237,7 +1239,7 @@ SMART_SECTIONS = (
     "Steps:",
     "Deliverable:",
     "Done when:",
-    "Customer benefit:",
+    "Why it matters:",
 )
 
 
@@ -1320,6 +1322,133 @@ def _assert_provider_generated_tasks(
         assert "return JSON" not in description
         assert "Project context:" not in description
         assert "Preferred task count" not in description
+
+
+class _PreviewUser:
+    user_id = 1
+
+
+def _pushup_preview_request(task_count: int = 8) -> AIPlanPreviewRequest:
+    return AIPlanPreviewRequest(
+        project_idea="Do 100 pushup a day",
+        deadline=datetime.now(timezone.utc) + timedelta(days=30),
+        project_type=ProjectType.personal,
+        available_hours_per_week=5,
+        preferred_task_count=task_count,
+    )
+
+
+def _assert_no_forbidden_planner_language(text: str) -> None:
+    lowered = text.lower()
+
+    for forbidden in (
+        "features",
+        "requirements",
+        "mvp",
+        "first useful version",
+        "customer benefit",
+        "idea goal",
+    ):
+        assert forbidden not in lowered
+
+
+def test_pushup_preview_fallback_returns_fitness_specific_tasks(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        lambda _prompt: None,
+    )
+
+    preview = create_ai_plan_preview(_pushup_preview_request(), _PreviewUser())
+
+    titles = [task.title for task in preview.tasks]
+    all_text = " ".join(
+        [preview.summary, *titles, *(task.description or "" for task in preview.tasks)]
+    )
+
+    assert preview.success is True
+    assert preview.ai_generation_status == "fallback"
+    assert preview.domain == "fitness_health"
+    assert titles == [
+        "Test your current max pushups",
+        "Set a safe daily starting volume",
+        "Split pushups into manageable sets",
+        "Practice correct pushup form",
+        "Create a 2-week progression schedule",
+        "Add recovery and pain rules",
+        "Track reps, sets, and difficulty",
+        "Review progress after 14 days",
+    ]
+    assert len(preview.tasks) == 8
+    assert "8 tasks" in preview.summary
+    _assert_no_forbidden_planner_language(all_text)
+
+
+def test_pushup_preview_summary_count_matches_tasks_length(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        lambda _prompt: None,
+    )
+
+    preview = create_ai_plan_preview(_pushup_preview_request(task_count=8), _PreviewUser())
+    match = re.search(r"\b(\d+)\s+tasks?\b", preview.summary)
+
+    assert match is not None
+    assert int(match.group(1)) == len(preview.tasks)
+
+
+def test_pushup_preview_malformed_provider_json_uses_domain_fallback(monkeypatch):
+    calls: list[str] = []
+
+    def malformed_provider(prompt: str) -> str:
+        calls.append(prompt)
+        return "not json"
+
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        malformed_provider,
+    )
+
+    preview = create_ai_plan_preview(_pushup_preview_request(), _PreviewUser())
+    all_text = " ".join(
+        [preview.summary, *(task.description or "" for task in preview.tasks)]
+    )
+
+    assert len(calls) == 2
+    assert preview.ai_generation_status == "fallback"
+    assert len(preview.tasks) == 8
+    assert preview.tasks[0].title == "Test your current max pushups"
+    _assert_no_forbidden_planner_language(all_text)
+
+
+def test_preview_uses_provider_json_when_available(monkeypatch):
+    provider_titles = [
+        "Define task tracker core user flow",
+        "Prioritize task tracker first-release features",
+        "Create task tracker test checklist",
+    ]
+
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        lambda _prompt: _provider_plan_from_titles(
+            titles=provider_titles,
+            focus="task tracker app",
+            domain="software_app",
+        ),
+    )
+
+    preview = create_ai_plan_preview(
+        AIPlanPreviewRequest(
+            project_idea="Build a task tracker app for daily chores",
+            deadline=datetime.now(timezone.utc) + timedelta(days=30),
+            project_type=ProjectType.personal,
+            preferred_task_count=3,
+        ),
+        _PreviewUser(),
+    )
+
+    assert preview.ai_generation_status == "generated"
+    assert preview.source == "ai_provider"
+    assert [task.title for task in preview.tasks] == provider_titles
 
 
 @pytest.mark.parametrize(

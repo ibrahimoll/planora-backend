@@ -23,10 +23,16 @@ LOCAL_STOPWORDS = {
     "at",
     "be",
     "by",
+    "context",
+    "daily",
+    "day",
+    "do",
     "for",
     "from",
+    "goal",
     "how",
     "i",
+    "idea",
     "in",
     "is",
     "it",
@@ -47,6 +53,120 @@ LOCAL_STOPWORDS = {
     "with",
     "you",
     "your",
+}
+
+FITNESS_KEYWORDS = {
+    "5k",
+    "bench",
+    "bodyweight",
+    "calorie",
+    "cardio",
+    "diet",
+    "exercise",
+    "fitness",
+    "gym",
+    "health",
+    "injury",
+    "km",
+    "lose weight",
+    "muscle",
+    "plank",
+    "push-up",
+    "pushup",
+    "reps",
+    "run",
+    "running",
+    "sets",
+    "squat",
+    "strength",
+    "train",
+    "walk",
+    "weight loss",
+    "workout",
+}
+
+STUDY_KEYWORDS = {
+    "assignment",
+    "book",
+    "course",
+    "exam",
+    "homework",
+    "learn",
+    "lesson",
+    "practice test",
+    "quiz",
+    "read",
+    "revision",
+    "study",
+}
+
+SOFTWARE_KEYWORDS = {
+    "api",
+    "app",
+    "backend",
+    "bug",
+    "code",
+    "database",
+    "feature",
+    "flutter",
+    "frontend",
+    "mobile",
+    "prototype",
+    "software",
+    "ui",
+    "website",
+}
+
+BUSINESS_KEYWORDS = {
+    "brand",
+    "business",
+    "campaign",
+    "client",
+    "customer",
+    "launch",
+    "lead",
+    "marketing",
+    "pricing",
+    "sales",
+    "shop",
+    "store",
+}
+
+CONTENT_KEYWORDS = {
+    "blog",
+    "content",
+    "instagram",
+    "podcast",
+    "post",
+    "reel",
+    "script",
+    "shorts",
+    "tiktok",
+    "video",
+    "youtube",
+}
+
+EVENT_TRIP_KEYWORDS = {
+    "conference",
+    "event",
+    "party",
+    "trip",
+    "travel",
+    "vacation",
+    "visit",
+    "wedding",
+    "workshop",
+}
+
+HABIT_KEYWORDS = {
+    "daily",
+    "habit",
+    "journal",
+    "morning",
+    "night",
+    "routine",
+    "sleep",
+    "wake",
 }
 
 
@@ -236,6 +356,14 @@ def _extract_original_prompt(prompt: str) -> str:
 
 def _clean_plain_text(value: str, max_length: int = 900) -> str:
     cleaned = re.sub(r'[`*_#>"\']+', ' ', value)
+    cleaned = re.sub(
+        r"\b(Project idea and goal|User idea and context|User idea and requirements|"
+        r"Extra notes, constraints, or preferences|Requirements, features, constraints, and notes|"
+        r"Requirements and constraints|Notes and constraints|Project context|Idea)\s*:",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" -:\n\t")
 
     if len(cleaned) > max_length:
@@ -248,9 +376,16 @@ def _extract_idea_context(prompt: str) -> str:
     source_prompt = _extract_original_prompt(prompt)
     idea = _extract_section(
         prompt=source_prompt,
-        start_label="User idea and requirements:",
+        start_label="User idea and context:",
         stop_labels=("Return JSON", "Milestones:"),
     )
+
+    if not idea:
+        idea = _extract_section(
+            prompt=source_prompt,
+            start_label="User idea and requirements:",
+            stop_labels=("Return JSON", "Milestones:"),
+        )
 
     if idea:
         return _clean_plain_text(idea)
@@ -321,6 +456,515 @@ def _title_topic(value: str) -> str:
     return topic if len(topic) <= 48 else topic[:45].rstrip() + "..."
 
 
+def _contains_any_keyword(value: str, keywords: set[str]) -> bool:
+    lowered = value.lower()
+    return any(keyword in lowered for keyword in keywords)
+
+
+def _classify_idea_domain(idea_context: str) -> str:
+    if _contains_any_keyword(idea_context, FITNESS_KEYWORDS):
+        return "fitness_health"
+
+    if _contains_any_keyword(idea_context, STUDY_KEYWORDS):
+        return "study_learning"
+
+    if _contains_any_keyword(idea_context, SOFTWARE_KEYWORDS):
+        return "software_app"
+
+    if _contains_any_keyword(idea_context, BUSINESS_KEYWORDS):
+        return "business_marketing"
+
+    if _contains_any_keyword(idea_context, CONTENT_KEYWORDS):
+        return "content_creator"
+
+    if _contains_any_keyword(idea_context, EVENT_TRIP_KEYWORDS):
+        return "event_trip"
+
+    if _contains_any_keyword(idea_context, HABIT_KEYWORDS):
+        return "personal_habit"
+
+    return "generic_project"
+
+
+def _fitness_focus(idea_context: str) -> str:
+    lowered = idea_context.lower()
+
+    if "push-up" in lowered or "pushup" in lowered:
+        return "pushups"
+
+    if "5k" in lowered or "5 km" in lowered or "5km" in lowered:
+        return "5K running"
+
+    if "run" in lowered or "running" in lowered:
+        return "running"
+
+    if "lose weight" in lowered or "weight loss" in lowered:
+        return "weight loss"
+
+    if "muscle" in lowered:
+        return "muscle building"
+
+    if "plank" in lowered:
+        return "planks"
+
+    if "squat" in lowered:
+        return "squats"
+
+    return "fitness goal"
+
+
+def _focus_from_context(idea_context: str, domain: str) -> str:
+    if domain == "fitness_health":
+        return _fitness_focus(idea_context)
+
+    topic = _title_topic(idea_context)
+    return topic if topic != "project" else "the plan"
+
+
+def _domain_task_description(
+    *,
+    goal: str,
+    steps: tuple[str, str, str],
+    deliverable: str,
+    done_when: str,
+    why_it_matters: str,
+) -> str:
+    return (
+        f"Goal: {goal}\n\n"
+        "Steps:\n"
+        f"1. {steps[0]}\n"
+        f"2. {steps[1]}\n"
+        f"3. {steps[2]}\n\n"
+        f"Deliverable: {deliverable}\n\n"
+        f"Done when: {done_when}\n\n"
+        f"Why it matters: {why_it_matters}"
+    )
+
+
+def _fitness_blueprints(focus: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "title": "Test your current max pushups",
+            "goal": "Find your safe starting point before aiming for 100 pushups a day.",
+            "steps": (
+                "Warm up your shoulders, wrists, and chest for 5 minutes.",
+                "Do one controlled max-rep set with clean form and stop before form breaks.",
+                "Write down total reps, difficulty, and any discomfort.",
+            ),
+            "deliverable": "A baseline pushup result log.",
+            "done_when": "Your max clean reps and difficulty rating are recorded.",
+            "why_it_matters": "A baseline keeps the plan challenging without starting too aggressively.",
+            "priority": "high",
+            "estimated_hours": 0.5,
+        },
+        {
+            "title": "Set a safe daily starting volume",
+            "goal": "Choose a daily rep target that builds consistency without overloading your joints.",
+            "steps": (
+                "Start with 40-60% of your clean max reps spread across the day.",
+                "Cap the first week below failure so soreness stays manageable.",
+                "Write the exact daily target and when you will do each set.",
+            ),
+            "deliverable": "A safe first-week pushup target.",
+            "done_when": "Your daily reps and set schedule are written down.",
+            "why_it_matters": "A conservative start makes the habit easier to sustain.",
+            "priority": "high",
+            "estimated_hours": 0.5,
+        },
+        {
+            "title": "Split pushups into manageable sets",
+            "goal": "Break the daily total into sets you can complete with good form.",
+            "steps": (
+                "Choose set sizes that feel like effort level 6-7 out of 10.",
+                "Place sets at least 30-60 minutes apart if needed.",
+                "Keep two reps in reserve on most sets during the first week.",
+            ),
+            "deliverable": "A set-by-set pushup schedule.",
+            "done_when": "The daily target is divided into realistic sets.",
+            "why_it_matters": "Smaller sets reduce form breakdown and make 100 reps more realistic.",
+            "priority": "high",
+            "estimated_hours": 0.5,
+        },
+        {
+            "title": "Practice correct pushup form",
+            "goal": "Make each rep useful and reduce shoulder, wrist, and lower-back strain.",
+            "steps": (
+                "Keep your body in a straight line from shoulders to ankles.",
+                "Lower with control until your chest is near the floor.",
+                "Stop or switch to incline pushups when your hips sag or elbows flare.",
+            ),
+            "deliverable": "A short form checklist for every set.",
+            "done_when": "You can name and check the main form cues before training.",
+            "why_it_matters": "Good form turns volume into strength instead of avoidable pain.",
+            "priority": "high",
+            "estimated_hours": 0.75,
+        },
+        {
+            "title": "Create a 2-week progression schedule",
+            "goal": "Move toward 100 daily pushups gradually instead of jumping there at once.",
+            "steps": (
+                "Increase daily reps by 5-10 only after two comfortable days.",
+                "Use incline or knee pushups when full pushups become sloppy.",
+                "Plan one lighter day after every 3-4 harder days.",
+            ),
+            "deliverable": "A 14-day pushup progression calendar.",
+            "done_when": "Each day has a rep target, set plan, and easier variation if needed.",
+            "why_it_matters": "Progression lets your muscles and joints adapt safely.",
+            "priority": "medium",
+            "estimated_hours": 1.0,
+        },
+        {
+            "title": "Add recovery and pain rules",
+            "goal": "Know when to rest, reduce reps, or stop before a small issue becomes an injury.",
+            "steps": (
+                "Schedule at least one lighter recovery day each week.",
+                "Stop the session if you feel sharp pain in wrists, elbows, shoulders, or chest.",
+                "Reduce volume by 30-50% if soreness changes your form the next day.",
+            ),
+            "deliverable": "A recovery and pain decision checklist.",
+            "done_when": "You have clear stop, reduce, and rest rules.",
+            "why_it_matters": "Recovery rules protect consistency and lower injury risk.",
+            "priority": "high",
+            "estimated_hours": 0.5,
+        },
+        {
+            "title": "Track reps, sets, and difficulty",
+            "goal": "Measure whether the pushup habit is getting easier or too intense.",
+            "steps": (
+                "Record each set with reps completed and effort level.",
+                "Note soreness, pain, sleep, and missed sets.",
+                "Highlight days where form or recovery felt worse than expected.",
+            ),
+            "deliverable": "A daily pushup tracking table.",
+            "done_when": "Every training day has reps, sets, effort, and notes recorded.",
+            "why_it_matters": "Tracking shows when to progress and when to back off.",
+            "priority": "medium",
+            "estimated_hours": 0.5,
+        },
+        {
+            "title": "Review progress after 14 days",
+            "goal": "Check whether the plan is moving you toward 100 pushups safely.",
+            "steps": (
+                "Compare day 1 and day 14 reps, effort, and soreness notes.",
+                "Retest one clean max set only if your joints feel good.",
+                "Choose whether to increase, hold, or reduce the next 2-week target.",
+            ),
+            "deliverable": "A 14-day progress review.",
+            "done_when": "You have a clear next target based on recorded progress.",
+            "why_it_matters": "A checkpoint prevents blindly chasing volume when your body needs adjustment.",
+            "priority": "high",
+            "estimated_hours": 0.75,
+        },
+        {
+            "title": f"Warm up before {focus} sessions",
+            "goal": f"Prepare your wrists, elbows, shoulders, and chest before {focus} work.",
+            "steps": (
+                "Circle wrists and shoulders for 60 seconds.",
+                "Do 10 slow scapular pushups or wall pushups.",
+                "Start the first set easier than the rest of the workout.",
+            ),
+            "deliverable": "A short warmup routine.",
+            "done_when": "You complete the warmup before every training session.",
+            "why_it_matters": "A warmup makes the first reps smoother and safer.",
+            "priority": "medium",
+            "estimated_hours": 0.25,
+        },
+        {
+            "title": f"Choose easier {focus} variations",
+            "goal": "Keep training productive on days when full reps are too difficult.",
+            "steps": (
+                "Use incline pushups on a table or wall when form breaks.",
+                "Use knee pushups only after you can keep a straight torso.",
+                "Return to full pushups when the easier version feels controlled.",
+            ),
+            "deliverable": "A ranked list of easier pushup variations.",
+            "done_when": "You know which variation to use before form breaks.",
+            "why_it_matters": "Easier variations let you finish volume without practicing bad form.",
+            "priority": "medium",
+            "estimated_hours": 0.5,
+        },
+        {
+            "title": f"Pair {focus} with a daily cue",
+            "goal": "Make the habit easier to remember.",
+            "steps": (
+                "Choose a cue such as after brushing teeth or before showering.",
+                "Place the first set immediately after that cue.",
+                "Track whether the cue helped you start without delay.",
+            ),
+            "deliverable": "A cue-based training trigger.",
+            "done_when": "Your first daily set has a fixed cue.",
+            "why_it_matters": "A cue reduces the chance that the habit depends on motivation.",
+            "priority": "low",
+            "estimated_hours": 0.25,
+        },
+        {
+            "title": f"Plan your next {focus} target",
+            "goal": "Choose the next realistic step after the first checkpoint.",
+            "steps": (
+                "Review the last 7 days of reps, effort, and recovery.",
+                "Pick a target that increases volume only if form stayed clean.",
+                "Write the next target before starting the next training block.",
+            ),
+            "deliverable": "A next-block pushup target.",
+            "done_when": "The next target is based on actual training data.",
+            "why_it_matters": "A measured next target keeps progress sustainable.",
+            "priority": "medium",
+            "estimated_hours": 0.5,
+        },
+    ]
+
+
+def _generic_domain_blueprints(domain: str, focus: str) -> list[dict[str, Any]]:
+    if domain == "software_app":
+        return [
+            {
+                "title": f"Define {focus} core user flow",
+                "goal": f"Clarify the main user path for {focus}.",
+                "steps": (
+                    "Write the primary user action from start to finish.",
+                    "List the screens, data, and decisions needed for that path.",
+                    "Remove any feature that is not needed for the first release.",
+                ),
+                "deliverable": "A core flow outline.",
+                "done_when": "The main user path can be explained in ordered steps.",
+                "why_it_matters": "A clear flow prevents scattered development work.",
+                "priority": "high",
+                "estimated_hours": 2.0,
+            },
+            {
+                "title": f"Prioritize {focus} first-release features",
+                "goal": f"Choose the smallest feature set that makes {focus} usable.",
+                "steps": (
+                    "List must-have, should-have, and later features.",
+                    "Mark dependencies between must-have features.",
+                    "Pick the first release scope.",
+                ),
+                "deliverable": "A prioritized feature list.",
+                "done_when": "Every first-release feature has a clear reason to exist.",
+                "why_it_matters": "Feature priority keeps the build focused.",
+                "priority": "high",
+                "estimated_hours": 2.0,
+            },
+        ]
+
+    if domain == "study_learning":
+        return [
+            {
+                "title": f"Check your current {focus} level",
+                "goal": f"Find what you already know and where {focus} needs practice.",
+                "steps": (
+                    "Take a short quiz or explain the topic from memory.",
+                    "Mark weak areas that felt slow or confusing.",
+                    "Choose the first three skills to practice.",
+                ),
+                "deliverable": "A short skills gap list.",
+                "done_when": "You know the top weak areas to study first.",
+                "why_it_matters": "Studying weak areas first makes each session more useful.",
+                "priority": "high",
+                "estimated_hours": 1.0,
+            },
+            {
+                "title": f"Schedule focused {focus} study blocks",
+                "goal": f"Create repeatable time blocks for {focus}.",
+                "steps": (
+                    "Choose realistic study days and session lengths.",
+                    "Assign one skill or chapter to each block.",
+                    "Add a short review at the end of every session.",
+                ),
+                "deliverable": "A study block calendar.",
+                "done_when": "Each block has a topic and review action.",
+                "why_it_matters": "A schedule turns learning into steady progress.",
+                "priority": "medium",
+                "estimated_hours": 1.0,
+            },
+        ]
+
+    return [
+        {
+            "title": f"Clarify the next outcome for {focus}",
+            "goal": f"Decide what concrete result should come next for {focus}.",
+            "steps": (
+                "Write the result you want in one sentence.",
+                "List the constraints, resources, and open questions.",
+                "Choose the next action that creates visible progress.",
+            ),
+            "deliverable": "A clear next-outcome note.",
+            "done_when": "The next result and first action are written down.",
+            "why_it_matters": "Clear outcomes make the work easier to start.",
+            "priority": "high",
+            "estimated_hours": 1.0,
+        },
+        {
+            "title": f"Break {focus} into action steps",
+            "goal": f"Turn {focus} into ordered work you can complete.",
+            "steps": (
+                "List every action needed for the next outcome.",
+                "Put the actions in dependency order.",
+                "Estimate the effort for each action.",
+            ),
+            "deliverable": "An ordered action list.",
+            "done_when": "Each action has an order and estimate.",
+            "why_it_matters": "Ordered actions reduce guessing and delay.",
+            "priority": "medium",
+            "estimated_hours": 1.5,
+        },
+    ]
+
+
+def _expanded_domain_blueprints(
+    *,
+    domain: str,
+    focus: str,
+    task_count: int,
+) -> list[dict[str, Any]]:
+    blueprints = (
+        _fitness_blueprints(focus)
+        if domain == "fitness_health"
+        else _generic_domain_blueprints(domain, focus)
+    )
+
+    while len(blueprints) < task_count:
+        index = len(blueprints) + 1
+        blueprints.append(
+            {
+                "title": f"Review {focus} checkpoint {index}",
+                "goal": f"Use recent progress to choose the next practical step for {focus}.",
+                "steps": (
+                    "Review what was completed since the last checkpoint.",
+                    "Write what is blocked, unclear, or too difficult.",
+                    "Choose one adjustment for the next work session.",
+                ),
+                "deliverable": f"A checkpoint note for {focus}.",
+                "done_when": "The next adjustment is written and ready to follow.",
+                "why_it_matters": "Regular checkpoints keep the plan realistic.",
+                "priority": "medium",
+                "estimated_hours": 0.75,
+            }
+        )
+
+    return blueprints
+
+
+def _build_domain_local_tasks(
+    *,
+    domain: str,
+    focus: str,
+    task_count: int,
+) -> list[dict[str, Any]]:
+    blueprints = _expanded_domain_blueprints(
+        domain=domain,
+        focus=focus,
+        task_count=task_count,
+    )
+    tasks: list[dict[str, Any]] = []
+
+    for index, blueprint in enumerate(blueprints[:task_count]):
+        tasks.append(
+            {
+                "suggested_order": index + 1,
+                "title": str(blueprint["title"]),
+                "description": _domain_task_description(
+                    goal=str(blueprint["goal"]),
+                    steps=blueprint["steps"],
+                    deliverable=str(blueprint["deliverable"]),
+                    done_when=str(blueprint["done_when"]),
+                    why_it_matters=str(blueprint["why_it_matters"]),
+                ),
+                "priority": blueprint["priority"],
+                "estimated_hours": blueprint["estimated_hours"],
+            }
+        )
+
+    return tasks
+
+
+def _domain_milestones(
+    *,
+    domain: str,
+    focus: str,
+    include_milestones: bool,
+) -> list[dict[str, Any]]:
+    if not include_milestones:
+        return []
+
+    if domain == "fitness_health":
+        return [
+            {
+                "name": "Baseline recorded",
+                "description": f"The starting point for {focus} is measured safely.",
+                "suggested_order": 1,
+            },
+            {
+                "name": "Routine started",
+                "description": f"The first week of {focus} training is scheduled and tracked.",
+                "suggested_order": 2,
+            },
+            {
+                "name": "Progress reviewed",
+                "description": f"Training volume, form, and recovery are reviewed after 14 days.",
+                "suggested_order": 3,
+            },
+        ]
+
+    return [
+        {
+            "name": "Direction confirmed",
+            "description": f"The next outcome for {focus} is clear.",
+            "suggested_order": 1,
+        },
+        {
+            "name": "Execution underway",
+            "description": f"The main actions for {focus} are started and tracked.",
+            "suggested_order": 2,
+        },
+        {
+            "name": "Progress reviewed",
+            "description": f"The current result for {focus} is reviewed and adjusted.",
+            "suggested_order": 3,
+        },
+    ]
+
+
+def _domain_risks(domain: str) -> list[dict[str, str]]:
+    if domain == "fitness_health":
+        return [
+            {
+                "risk": "Doing too many reps too soon can irritate wrists, elbows, or shoulders.",
+                "recommendation": "Increase volume gradually and stop if sharp pain appears.",
+            },
+            {
+                "risk": "Poor form can turn daily pushups into strain instead of progress.",
+                "recommendation": "Use easier variations whenever full pushups lose control.",
+            },
+        ]
+
+    return [
+        {
+            "risk": "The plan may be too broad to finish comfortably.",
+            "recommendation": "Keep the next outcome small enough to complete and review.",
+        },
+        {
+            "risk": "Progress may stall without a tracking habit.",
+            "recommendation": "Record the result of each work session before moving on.",
+        },
+    ]
+
+
+def _domain_recommendations(domain: str) -> list[str]:
+    if domain == "fitness_health":
+        return [
+            "Start below your maximum and build volume gradually.",
+            "Prioritize clean form over hitting the daily number at any cost.",
+            "Use pain, soreness, and effort notes to adjust the next target.",
+        ]
+
+    return [
+        "Start with the highest-priority action before adding optional work.",
+        "Keep every task tied to a visible result.",
+        "Review the plan after the first checkpoint and adjust it.",
+    ]
+
+
 def _local_task_description(
     *,
     topic: str,
@@ -338,7 +982,7 @@ def _local_task_description(
         f"3. {steps[2]}\n\n"
         f"Deliverable: {deliverable}\n\n"
         f"Done when: {done_when}\n\n"
-        f"Customer benefit: {benefit}"
+        f"Why it matters: {benefit}"
     ).replace("{topic}", topic)
 
 
@@ -364,9 +1008,9 @@ def _build_local_tasks(topic: str, task_count: int) -> list[dict[str, Any]]:
             "steps": (
                 "Separate required features, optional features, and constraints for {topic}.",
                 "Mark each requirement as simple, medium, or complex.",
-                "Remove anything that does not support the first useful version.",
+                "Remove anything that does not support the next practical result.",
             ),
-            "deliverable": "A prioritized requirements checklist for {topic}.",
+            "deliverable": "A prioritized planning checklist for {topic}.",
             "done_when": "Every requirement has a priority and the first version has no unclear items.",
             "benefit": "The user knows exactly what should be built first.",
             "priority": "high",
@@ -406,7 +1050,7 @@ def _build_local_tasks(topic: str, task_count: int) -> list[dict[str, Any]]:
             "steps": (
                 "Run through the main user flow from the first step to the final result.",
                 "Write every bug, missing detail, or confusing part in a tracker.",
-                "Choose the fixes that block the first useful version.",
+                "Choose the fixes that block the next useful result.",
             ),
             "deliverable": "A test results tracker for {topic}.",
             "done_when": "The tracker lists tested steps, found issues, and the fixes required before release.",
@@ -543,50 +1187,29 @@ def _generate_with_local_planner(prompt: str) -> str:
     task_count = _extract_task_count(prompt)
     idea_context = _extract_idea_context(prompt)
     project_title = _extract_project_title(prompt, idea_context)
-    topic = _title_topic(f"{project_title} {idea_context}")
+    domain = _classify_idea_domain(f"{project_title} {idea_context}")
+    focus = _focus_from_context(idea_context, domain)
     include_milestones = "Return an empty milestones array" not in prompt
-    tasks = _build_local_tasks(topic=topic, task_count=task_count)
-    milestones = []
-
-    if include_milestones:
-        milestones = [
-            {
-                "name": "Scope confirmed",
-                "description": f"The first-version direction for {topic} is clear and ready for execution.",
-                "suggested_order": 1,
-            },
-            {
-                "name": "First version completed",
-                "description": f"The main usable version of {topic} is built or drafted.",
-                "suggested_order": 2,
-            },
-            {
-                "name": "Quality reviewed",
-                "description": f"The core flow, checklist, and final issues for {topic} are reviewed.",
-                "suggested_order": 3,
-            },
-        ]
+    tasks = _build_domain_local_tasks(
+        domain=domain,
+        focus=focus,
+        task_count=task_count,
+    )
 
     plan = {
-        "domain": _human_topic(f"{project_title} {idea_context}"),
-        "summary": f"Generated a practical fallback plan for {project_title} with {len(tasks)} focused tasks.",
+        "domain": domain,
+        "summary": (
+            f"Generated a {domain.replace('_', ' ')} plan for "
+            f"{project_title} with {len(tasks)} tasks."
+        ),
         "tasks": tasks,
-        "milestones": milestones,
-        "risks": [
-            {
-                "risk": "The project idea may still be too broad for the first version.",
-                "recommendation": "Keep only the requirements that directly support the first usable result.",
-            },
-            {
-                "risk": "Testing may reveal missing details late in the process.",
-                "recommendation": "Test the core flow before adding polish or optional work.",
-            },
-        ],
-        "recommendations": [
-            "Start with the success criteria task before building anything large.",
-            "Keep every task tied to a visible deliverable.",
-            "Review the generated plan and adjust wording before accepting it.",
-        ],
+        "milestones": _domain_milestones(
+            domain=domain,
+            focus=focus,
+            include_milestones=include_milestones,
+        ),
+        "risks": _domain_risks(domain),
+        "recommendations": _domain_recommendations(domain),
     }
 
     return json.dumps(plan, ensure_ascii=False)
