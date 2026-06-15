@@ -872,13 +872,22 @@ def test_preview_from_idea_falls_back_when_provider_returns_none(
     preview = response.json()
     assert preview["success"] is True
     assert preview["ai_generation_status"] == "fallback"
-    assert preview["source"] in {
-        "local_planner_fallback_v1",
-        "minimum_local_planner_v1",
-    }
+    assert preview["source"] == "adaptive_fallback_v1"
     assert preview["tasks"]
     assert len(preview["tasks"]) == 4
+    assert preview["preferred_task_count"] == len(preview["tasks"])
+    summary_count = re.search(r"\b(\d+)\s+tasks?\b", preview["summary"])
+    assert summary_count is not None
+    assert int(summary_count.group(1)) == len(preview["tasks"])
     assert preview["ai_generation_status"] != "failed"
+    preview_text = " ".join(
+        [
+            preview["summary"],
+            *(task["title"] for task in preview["tasks"]),
+            *(task["description"] for task in preview["tasks"]),
+        ]
+    )
+    _assert_no_forbidden_planner_language(preview_text)
 
     for task in preview["tasks"]:
         assert task["title"]
@@ -1346,13 +1355,29 @@ def _assert_no_forbidden_planner_language(text: str) -> None:
         "requirements",
         "mvp",
         "first useful version",
+        "core flow",
         "customer benefit",
+        "prototype",
+        "release",
         "idea goal",
     ):
         assert forbidden not in lowered
 
 
-def test_pushup_preview_fallback_returns_fitness_specific_tasks(monkeypatch):
+def test_preview_from_idea_has_one_active_handler():
+    from app.main import app as planora_app
+
+    matching_routes = [
+        route
+        for route in planora_app.routes
+        if getattr(route, "path", None) == "/ai-plans/preview-from-idea"
+        and "POST" in getattr(route, "methods", set())
+    ]
+
+    assert len(matching_routes) == 1
+
+
+def test_pushup_preview_fallback_returns_adaptive_practical_tasks(monkeypatch):
     monkeypatch.setattr(
         "app.services.ai_plan_service.generate_ai_reply_from_provider",
         lambda _prompt: None,
@@ -1367,19 +1392,23 @@ def test_pushup_preview_fallback_returns_fitness_specific_tasks(monkeypatch):
 
     assert preview.success is True
     assert preview.ai_generation_status == "fallback"
-    assert preview.domain == "fitness_health"
+    assert preview.source == "adaptive_fallback_v1"
+    assert preview.domain == "adaptive_plan"
     assert titles == [
-        "Test your current max pushups",
-        "Set a safe daily starting volume",
-        "Split pushups into manageable sets",
+        "Check your current pushup starting point",
+        "Set a realistic daily pushup target",
+        "Split the pushups into smaller sets",
         "Practice correct pushup form",
-        "Create a 2-week progression schedule",
+        "Create a simple weekly progression schedule",
         "Add recovery and pain rules",
-        "Track reps, sets, and difficulty",
-        "Review progress after 14 days",
+        "Track reps and difficulty daily",
+        "Review progress and adjust the target",
     ]
     assert len(preview.tasks) == 8
+    assert preview.preferred_task_count == len(preview.tasks)
     assert "8 tasks" in preview.summary
+    for concept in ("pushup", "form", "progression", "recovery", "track"):
+        assert concept in all_text.lower()
     _assert_no_forbidden_planner_language(all_text)
 
 
@@ -1394,6 +1423,7 @@ def test_pushup_preview_summary_count_matches_tasks_length(monkeypatch):
 
     assert match is not None
     assert int(match.group(1)) == len(preview.tasks)
+    assert preview.preferred_task_count == len(preview.tasks)
 
 
 def test_pushup_preview_malformed_provider_json_uses_domain_fallback(monkeypatch):
@@ -1416,7 +1446,8 @@ def test_pushup_preview_malformed_provider_json_uses_domain_fallback(monkeypatch
     assert len(calls) == 2
     assert preview.ai_generation_status == "fallback"
     assert len(preview.tasks) == 8
-    assert preview.tasks[0].title == "Test your current max pushups"
+    assert preview.source == "adaptive_fallback_v1"
+    assert preview.tasks[0].title == "Check your current pushup starting point"
     _assert_no_forbidden_planner_language(all_text)
 
 

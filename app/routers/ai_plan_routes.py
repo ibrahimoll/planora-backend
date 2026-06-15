@@ -104,10 +104,17 @@ def preview_ai_plan_from_idea(
                 detail=NOT_ALLOWED,
             )
 
-    return create_ai_plan_preview(
+    preview = create_ai_plan_preview(
         preview_data=preview_data,
         current_user=current_user,
     )
+    logger.info(
+        "AI Planner preview route returned. user_id=%s ai_generation_status=%s task_count=%s",
+        current_user.user_id,
+        preview.ai_generation_status,
+        len(preview.tasks),
+    )
+    return preview
 
 
 @router.post(
