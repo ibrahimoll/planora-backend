@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 import re
 
 import pytest
@@ -1288,6 +1289,123 @@ def _provider_plan_from_titles(
     )
 
 
+def _activity_plan_from_titles(
+    *,
+    titles: list[str],
+    focus: str,
+    domain: str,
+    vocabulary: str,
+) -> str:
+    deliverables = [
+        "checklist",
+        "tracker",
+        "schedule",
+        "practice log",
+        "review note",
+        "progress table",
+    ]
+    specific_notes = [
+        "pick the first skill and define the exact cue",
+        "prepare the reward or target setup before starting",
+        "run a short session with a clear stop point",
+        "practice in the easiest useful environment",
+        "respond immediately when the desired action happens",
+        "increase difficulty only after the easy version works",
+        "keep the same signals so the habit is understandable",
+        "track the learned behavior and the next adjustment",
+    ]
+
+    return json.dumps(
+        {
+            "domain": domain,
+            "summary": f"Generated {len(titles)} tasks for {focus}.",
+            "message": "Generated AI tasks from the user idea.",
+            "tasks": [
+                {
+                    "suggested_order": index,
+                    "title": title,
+                    "description": (
+                        f"Goal: {specific_notes[(index - 1) % len(specific_notes)].capitalize()} for {focus} using {vocabulary}.\n\n"
+                        "Steps:\n"
+                        f"1. {specific_notes[(index - 1) % len(specific_notes)].capitalize()}.\n"
+                        f"2. Apply the relevant {vocabulary} detail while completing '{title}'.\n"
+                        f"3. Record the result, friction, and next adjustment for this exact step.\n\n"
+                        f"Deliverable: A {focus} {deliverables[(index - 1) % len(deliverables)]} focused on {specific_notes[(index - 1) % len(specific_notes)]}.\n\n"
+                        f"Done when: The {deliverables[(index - 1) % len(deliverables)]} includes the result, notes, and next action for '{title}'.\n\n"
+                        f"Why it matters: This specific {focus} step keeps the plan tied to the original idea."
+                    ),
+                    "priority": "high" if index <= 2 else "medium",
+                    "estimated_hours": 1.5,
+                }
+                for index, title in enumerate(titles, start=1)
+            ],
+            "milestones": [],
+            "risks": [],
+            "recommendations": [],
+        }
+    )
+
+
+def _dog_training_plan() -> str:
+    return _activity_plan_from_titles(
+        titles=[
+            "Choose one command to teach first",
+            "Prepare treats and a reward marker",
+            "Run short daily training sessions",
+            "Practice in a quiet low-distraction space",
+            "Reward the behavior immediately",
+            "Add distractions slowly",
+            "Keep commands and signals consistent",
+            "Track learned commands and problem behaviors",
+        ],
+        focus="dog training",
+        domain="dog training",
+        vocabulary=(
+            "dog, command, treat, reward marker, leash, session, behavior, "
+            "sit, stay, recall, potty, distraction, consistency"
+        ),
+    )
+
+
+def _pushup_training_plan() -> str:
+    return _activity_plan_from_titles(
+        titles=[
+            "Check your current pushup starting point",
+            "Set a realistic daily pushup target",
+            "Split pushups into smaller sets",
+            "Practice correct pushup form",
+            "Create a weekly progression schedule",
+            "Add recovery and pain rules",
+            "Track reps and difficulty daily",
+            "Review progress and adjust the target",
+        ],
+        focus="pushup training",
+        domain="pushup training",
+        vocabulary=(
+            "pushup, reps, sets, form, daily target, progression, recovery, "
+            "soreness, pain rules, tracker"
+        ),
+    )
+
+
+def _bad_generic_plan() -> str:
+    return _activity_plan_from_titles(
+        titles=[
+            "Clarify the next outcome for train dog",
+            "Break train dog into small actions",
+            "Schedule focused time for train dog",
+            "Prepare the materials for train dog",
+            "Start the first visible step for train dog",
+            "Track progress and blockers for train dog",
+            "Review results and adjust train dog",
+            "Share the next step for train dog",
+        ],
+        focus="train dog",
+        domain="generic",
+        vocabulary="general planning, tracker, checklist",
+    )
+
+
 def _provider_task_with_title(
     *,
     index: int,
@@ -1364,6 +1482,19 @@ def _assert_no_forbidden_planner_language(text: str) -> None:
         assert forbidden not in lowered
 
 
+def _assert_no_generic_template_phrases(text: str) -> None:
+    lowered = text.lower()
+
+    for forbidden in (
+        "clarify the next outcome",
+        "break train dog into small actions",
+        "schedule focused time",
+        "prepare the materials",
+        "track progress and blockers",
+    ):
+        assert forbidden not in lowered
+
+
 def test_preview_from_idea_has_one_active_handler():
     from app.main import app as planora_app
 
@@ -1377,13 +1508,22 @@ def test_preview_from_idea_has_one_active_handler():
     assert len(matching_routes) == 1
 
 
-def test_pushup_preview_fallback_returns_adaptive_practical_tasks(monkeypatch):
+def test_preview_uses_gemini_json_for_train_dog(monkeypatch):
     monkeypatch.setattr(
         "app.services.ai_plan_service.generate_ai_reply_from_provider",
-        lambda _prompt: None,
+        lambda _prompt: _dog_training_plan(),
     )
 
-    preview = create_ai_plan_preview(_pushup_preview_request(), _PreviewUser())
+    preview = create_ai_plan_preview(
+        AIPlanPreviewRequest(
+            project_idea="Train a dog",
+            deadline=datetime.now(timezone.utc) + timedelta(days=30),
+            project_type=ProjectType.personal,
+            available_hours_per_week=5,
+            preferred_task_count=8,
+        ),
+        _PreviewUser(),
+    )
 
     titles = [task.title for task in preview.tasks]
     all_text = " ".join(
@@ -1391,24 +1531,61 @@ def test_pushup_preview_fallback_returns_adaptive_practical_tasks(monkeypatch):
     )
 
     assert preview.success is True
-    assert preview.ai_generation_status == "fallback"
-    assert preview.source == "adaptive_fallback_v1"
-    assert preview.domain == "adaptive_plan"
+    assert preview.ai_generation_status == "generated"
+    assert preview.source == "ai_provider"
     assert titles == [
-        "Check your current pushup starting point",
-        "Set a realistic daily pushup target",
-        "Split the pushups into smaller sets",
-        "Practice correct pushup form",
-        "Create a simple weekly progression schedule",
-        "Add recovery and pain rules",
-        "Track reps and difficulty daily",
-        "Review progress and adjust the target",
+        "Choose one command to teach first",
+        "Prepare treats and a reward marker",
+        "Run short daily training sessions",
+        "Practice in a quiet low-distraction space",
+        "Reward the behavior immediately",
+        "Add distractions slowly",
+        "Keep commands and signals consistent",
+        "Track learned commands and problem behaviors",
     ]
     assert len(preview.tasks) == 8
     assert preview.preferred_task_count == len(preview.tasks)
     assert "8 tasks" in preview.summary
-    for concept in ("pushup", "form", "progression", "recovery", "track"):
+
+    for concept in ("dog", "command", "treat", "reward", "leash", "behavior"):
         assert concept in all_text.lower()
+
+    _assert_no_forbidden_planner_language(all_text)
+    _assert_no_generic_template_phrases(all_text)
+
+
+def test_pushup_preview_uses_gemini_not_hardcoded_fallback(monkeypatch):
+    service_source = Path("app/services/ai_plan_service.py").read_text()
+    assert "_pushup_adaptive_fallback_specs" not in service_source
+
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        lambda _prompt: _pushup_training_plan(),
+    )
+
+    preview = create_ai_plan_preview(_pushup_preview_request(), _PreviewUser())
+    all_text = " ".join(
+        [preview.summary, *(task.title for task in preview.tasks), *(task.description or "" for task in preview.tasks)]
+    )
+
+    assert preview.success is True
+    assert preview.ai_generation_status == "generated"
+    assert preview.source == "ai_provider"
+    assert [task.title for task in preview.tasks] == [
+        "Check your current pushup starting point",
+        "Set a realistic daily pushup target",
+        "Split pushups into smaller sets",
+        "Practice correct pushup form",
+        "Create a weekly progression schedule",
+        "Add recovery and pain rules",
+        "Track reps and difficulty daily",
+        "Review progress and adjust the target",
+    ]
+    assert preview.preferred_task_count == len(preview.tasks)
+
+    for concept in ("pushup", "reps", "sets", "form", "recovery", "progression"):
+        assert concept in all_text.lower()
+
     _assert_no_forbidden_planner_language(all_text)
 
 
@@ -1426,28 +1603,120 @@ def test_pushup_preview_summary_count_matches_tasks_length(monkeypatch):
     assert preview.preferred_task_count == len(preview.tasks)
 
 
-def test_pushup_preview_malformed_provider_json_uses_domain_fallback(monkeypatch):
+def test_preview_repairs_malformed_gemini_json(monkeypatch):
     calls: list[str] = []
 
     def malformed_provider(prompt: str) -> str:
         calls.append(prompt)
-        return "not json"
+
+        if len(calls) == 1:
+            return "not json"
+
+        return _dog_training_plan()
 
     monkeypatch.setattr(
         "app.services.ai_plan_service.generate_ai_reply_from_provider",
         malformed_provider,
     )
 
-    preview = create_ai_plan_preview(_pushup_preview_request(), _PreviewUser())
+    preview = create_ai_plan_preview(
+        AIPlanPreviewRequest(
+            project_idea="Train a dog",
+            deadline=datetime.now(timezone.utc) + timedelta(days=30),
+            project_type=ProjectType.personal,
+            preferred_task_count=8,
+        ),
+        _PreviewUser(),
+    )
     all_text = " ".join(
-        [preview.summary, *(task.description or "" for task in preview.tasks)]
+        [preview.summary, *(task.title for task in preview.tasks), *(task.description or "" for task in preview.tasks)]
     )
 
     assert len(calls) == 2
-    assert preview.ai_generation_status == "fallback"
+    assert "Repair this into valid JSON" in calls[1]
+    assert preview.ai_generation_status == "generated"
+    assert preview.source == "ai_provider"
     assert len(preview.tasks) == 8
+    assert preview.tasks[0].title == "Choose one command to teach first"
+    assert "reward" in all_text.lower()
+    _assert_no_forbidden_planner_language(all_text)
+    _assert_no_generic_template_phrases(all_text)
+
+
+def test_preview_retries_when_gemini_returns_generic_tasks(monkeypatch):
+    calls: list[str] = []
+
+    def provider(prompt: str) -> str:
+        calls.append(prompt)
+
+        if len(calls) == 1:
+            return _bad_generic_plan()
+
+        return _dog_training_plan()
+
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        provider,
+    )
+
+    preview = create_ai_plan_preview(
+        AIPlanPreviewRequest(
+            project_idea="Train a dog",
+            deadline=datetime.now(timezone.utc) + timedelta(days=30),
+            project_type=ProjectType.personal,
+            preferred_task_count=8,
+        ),
+        _PreviewUser(),
+    )
+    all_text = " ".join(
+        [preview.summary, *(task.title for task in preview.tasks), *(task.description or "" for task in preview.tasks)]
+    )
+
+    assert len(calls) == 2
+    assert "previous planner output was too generic" in calls[1].lower()
+    assert preview.ai_generation_status == "generated"
+    assert preview.source == "ai_provider"
+    assert preview.tasks[0].title == "Choose one command to teach first"
+    assert preview.preferred_task_count == len(preview.tasks)
+    _assert_no_generic_template_phrases(all_text)
+    _assert_no_forbidden_planner_language(all_text)
+
+
+def test_preview_local_fallback_when_gemini_unavailable_is_valid(monkeypatch):
+    calls: list[str] = []
+
+    def unavailable_provider(prompt: str) -> None:
+        calls.append(prompt)
+        return None
+
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        unavailable_provider,
+    )
+
+    preview = create_ai_plan_preview(
+        AIPlanPreviewRequest(
+            project_idea="Train a dog",
+            deadline=datetime.now(timezone.utc) + timedelta(days=30),
+            project_type=ProjectType.personal,
+            preferred_task_count=5,
+        ),
+        _PreviewUser(),
+    )
+    all_text = " ".join(
+        [preview.summary, *(task.title for task in preview.tasks), *(task.description or "" for task in preview.tasks)]
+    )
+
+    assert len(calls) == 2
+    assert preview.success is True
+    assert preview.ai_generation_status == "fallback"
     assert preview.source == "adaptive_fallback_v1"
-    assert preview.tasks[0].title == "Check your current pushup starting point"
+    assert len(preview.tasks) == 5
+    assert preview.preferred_task_count == len(preview.tasks)
+    assert "5 tasks" in preview.summary
+    assert "train dog" not in all_text.lower()
+    assert "training a dog" in all_text.lower()
+    _assert_no_generic_template_phrases(all_text)
     _assert_no_forbidden_planner_language(all_text)
 
 
@@ -1573,11 +1842,12 @@ def test_ai_provider_unrelated_json_is_rejected_without_fake_tasks(monkeypatch):
         include_milestones=False,
     )
 
-    assert len(calls) == 2
+    assert len(calls) == 3
+    assert "previous planner output was too generic" in calls[2].lower()
     assert plan["success"] is False
     assert plan["ai_generation_status"] == "failed"
     assert plan["tasks"] == []
-    assert plan["rejected_unrelated_count"] >= 3
+    assert plan["rejected_unrelated_count"] >= 1
 
 
 def test_ai_provider_invalid_json_gets_one_repair_call(monkeypatch):

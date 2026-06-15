@@ -60,6 +60,16 @@ GENERIC_TASK_TITLE_PATTERNS = (
     r"^\s*complete\s+project\s+step\s+\d+\s*$",
 )
 
+GENERIC_FALLBACK_TITLE_PATTERNS = (
+    r"^\s*clarify\s+the\s+next\s+outcome\b",
+    r"^\s*break\b.*\binto\s+small\s+actions\b",
+    r"^\s*schedule\s+focused\s+time\b",
+    r"^\s*prepare\s+the\s+materials\b",
+    r"^\s*start\s+the\s+first\s+visible\s+step\b",
+    r"^\s*track\s+progress\s+and\s+blockers\b",
+    r"^\s*review\s+results\s+and\s+adjust\b",
+)
+
 ACTION_VERBS = {
     "add",
     "adjust",
@@ -85,19 +95,24 @@ ACTION_VERBS = {
     "identify",
     "increase",
     "improve",
+    "keep",
     "list",
     "log",
     "make",
     "map",
     "measure",
+    "name",
     "pick",
     "plan",
     "practice",
     "prepare",
     "prioritize",
     "publish",
+    "record",
     "remove",
+    "reward",
     "review",
+    "run",
     "schedule",
     "send",
     "set",
@@ -158,6 +173,24 @@ QUALITY_STOPWORDS = {
     "with",
     "you",
     "your",
+}
+
+GENERIC_CONTEXT_TOKENS = {
+    "available",
+    "brief",
+    "constraint",
+    "constraints",
+    "count",
+    "deadline",
+    "extra",
+    "hour",
+    "hours",
+    "notes",
+    "planning",
+    "preferred",
+    "task",
+    "tasks",
+    "week",
 }
 
 ROBOTIC_DESCRIPTION_FRAGMENTS = (
@@ -372,6 +405,13 @@ def _token_overlap_score(source: str, candidate: str) -> float:
         return 0.0
 
     return len(source_tokens & candidate_tokens) / max(1, min(len(source_tokens), 8))
+
+
+def _has_meaningful_idea_token_overlap(source: str, candidate: str) -> bool:
+    source_tokens = _quality_tokens(source) - GENERIC_CONTEXT_TOKENS
+    candidate_tokens = _quality_tokens(candidate) - GENERIC_CONTEXT_TOKENS
+
+    return bool(source_tokens & candidate_tokens)
 
 
 def _specificity_score(title: str, description: str) -> float:
@@ -619,39 +659,6 @@ def _generate_ai_plan_reply_from_provider(prompt: str) -> str | None:
     return generate_ai_reply_from_provider(prompt)
 
 
-FALLBACK_STOPWORDS = QUALITY_STOPWORDS | {
-    "about",
-    "after",
-    "before",
-    "day",
-    "daily",
-    "do",
-    "each",
-    "every",
-    "goal",
-    "help",
-    "idea",
-    "into",
-    "make",
-    "need",
-    "per",
-    "plan",
-    "please",
-    "start",
-    "using",
-    "week",
-}
-
-
-def _normalized_fallback_term(value: str) -> str:
-    token = value.lower().strip("'-")
-
-    if token in {"push-up", "push-ups", "pushup", "pushups"}:
-        return "pushup"
-
-    return token
-
-
 def _fallback_user_idea_text(
     project: Project,
     input_prompt: str,
@@ -693,50 +700,108 @@ def _fallback_user_idea_text(
     return "\n".join(dict.fromkeys(pieces)) or project.title
 
 
-def _fallback_focus_terms(idea_text: str) -> list[str]:
-    terms: list[str] = []
-
-    for raw_token in re.findall(r"[a-zA-Z0-9][a-zA-Z0-9'-]*", idea_text):
-        token = _normalized_fallback_term(raw_token)
-
-        if token in FALLBACK_STOPWORDS:
-            continue
-
-        if token.isdigit():
-            continue
-
-        if len(token) < 3:
-            continue
-
-        if token.endswith("s") and len(token) > 4 and token != "pushup":
-            token = token[:-1]
-
-        if token not in terms:
-            terms.append(token)
-
-    return terms
-
-
-def _fallback_focus_phrase(project: Project, idea_text: str) -> str:
-    terms = _fallback_focus_terms(idea_text)
-
-    if "pushup" in terms:
-        return "pushup"
-
-    if terms:
-        return " ".join(terms[:3])
-
-    return _clean_ai_text_field(project.title, fallback="the goal", max_length=48)
-
-
 def _fallback_plural(value: str) -> str:
-    if value == "pushup":
-        return "pushups"
-
     if value.endswith("s"):
         return value
 
     return f"{value}s"
+
+
+GERUND_VERBS = {
+    "add": "adding",
+    "build": "building",
+    "clean": "cleaning",
+    "cook": "cooking",
+    "create": "creating",
+    "do": "doing",
+    "finish": "finishing",
+    "fix": "fixing",
+    "grow": "growing",
+    "improve": "improving",
+    "learn": "learning",
+    "make": "making",
+    "organize": "organizing",
+    "plan": "planning",
+    "practice": "practicing",
+    "prepare": "preparing",
+    "read": "reading",
+    "run": "running",
+    "save": "saving",
+    "start": "starting",
+    "study": "studying",
+    "teach": "teaching",
+    "train": "training",
+    "write": "writing",
+}
+
+
+def _pluralize_counted_terms(value: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        number = match.group(1)
+        word = match.group(2)
+
+        if word.endswith("s"):
+            return match.group(0)
+
+        return f"{number} {_fallback_plural(word)}"
+
+    return re.sub(
+        r"\b([2-9]\d*|1\d+)\s+([a-zA-Z][a-zA-Z'-]{2,})\b",
+        replace,
+        value,
+    )
+
+
+def _clean_display_phrase_from_idea(idea_text: str, fallback: str) -> str:
+    first_line = next(
+        (line.strip() for line in idea_text.splitlines() if line.strip()),
+        fallback,
+    )
+    cleaned = re.sub(
+        r"^(idea|project idea|project idea and goal|user idea and context)\s*:\s*",
+        "",
+        first_line,
+        flags=re.IGNORECASE,
+    ).strip()
+    cleaned = re.sub(
+        r"^(i\s+want\s+to|i\s+need\s+to|please|can\s+you)\s+",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    ).strip()
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
+
+    if not cleaned:
+        cleaned = fallback
+
+    lowered = cleaned[:1].lower() + cleaned[1:]
+    words = lowered.split(" ", 1)
+    first_word = words[0].lower()
+
+    if first_word in GERUND_VERBS:
+        remainder = words[1].strip() if len(words) > 1 else ""
+
+        if remainder:
+            remainder_words = remainder.split()
+
+            if (
+                len(remainder_words) == 1
+                and remainder_words[0].isalpha()
+                and remainder_words[0].lower() not in {"a", "an", "the"}
+            ):
+                lowered = f"{GERUND_VERBS[first_word]} a {remainder}"
+            else:
+                lowered = f"{GERUND_VERBS[first_word]} {remainder}"
+        else:
+            lowered = GERUND_VERBS[first_word]
+
+    lowered = _pluralize_counted_terms(lowered)
+
+    return _clean_ai_text_field(
+        lowered,
+        fallback=fallback.lower(),
+        max_length=80,
+    )
 
 
 def _fallback_task_description(
@@ -762,293 +827,129 @@ def _fallback_task_description(
     )
 
 
-def _pushup_adaptive_fallback_specs(activity: str) -> list[dict[str, Any]]:
-    plural = _fallback_plural(activity)
-
+def _local_secondary_fallback_specs(display_phrase: str) -> list[dict[str, Any]]:
     return [
         {
-            "title": f"Check your current {activity} starting point",
-            "goal": f"Find a safe baseline before increasing daily {activity} volume.",
+            "title": f"Name one measurable result for {display_phrase}",
+            "goal": f"Choose one small result that proves progress on {display_phrase}.",
             "steps": [
-                f"Do one comfortable set of clean {plural} and stop before form breaks.",
-                "Write down reps, effort, and any wrist, shoulder, or back discomfort.",
-                "Use that number as the starting point for the next target.",
+                "Write the result in one plain sentence.",
+                "Add two details that make the result observable.",
+                "Circle the smallest version that can be attempted first.",
             ],
-            "deliverable": f"A baseline note with current {activity} reps, effort, and comfort level.",
-            "done_when": "You have one recorded baseline set and a clear starting number.",
-            "why": "A baseline keeps the next steps realistic and safer to repeat.",
+            "deliverable": "A short result note with observable done signals.",
+            "done_when": "The result note names one target and two observable details.",
+            "why": "A narrow target keeps the fallback plan usable while AI detail is unavailable.",
         },
         {
-            "title": f"Set a realistic daily {activity} target",
-            "goal": f"Choose a daily {activity} number that builds consistency without overload.",
+            "title": f"List the real-world parts of {display_phrase}",
+            "goal": f"Identify the people, tools, places, or signals involved in {display_phrase}.",
             "steps": [
-                "Start below the maximum baseline instead of matching the full target immediately.",
-                "Pick a daily number you can complete with clean form.",
-                "Write the rule for when to raise, hold, or lower the target.",
+                "Write the physical items or information you already have.",
+                "Write the missing items or decisions that block the next attempt.",
+                "Mark the one missing item that matters most.",
             ],
-            "deliverable": f"A daily {activity} target with an adjustment rule.",
-            "done_when": "The daily target and adjustment rule are written in one place.",
-            "why": "A realistic target makes the habit easier to sustain.",
+            "deliverable": "A readiness list with available, missing, and blocked items.",
+            "done_when": "The readiness list shows the most important missing item.",
+            "why": "Knowing what is ready prevents vague work from replacing action.",
         },
         {
-            "title": f"Split the {plural} into smaller sets",
-            "goal": f"Make the daily {activity} total manageable across the day.",
+            "title": f"Set one short session for {display_phrase}",
+            "goal": f"Give {display_phrase} a repeatable time box instead of an open-ended effort.",
             "steps": [
-                "Choose set sizes that leave a few good reps in reserve.",
-                "Place the sets at times you can remember and repeat.",
-                "Add a short rest rule between sets.",
+                "Choose a short session length you can finish without rushing.",
+                "Pick a specific day and time for the first session.",
+                "Write what you will do first when the session begins.",
             ],
-            "deliverable": f"A set plan showing reps per set and when to do each set.",
-            "done_when": "The daily total is split into clear sets with rest times.",
-            "why": "Smaller sets reduce form breakdown and make the target less intimidating.",
+            "deliverable": "A dated session note with length, time, and first action.",
+            "done_when": "The first session has a date, duration, and opening action.",
+            "why": "Short sessions make the fallback plan easier to start and repeat.",
         },
         {
-            "title": f"Practice correct {activity} form",
-            "goal": f"Make each {activity} useful while reducing avoidable strain.",
+            "title": f"Run the first small attempt at {display_phrase}",
+            "goal": f"Create real feedback from doing a small part of {display_phrase}.",
             "steps": [
-                "Choose two form cues, such as straight body line and controlled depth.",
-                "Record or mirror-check a short set.",
-                "Pause the set when the cues are no longer consistent.",
+                "Use the result note to choose one small attempt.",
+                "Do only that attempt during the first session.",
+                "Stop and write what worked, what was confusing, and what changed.",
             ],
-            "deliverable": f"A short {activity} form checklist with two or three cues.",
-            "done_when": "You can complete a set while following the chosen form cues.",
-            "why": "Clean form helps progress without turning daily reps into pain.",
+            "deliverable": "A first-attempt note with worked, confusing, and changed sections.",
+            "done_when": "The note records at least one observation from the attempt.",
+            "why": "A small attempt gives better information than planning from memory.",
         },
         {
-            "title": "Create a simple weekly progression schedule",
-            "goal": f"Move toward the target gradually with planned {activity} increases.",
+            "title": f"Record evidence from {display_phrase}",
+            "goal": f"Track what is happening so {display_phrase} can improve over time.",
             "steps": [
-                "Choose which days stay steady and which days can increase slightly.",
-                "Add a lighter day after any hard day.",
-                "Write the next seven days of set totals before starting.",
+                "Choose one simple measure that matches the result note.",
+                "Record the measure after each attempt.",
+                "Add one sentence about the next adjustment.",
             ],
-            "deliverable": "A one-week progression schedule with daily totals.",
-            "done_when": "Each day has a planned total and any lighter day is marked.",
-            "why": "Progression turns effort into a paced plan instead of a sudden jump.",
+            "deliverable": "A progress tracker with measure, observation, and next adjustment.",
+            "done_when": "The tracker has one row for the latest attempt.",
+            "why": "Evidence keeps the fallback plan from becoming generic busywork.",
         },
         {
-            "title": "Add recovery and pain rules",
-            "goal": "Know when to rest, reduce volume, or stop for the day.",
+            "title": f"Adjust the next attempt for {display_phrase}",
+            "goal": f"Use the latest evidence to choose the next version of {display_phrase}.",
             "steps": [
-                "Define pain signals that mean stop immediately.",
-                "Choose a lighter option for tired or sore days.",
-                "Write one rest-day rule for recovery.",
+                "Read the latest observation from the progress tracker.",
+                "Choose one thing to keep the same.",
+                "Choose one thing to change in the next session.",
             ],
-            "deliverable": "A recovery note with stop, reduce, and rest rules.",
-            "done_when": "The rules are written and easy to check before each session.",
-            "why": "Clear rules protect the habit when the body needs adjustment.",
+            "deliverable": "A next-attempt note with one keep and one change.",
+            "done_when": "The next-attempt note is written before the next session begins.",
+            "why": "A single adjustment helps progress without adding complexity.",
         },
         {
-            "title": "Track reps and difficulty daily",
-            "goal": f"Measure whether the {activity} plan is getting easier or too intense.",
+            "title": f"Repeat the strongest action for {display_phrase}",
+            "goal": f"Reinforce the part of {display_phrase} that produced the clearest progress.",
             "steps": [
-                "Log reps, sets, and effort after each session.",
-                "Mark form quality as clean, mixed, or poor.",
-                "Add one sentence about what to change tomorrow.",
+                "Pick the action that worked best in the tracker.",
+                "Repeat it under similar conditions.",
+                "Record whether the result improved, stayed the same, or got worse.",
             ],
-            "deliverable": f"A daily {activity} tracker with reps, sets, effort, and notes.",
-            "done_when": "Each completed day has reps, difficulty, and the next adjustment.",
-            "why": "Tracking shows whether the plan is working before guessing.",
+            "deliverable": "A comparison note for the repeated action.",
+            "done_when": "The comparison note shows whether the repeated action helped.",
+            "why": "Repeating what works turns one-off progress into a usable pattern.",
         },
         {
-            "title": "Review progress and adjust the target",
-            "goal": "Use real results to choose the next safe target.",
+            "title": f"Review the next target for {display_phrase}",
+            "goal": f"Choose a next target for {display_phrase} from actual results.",
             "steps": [
-                "Review the tracker after the first week or two.",
-                "Compare completed reps, effort, soreness, and form quality.",
-                "Raise, hold, or lower the target based on the pattern.",
+                "Review the result note, readiness list, and progress tracker.",
+                "Write the strongest evidence of progress.",
+                "Choose the next target that follows from that evidence.",
             ],
-            "deliverable": "A short review note with the next target and reason.",
-            "done_when": "The next target is chosen from tracked results.",
-            "why": "Review keeps the plan responsive instead of forcing the same number.",
+            "deliverable": "A review note with evidence and the next target.",
+            "done_when": "The next target is selected from recorded results.",
+            "why": "Review keeps the plan grounded when AI-specific detail is unavailable.",
         },
         {
-            "title": "Prepare a quick warmup routine",
-            "goal": f"Start each {activity} session with less stiffness.",
+            "title": f"Prepare the next session for {display_phrase}",
+            "goal": f"Make the next session for {display_phrase} easy to start.",
             "steps": [
-                "Pick two shoulder, wrist, or chest warmup movements.",
-                "Do the warmup before the first set.",
-                "Remove any movement that causes pain.",
+                "Copy the next target into a fresh session note.",
+                "Put any needed items or information in one place.",
+                "Set a start time and a stop time.",
             ],
-            "deliverable": "A short warmup routine that takes only a few minutes.",
-            "done_when": "The warmup is written and used before the next session.",
-            "why": "A quick warmup makes daily practice feel smoother.",
+            "deliverable": "A prepared session note with target, items, and timing.",
+            "done_when": "The next session can start without searching for missing pieces.",
+            "why": "Preparation protects momentum after the first review.",
         },
         {
-            "title": "Choose an easier backup variation",
-            "goal": f"Keep the {activity} habit going on low-energy days.",
+            "title": f"Write a simple consistency rule for {display_phrase}",
+            "goal": f"Keep {display_phrase} moving even when the original plan needs editing.",
             "steps": [
-                "Choose an easier variation you can do with clean form.",
-                "Decide when the backup variation should replace normal reps.",
-                "Track backup reps separately so progress stays clear.",
+                "Choose the minimum session length you will still count.",
+                "Choose what to do when the session is missed.",
+                "Choose when to review the rule again.",
             ],
-            "deliverable": "A backup variation rule for tired or sore days.",
-            "done_when": "The backup option and trigger rule are written.",
-            "why": "A backup option prevents one hard day from stopping the routine.",
-        },
-        {
-            "title": "Set a reminder for daily sessions",
-            "goal": f"Make the {activity} routine easier to remember.",
-            "steps": [
-                "Choose the most reliable time window for the first set.",
-                "Set a phone, calendar, or visible reminder.",
-                "Connect the reminder to an existing daily habit.",
-            ],
-            "deliverable": "A reminder setup tied to a daily routine.",
-            "done_when": "The reminder is active and linked to a specific time or habit.",
-            "why": "A visible cue reduces missed days.",
-        },
-        {
-            "title": "Write the next adjustment plan",
-            "goal": "Choose what happens after the current schedule ends.",
-            "steps": [
-                "Review the last completed week.",
-                "Choose one small increase, hold, or recovery change.",
-                "Write the next week before the current one ends.",
-            ],
-            "deliverable": "A next-week adjustment note.",
-            "done_when": "The next week has a clear target and recovery rule.",
-            "why": "Planning the next adjustment keeps progress steady.",
+            "deliverable": "A consistency rule with minimum, missed-session, and review parts.",
+            "done_when": "The consistency rule is written and visible before the next session.",
+            "why": "A simple rule helps the fallback plan survive interruptions.",
         },
     ]
-
-
-def _generic_adaptive_fallback_specs(focus: str) -> list[dict[str, Any]]:
-    return [
-        {
-            "title": f"Clarify the next outcome for {focus}",
-            "goal": f"Turn {focus} into one concrete result you can work toward first.",
-            "steps": [
-                f"Write the exact result you want from {focus}.",
-                "List what must be true for that result to count as done.",
-                "Remove anything that can wait until later.",
-            ],
-            "deliverable": "A one-paragraph outcome note with clear done signals.",
-            "done_when": "The note names one result and at least three done signals.",
-            "why": "A clear outcome makes every next action easier to choose.",
-        },
-        {
-            "title": f"Break {focus} into small actions",
-            "goal": f"Make {focus} less vague by turning it into practical next actions.",
-            "steps": [
-                "Write every action you can think of without sorting them first.",
-                "Group related actions together.",
-                "Choose the first three actions that can be finished soon.",
-            ],
-            "deliverable": "A short action list ordered from first to later.",
-            "done_when": "The first three actions are specific enough to start.",
-            "why": "Small actions reduce delay and make progress visible.",
-        },
-        {
-            "title": f"Schedule focused time for {focus}",
-            "goal": f"Reserve realistic time for {focus} before the deadline gets close.",
-            "steps": [
-                "Choose two or three time blocks you can actually protect.",
-                "Assign one action to each time block.",
-                "Leave a buffer for interruptions or slower work.",
-            ],
-            "deliverable": "A simple schedule with time blocks and assigned actions.",
-            "done_when": "Each time block has one clear action and a buffer.",
-            "why": "A schedule turns intention into time you can use.",
-        },
-        {
-            "title": f"Prepare the materials for {focus}",
-            "goal": f"Collect what you need so starting {focus} is easy.",
-            "steps": [
-                "List the tools, notes, people, or spaces needed.",
-                "Gather the items that are already available.",
-                "Write any missing item as a small follow-up action.",
-            ],
-            "deliverable": "A preparation checklist with available and missing items.",
-            "done_when": "The checklist shows what is ready and what still needs action.",
-            "why": "Preparation removes avoidable friction before the main work.",
-        },
-        {
-            "title": f"Start the first visible step for {focus}",
-            "goal": f"Create early momentum for {focus} with one visible result.",
-            "steps": [
-                "Choose the smallest action that proves progress.",
-                "Work on only that action until something visible exists.",
-                "Write what changed and what should happen next.",
-            ],
-            "deliverable": "A first visible result plus a short next-action note.",
-            "done_when": "There is something you can point to and improve.",
-            "why": "Visible progress makes the plan feel real.",
-        },
-        {
-            "title": f"Track progress and blockers for {focus}",
-            "goal": f"See what is moving and what is slowing down {focus}.",
-            "steps": [
-                "Create a simple tracker with date, action, result, and blocker columns.",
-                "Update the tracker after each work session.",
-                "Choose one blocker to solve before adding more work.",
-            ],
-            "deliverable": "A progress tracker with recent actions and blockers.",
-            "done_when": "The tracker has at least three useful entries or all current blockers.",
-            "why": "Tracking prevents the plan from drifting without feedback.",
-        },
-        {
-            "title": f"Review results and adjust {focus}",
-            "goal": f"Use what happened to make the next {focus} step better.",
-            "steps": [
-                "Compare the result with the outcome note.",
-                "Keep what worked and remove what did not help.",
-                "Choose the next action based on the review.",
-            ],
-            "deliverable": "A review note with one keep, one change, and one next action.",
-            "done_when": "The next action is based on evidence from the review.",
-            "why": "Review keeps the plan useful as reality changes.",
-        },
-        {
-            "title": f"Share the next step for {focus}",
-            "goal": f"Make the next {focus} action easier to follow through on.",
-            "steps": [
-                "Write the next action in one sentence.",
-                "Share it with someone helpful or place it somewhere visible.",
-                "Set a time to report or check progress.",
-            ],
-            "deliverable": "A shared or visible next-action note.",
-            "done_when": "The next action has a place, time, and check-in.",
-            "why": "A visible commitment makes follow-through more likely.",
-        },
-        {
-            "title": f"Measure what changed from {focus}",
-            "goal": f"Check whether {focus} is creating the result you wanted.",
-            "steps": [
-                "Choose one simple measure that matches the outcome.",
-                "Record the current value or status.",
-                "Compare it after the next work session.",
-            ],
-            "deliverable": "A simple before-and-after measure.",
-            "done_when": "The measure has a starting value and a planned next check.",
-            "why": "Measurement turns progress into evidence.",
-        },
-        {
-            "title": f"Choose the next adjustment for {focus}",
-            "goal": f"Keep {focus} moving with one deliberate adjustment.",
-            "steps": [
-                "Review the latest tracker or notes.",
-                "Choose one adjustment that reduces effort or improves the result.",
-                "Apply the adjustment in the next session only.",
-            ],
-            "deliverable": "A next-session adjustment note.",
-            "done_when": "The adjustment is chosen and tied to the next session.",
-            "why": "Small adjustments help the plan improve without becoming complicated.",
-        },
-    ]
-
-
-def _adaptive_fallback_specs(
-    project: Project,
-    idea_text: str,
-) -> tuple[str, list[dict[str, Any]]]:
-    focus = _fallback_focus_phrase(project, idea_text)
-    terms = _fallback_focus_terms(idea_text)
-
-    if "pushup" in terms:
-        return focus, _pushup_adaptive_fallback_specs("pushup")
-
-    return focus, _generic_adaptive_fallback_specs(focus)
 
 
 def _build_adaptive_fallback_tasks(
@@ -1057,7 +958,11 @@ def _build_adaptive_fallback_tasks(
     task_count: int,
 ) -> list[dict[str, Any]]:
     idea_text = _fallback_user_idea_text(project=project, input_prompt=input_prompt)
-    focus, specs = _adaptive_fallback_specs(project=project, idea_text=idea_text)
+    display_phrase = _clean_display_phrase_from_idea(
+        idea_text=idea_text,
+        fallback=project.title,
+    )
+    specs = _local_secondary_fallback_specs(display_phrase)
     due_dates = _build_ai_due_dates(project=project, task_count=task_count)
     tasks: list[dict[str, Any]] = []
 
@@ -1073,7 +978,7 @@ def _build_adaptive_fallback_tasks(
                 "suggested_order": index + 1,
                 "title": _clean_ai_text_field(
                     title,
-                    fallback=f"Review next action for {focus}",
+                    fallback=f"Review next action for {display_phrase}",
                     max_length=120,
                 ),
                 "description": _fallback_task_description(
@@ -1267,6 +1172,10 @@ Generate a plan that fits the user's actual situation.
 - For personal goals, routines, health goals, learning goals, events, creative work, and other non-software ideas, write like a practical coach for that exact goal.
 - Do not force personal ideas into features, requirements, MVPs, user flows, releases, prototypes, or customer language.
 - If the idea is not clearly software or product work, do not use: requirements, features, MVP, first useful version, core flow, customer benefit, prototype, release, or idea goal.
+- Use concrete nouns, tools, actions, constraints, and signals from the real-world activity in the user's idea.
+- For "Train a dog", tasks should mention dog-training concepts such as commands, treats, reward timing, short sessions, leash practice, distractions, consistency, learned behaviors, sit, stay, recall, or potty routines.
+- For "Do 100 pushup a day", tasks should mention pushups, reps, sets, form, daily target, progression, recovery, soreness, pain rules, or tracking.
+- For any other idea, infer the real activity from the idea itself and use the vocabulary a knowledgeable human would use for that activity.
 
 Critical output rules:
 - Return valid JSON only.
@@ -1277,6 +1186,7 @@ Critical output rules:
 - Task titles must start with an action verb.
 - Task titles must be specific to the user's idea.
 - Avoid vague titles like "Research", "Plan project", "Work on the task", "Prepare strategy", or "Finish project".
+- Avoid generic fallback titles like "Clarify the next outcome", "Break into small actions", "Schedule focused time", "Prepare the materials", "Start the first visible step", "Track progress and blockers", or "Review results and adjust".
 - Do not duplicate existing task titles, descriptions, or the same intent.
 - If a current task already covers an idea, generate a different missing or follow-up task.
 - Priority must be one of: low, medium, high.
@@ -1661,6 +1571,11 @@ def _is_disallowed_generic_task_title(title: str) -> bool:
     return _matches_any_pattern(normalized, GENERIC_TASK_TITLE_PATTERNS)
 
 
+def _is_generic_fallback_style_title(title: str) -> bool:
+    normalized = _normalize_comparison_text(title)
+    return _matches_any_pattern(normalized, GENERIC_FALLBACK_TITLE_PATTERNS)
+
+
 def _has_similar_seen_title(title: str, seen_titles: set[str]) -> bool:
     return any(_task_titles_are_similar(title, seen_title) for seen_title in seen_titles)
 
@@ -1775,6 +1690,152 @@ Rules:
 """.strip()
 
 
+def _build_concrete_regeneration_prompt(
+    *,
+    original_prompt: str,
+    project_context: str,
+    rejected_tasks: list[dict[str, Any]],
+    task_count: int,
+    include_milestones: bool,
+) -> str:
+    return f"""
+You are Planora AI.
+
+The previous planner output was too generic or did not pass quality validation.
+Regenerate the complete plan from the user's idea, not from reusable productivity templates.
+
+User idea and context:
+{project_context}
+
+Original planning prompt:
+{original_prompt}
+
+Rejected task samples:
+{json.dumps(rejected_tasks[:8], ensure_ascii=False, indent=2)}
+
+Concrete activity rules:
+- Understand the idea naturally and infer the real-world activity.
+- Use concrete nouns, tools, actions, constraints, and signals from that activity.
+- Do not assume the idea is software/product unless the user explicitly says app, website, software, platform, API, dashboard, SaaS, or similar.
+- For "Train a dog", use dog-training vocabulary such as command, treat, reward marker, leash, short session, behavior, sit, stay, recall, potty, distraction, or consistency.
+- For "Do 100 pushup a day", use pushup vocabulary such as reps, sets, form, daily target, progression, recovery, soreness, pain rule, or tracker.
+- For every other idea, use the real vocabulary a knowledgeable human would use for that activity.
+- Do not use generic titles like "Clarify the next outcome", "Break into small actions", "Schedule focused time", "Prepare the materials", "Start the first visible step", "Track progress and blockers", or "Review results and adjust".
+- Do not use product-management words unless the user clearly asked for software/product work.
+
+Return valid JSON only. No Markdown. No code fences.
+Generate exactly {task_count} tasks.
+Every task description must include these exact labels:
+Goal:
+Steps:
+Deliverable:
+Done when:
+Why it matters:
+
+Return JSON in exactly this shape:
+{{
+  "domain": "short natural label inferred from the user idea",
+  "summary": "short summary that mentions {task_count} tasks",
+  "tasks": [
+    {{
+      "suggested_order": 1,
+      "title": "specific action title using real activity vocabulary",
+      "description": "Goal: ...\\n\\nSteps:\\n1. ...\\n2. ...\\n3. ...\\n\\nDeliverable: ...\\n\\nDone when: ...\\n\\nWhy it matters: ...",
+      "priority": "high",
+      "estimated_hours": 2
+    }}
+  ],
+  "milestones": [
+    {{
+      "name": "milestone name",
+      "description": "milestone description",
+      "suggested_order": 1
+    }}
+  ],
+  "risks": [
+    {{
+      "risk": "main risk",
+      "recommendation": "how to reduce it"
+    }}
+  ],
+  "recommendations": [
+    "practical recommendation"
+  ]
+}}
+
+Milestones:
+{"Include 2-4 milestones." if include_milestones else "Return an empty milestones array."}
+""".strip()
+
+
+def _try_regenerate_concrete_ai_plan(
+    *,
+    project: Project,
+    input_prompt: str,
+    original_prompt: str,
+    task_count: int,
+    include_milestones: bool,
+    existing_tasks: list[Task] | None,
+    rejected_tasks: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    regeneration_prompt = _build_concrete_regeneration_prompt(
+        original_prompt=original_prompt,
+        project_context=_extract_user_project_context(project, input_prompt),
+        rejected_tasks=rejected_tasks,
+        task_count=task_count,
+        include_milestones=include_milestones,
+    )
+    logger.info(
+        "AI Planner provider attempted. reason=quality_regeneration project_id=%s requested_task_count=%s",
+        project.project_id,
+        task_count,
+    )
+    regeneration_reply = _generate_ai_plan_reply_from_provider(regeneration_prompt)
+
+    if regeneration_reply is None:
+        logger.warning(
+            "AI Planner regeneration provider failed. reason=provider_unavailable project_id=%s",
+            project.project_id,
+        )
+        return None
+
+    regeneration_data = _parse_json_object(regeneration_reply)
+
+    if regeneration_data is None:
+        logger.warning(
+            "AI Planner regeneration parse failed. project_id=%s",
+            project.project_id,
+        )
+        return None
+
+    regenerated_plan = _normalize_ai_plan_response(
+        ai_data=regeneration_data,
+        project=project,
+        input_prompt=input_prompt,
+        task_count=task_count,
+        include_milestones=include_milestones,
+        existing_tasks=existing_tasks,
+        ai_generation_status="generated",
+    )
+
+    if regenerated_plan is None or len(regenerated_plan["tasks"]) < task_count:
+        logger.warning(
+            "AI Planner regeneration failed quality validation. project_id=%s accepted_task_count=%s requested_task_count=%s",
+            project.project_id,
+            len(regenerated_plan["tasks"]) if regenerated_plan is not None else 0,
+            task_count,
+        )
+        return None
+
+    regenerated_plan["tasks"] = regenerated_plan["tasks"][:task_count]
+    logger.info(
+        "AI Planner regeneration succeeded. project_id=%s task_count=%s",
+        project.project_id,
+        len(regenerated_plan["tasks"]),
+    )
+    return regenerated_plan
+
+
 def _task_quality_rejection_reasons(
     *,
     title: str,
@@ -1814,7 +1875,11 @@ def _task_quality_rejection_reasons(
     ):
         reasons.append("wrong_domain_language")
 
-    if _is_low_quality_task_title(title) or _is_disallowed_generic_task_title(title):
+    if (
+        _is_low_quality_task_title(title)
+        or _is_disallowed_generic_task_title(title)
+        or _is_generic_fallback_style_title(title)
+    ):
         reasons.append("generic_title")
 
     if (
@@ -1828,7 +1893,10 @@ def _task_quality_rejection_reasons(
     if _description_repeats_project_idea(description, project_context):
         reasons.append("description_repeats_idea")
 
-    if relevance_score < 0.18:
+    if relevance_score < 0.18 and not _has_meaningful_idea_token_overlap(
+        project_context,
+        combined_task_text,
+    ):
         reasons.append("unrelated_to_idea")
 
     if specificity_score < 0.35:
@@ -1890,6 +1958,38 @@ def _has_only_duplicate_rejections(generated_plan: dict[str, Any]) -> bool:
             return False
 
     return True
+
+
+def _should_regenerate_full_plan(
+    generated_plan: dict[str, Any],
+    task_count: int,
+) -> bool:
+    rejected_tasks = generated_plan.get("rejected_tasks")
+
+    if not isinstance(rejected_tasks, list):
+        return False
+
+    rejected_count = len(rejected_tasks)
+    accepted_count = len(generated_plan.get("tasks") or [])
+
+    if rejected_count < max(2, task_count // 2):
+        return False
+
+    generic_rejections = 0
+
+    for rejected_task in rejected_tasks:
+        if not isinstance(rejected_task, dict):
+            continue
+
+        reasons = rejected_task.get("reasons")
+
+        if isinstance(reasons, list) and any(
+            reason in {"generic_title", "generic_description", "not_specific_enough"}
+            for reason in reasons
+        ):
+            generic_rejections += 1
+
+    return generic_rejections >= accepted_count
 
 
 def _normalize_ai_plan_response(
@@ -2168,12 +2268,25 @@ def _build_ai_generated_plan(
     provider_reply = _generate_ai_plan_reply_from_provider(prompt)
 
     if provider_reply is None:
+        regenerated_plan = _try_regenerate_concrete_ai_plan(
+            project=project,
+            input_prompt=input_prompt,
+            original_prompt=prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            existing_tasks=existing_tasks,
+            rejected_tasks=[],
+        )
+
+        if regenerated_plan is not None:
+            return regenerated_plan
+
         return _build_failed_or_fallback_generated_plan(
             project=project,
             input_prompt=input_prompt,
             task_count=task_count,
             include_milestones=include_milestones,
-            reason="provider_unavailable",
+            reason="provider_unavailable_after_retry",
             allow_local_fallback=allow_local_fallback,
         )
 
@@ -2188,12 +2301,25 @@ def _build_ai_generated_plan(
         repaired_reply = _generate_ai_plan_reply_from_provider(repair_prompt)
 
         if repaired_reply is None:
+            regenerated_plan = _try_regenerate_concrete_ai_plan(
+                project=project,
+                input_prompt=input_prompt,
+                original_prompt=prompt,
+                task_count=task_count,
+                include_milestones=include_milestones,
+                existing_tasks=existing_tasks,
+                rejected_tasks=[],
+            )
+
+            if regenerated_plan is not None:
+                return regenerated_plan
+
             return _build_failed_or_fallback_generated_plan(
                 project=project,
                 input_prompt=input_prompt,
                 task_count=task_count,
                 include_milestones=include_milestones,
-                reason="json_repair_provider_unavailable",
+                reason="json_repair_provider_unavailable_after_retry",
                 allow_local_fallback=allow_local_fallback,
             )
 
@@ -2201,12 +2327,25 @@ def _build_ai_generated_plan(
         ai_generation_status = "repaired"
 
         if parsed is None:
+            regenerated_plan = _try_regenerate_concrete_ai_plan(
+                project=project,
+                input_prompt=input_prompt,
+                original_prompt=prompt,
+                task_count=task_count,
+                include_milestones=include_milestones,
+                existing_tasks=existing_tasks,
+                rejected_tasks=[],
+            )
+
+            if regenerated_plan is not None:
+                return regenerated_plan
+
             return _build_failed_or_fallback_generated_plan(
                 project=project,
                 input_prompt=input_prompt,
                 task_count=task_count,
                 include_milestones=include_milestones,
-                reason="json_parse_failed_after_repair",
+                reason="json_parse_failed_after_repair_and_retry",
                 allow_local_fallback=allow_local_fallback,
             )
 
@@ -2224,13 +2363,56 @@ def _build_ai_generated_plan(
     )
 
     if normalized_plan is None:
+        regenerated_plan = _try_regenerate_concrete_ai_plan(
+            project=project,
+            input_prompt=input_prompt,
+            original_prompt=prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            existing_tasks=existing_tasks,
+            rejected_tasks=[],
+        )
+
+        if regenerated_plan is not None:
+            return regenerated_plan
+
         return _build_failed_or_fallback_generated_plan(
             project=project,
             input_prompt=input_prompt,
             task_count=task_count,
             include_milestones=include_milestones,
-            reason="normalized_plan_invalid",
+            reason="normalized_plan_invalid_after_retry",
             allow_local_fallback=allow_local_fallback,
+        )
+
+    if not normalized_plan["tasks"] and not allow_zero_tasks:
+        regenerated_plan = _try_regenerate_concrete_ai_plan(
+            project=project,
+            input_prompt=input_prompt,
+            original_prompt=prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            existing_tasks=existing_tasks,
+            rejected_tasks=list(normalized_plan.get("rejected_tasks") or []),
+        )
+
+        if regenerated_plan is not None:
+            return regenerated_plan
+
+        return _build_failed_or_fallback_generated_plan(
+            project=project,
+            input_prompt=input_prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            reason="all_tasks_rejected_after_retry",
+            allow_local_fallback=allow_local_fallback,
+            rejected_generic_count=int(
+                normalized_plan.get("rejected_generic_count") or 0
+            ),
+            rejected_unrelated_count=int(
+                normalized_plan.get("rejected_unrelated_count") or 0
+            ),
+            rejected_tasks=list(normalized_plan.get("rejected_tasks") or []),
         )
 
     if (
@@ -2241,6 +2423,36 @@ def _build_ai_generated_plan(
         normalized_plan["message"] = PLAN_ALREADY_COVERS_MESSAGE
         normalized_plan["summary"] = PLAN_ALREADY_COVERS_MESSAGE
         return normalized_plan
+
+    if _should_regenerate_full_plan(normalized_plan, task_count):
+        regenerated_plan = _try_regenerate_concrete_ai_plan(
+            project=project,
+            input_prompt=input_prompt,
+            original_prompt=prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            existing_tasks=existing_tasks,
+            rejected_tasks=list(normalized_plan.get("rejected_tasks") or []),
+        )
+
+        if regenerated_plan is not None:
+            return regenerated_plan
+
+        return _build_failed_or_fallback_generated_plan(
+            project=project,
+            input_prompt=input_prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            reason="mostly_generic_plan_after_retry",
+            allow_local_fallback=allow_local_fallback,
+            rejected_generic_count=int(
+                normalized_plan.get("rejected_generic_count") or 0
+            ),
+            rejected_unrelated_count=int(
+                normalized_plan.get("rejected_unrelated_count") or 0
+            ),
+            rejected_tasks=list(normalized_plan.get("rejected_tasks") or []),
+        )
 
     if len(normalized_plan["tasks"]) >= task_count:
         normalized_plan["tasks"] = normalized_plan["tasks"][:task_count]
@@ -2257,12 +2469,25 @@ def _build_ai_generated_plan(
     replacement_reply = _generate_ai_plan_reply_from_provider(replacement_prompt)
 
     if replacement_reply is None:
+        regenerated_plan = _try_regenerate_concrete_ai_plan(
+            project=project,
+            input_prompt=input_prompt,
+            original_prompt=prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            existing_tasks=existing_tasks,
+            rejected_tasks=list(normalized_plan.get("rejected_tasks") or []),
+        )
+
+        if regenerated_plan is not None:
+            return regenerated_plan
+
         return _build_failed_or_fallback_generated_plan(
             project=project,
             input_prompt=input_prompt,
             task_count=task_count,
             include_milestones=include_milestones,
-            reason="replacement_provider_unavailable",
+            reason="replacement_provider_unavailable_after_retry",
             allow_local_fallback=allow_local_fallback,
             rejected_generic_count=int(normalized_plan.get("rejected_generic_count") or 0),
             rejected_unrelated_count=int(
@@ -2274,12 +2499,25 @@ def _build_ai_generated_plan(
     replacement_data = _parse_json_object(replacement_reply)
 
     if replacement_data is None:
+        regenerated_plan = _try_regenerate_concrete_ai_plan(
+            project=project,
+            input_prompt=input_prompt,
+            original_prompt=prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            existing_tasks=existing_tasks,
+            rejected_tasks=list(normalized_plan.get("rejected_tasks") or []),
+        )
+
+        if regenerated_plan is not None:
+            return regenerated_plan
+
         return _build_failed_or_fallback_generated_plan(
             project=project,
             input_prompt=input_prompt,
             task_count=task_count,
             include_milestones=include_milestones,
-            reason="replacement_json_parse_failed",
+            reason="replacement_json_parse_failed_after_retry",
             allow_local_fallback=allow_local_fallback,
             rejected_generic_count=int(normalized_plan.get("rejected_generic_count") or 0),
             rejected_unrelated_count=int(
@@ -2313,12 +2551,25 @@ def _build_ai_generated_plan(
             )
             rejected_tasks.extend(list(replacement_plan.get("rejected_tasks") or []))
 
+        regenerated_plan = _try_regenerate_concrete_ai_plan(
+            project=project,
+            input_prompt=input_prompt,
+            original_prompt=prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            existing_tasks=existing_tasks,
+            rejected_tasks=rejected_tasks,
+        )
+
+        if regenerated_plan is not None:
+            return regenerated_plan
+
         return _build_failed_or_fallback_generated_plan(
             project=project,
             input_prompt=input_prompt,
             task_count=task_count,
             include_milestones=include_milestones,
-            reason="replacement_normalized_plan_invalid",
+            reason="replacement_normalized_plan_invalid_after_retry",
             allow_local_fallback=allow_local_fallback,
             rejected_generic_count=rejected_generic_count,
             rejected_unrelated_count=rejected_unrelated_count,

@@ -69,7 +69,7 @@ class AIPlanGenerateResponse(BaseModel):
 
 
 class AIPlanPreviewRequest(BaseModel):
-    project_idea: str = Field(..., min_length=12, max_length=5000)
+    project_idea: str = Field(..., min_length=10, max_length=5000)
     deadline: datetime
     project_type: ProjectType = ProjectType.personal
     team_id: int | None = None
