@@ -88,7 +88,7 @@ def _generate_with_gemini(
     response_mime_type: str | None = None,
 ) -> str | None:
     if not settings.gemini_api_key:
-        logger.warning("Gemini API key is missing. Using local planner fallback.")
+        logger.warning("Gemini API key is missing.")
         return None
 
     url = (
@@ -134,7 +134,7 @@ def _generate_with_gemini(
 
         if response.status_code >= 400:
             logger.warning(
-                "Gemini API error. status=%s body=%s. Using local planner fallback.",
+                "Gemini API error. status=%s body=%s",
                 response.status_code,
                 response.text[:800],
             )
@@ -143,16 +143,16 @@ def _generate_with_gemini(
         return _extract_gemini_text(response.json())
 
     except httpx.TimeoutException as exc:
-        logger.warning("Gemini API timeout: %s. Using local planner fallback.", type(exc).__name__)
+        logger.warning("Gemini API timeout: %s", type(exc).__name__)
         return None
 
     except httpx.HTTPError as exc:
-        logger.warning("Gemini HTTP error: %s. Using local planner fallback.", type(exc).__name__)
+        logger.warning("Gemini HTTP error: %s", type(exc).__name__)
         return None
 
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         logger.warning(
-            "Gemini response parsing error: %s. Using local planner fallback.",
+            "Gemini response parsing error: %s",
             type(exc).__name__,
         )
         return None

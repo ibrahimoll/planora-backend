@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -42,6 +43,7 @@ CurrentUser = Annotated[User, Depends(get_current_active_verified_user)]
 PROJECT_NOT_FOUND = "Project not found"
 NOT_ALLOWED = "You are not allowed to perform this action"
 TEAM_NOT_FOUND = "Team not found"
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     tags=["AI Plans"],
@@ -64,6 +66,14 @@ def preview_ai_plan_from_idea(
     db: DBSession,
     current_user: CurrentUser,
 ):
+    logger.info(
+        "AI Planner preview route entered. user_id=%s project_type=%s team_id_present=%s preferred_task_count=%s",
+        current_user.user_id,
+        preview_data.project_type.value,
+        preview_data.team_id is not None,
+        preview_data.preferred_task_count,
+    )
+
     if preview_data.project_type.value == "team":
         if preview_data.team_id is None:
             raise HTTPException(

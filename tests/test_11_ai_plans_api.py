@@ -783,6 +783,156 @@ def test_preview_from_idea_does_not_create_project_until_accepted(
     assert db.query(Project).count() == before_count + 1
 
 
+def test_preview_from_idea_returns_success_with_provider_json(
+    client: TestClient,
+    db: Session,
+    monkeypatch,
+):
+    _, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_preview_provider_json_owner",
+        email="ai_preview_provider_json_owner@example.com",
+    )
+
+    provider_titles = [
+        "Define compost workshop audience needs",
+        "Map compost workshop material checklist",
+        "Create compost workshop practice agenda",
+    ]
+
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        lambda _prompt: _provider_plan_from_titles(
+            titles=provider_titles,
+            focus="compost workshop",
+        ),
+    )
+
+    response = client.post(
+        "/ai-plans/preview-from-idea",
+        headers=auth_headers(token),
+        json={
+            "project_idea": "Plan a neighborhood compost workshop for apartment residents with limited kitchen space",
+            "deadline": "2026-08-01T12:00:00+00:00",
+            "project_type": "personal",
+            "available_hours_per_week": 6,
+            "preferred_task_count": 3,
+            "requirements": "Keep the workshop beginner friendly and low cost.",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+
+    preview = response.json()
+    assert preview["success"] is True
+    assert preview["ai_generation_status"] == "generated"
+    assert preview["source"] == "ai_provider"
+    assert preview["project_title"]
+    assert preview["description"]
+    assert preview["summary"]
+    assert [task["title"] for task in preview["tasks"]] == provider_titles
+    assert preview["ai_generation_status"] != "failed"
+
+
+def test_preview_from_idea_falls_back_when_provider_returns_none(
+    client: TestClient,
+    db: Session,
+    monkeypatch,
+):
+    _, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_preview_provider_none_owner",
+        email="ai_preview_provider_none_owner@example.com",
+    )
+
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        lambda _prompt: None,
+    )
+
+    response = client.post(
+        "/ai-plans/preview-from-idea",
+        headers=auth_headers(token),
+        json={
+            "project_idea": "Create a launch checklist for a small handmade candle subscription box",
+            "deadline": "2026-08-01T12:00:00+00:00",
+            "project_type": "personal",
+            "available_hours_per_week": 5,
+            "preferred_task_count": 4,
+            "requirements": "Include packaging, pricing, and the first customer test.",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+
+    preview = response.json()
+    assert preview["success"] is True
+    assert preview["ai_generation_status"] == "fallback"
+    assert preview["source"] in {
+        "local_planner_fallback_v1",
+        "minimum_local_planner_v1",
+    }
+    assert preview["tasks"]
+    assert len(preview["tasks"]) == 4
+    assert preview["ai_generation_status"] != "failed"
+
+    for task in preview["tasks"]:
+        assert task["title"]
+        assert task["description"]
+        assert task["priority"] in {"low", "medium", "high"}
+        assert task["estimated_hours"] is not None
+
+
+def test_preview_from_idea_parses_markdown_fenced_json(
+    client: TestClient,
+    db: Session,
+    monkeypatch,
+):
+    _, token = create_verified_user_and_login(
+        client=client,
+        db=db,
+        username="ai_preview_fenced_json_owner",
+        email="ai_preview_fenced_json_owner@example.com",
+    )
+
+    provider_titles = [
+        "Define herb garden shelf constraints",
+        "Create herb garden supply checklist",
+        "Test herb garden watering routine",
+    ]
+    provider_json = _provider_plan_from_titles(
+        titles=provider_titles,
+        focus="herb garden",
+    )
+
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        lambda _prompt: f"```json\n{provider_json}\n```",
+    )
+
+    response = client.post(
+        "/ai-plans/preview-from-idea",
+        headers=auth_headers(token),
+        json={
+            "project_idea": "Build a tiny indoor herb garden plan for a sunny kitchen shelf",
+            "deadline": "2026-08-01T12:00:00+00:00",
+            "project_type": "personal",
+            "available_hours_per_week": 4,
+            "preferred_task_count": 3,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+
+    preview = response.json()
+    assert preview["success"] is True
+    assert preview["ai_generation_status"] == "generated"
+    assert [task["title"] for task in preview["tasks"]] == provider_titles
+    assert preview["ai_generation_status"] != "failed"
+
+
 def test_generate_ai_plan_endpoint_can_store_plan_without_creating_tasks(
     client: TestClient,
     db: Session,

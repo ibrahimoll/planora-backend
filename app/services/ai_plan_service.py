@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import inspect
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
@@ -27,7 +29,10 @@ from app.schemas.ai_plan_schema import (
 )
 from app.schemas.task_schema import TaskStatus
 from app.services.activity_log_service import create_activity_log
-from app.services.ai_provider_service import generate_ai_reply_from_provider
+from app.services.ai_provider_service import (
+    generate_ai_reply_from_provider,
+    generate_local_planner_reply,
+)
 
 
 INSTRUCTION_PREFIXES = (
@@ -162,6 +167,8 @@ AI_PLANNING_UNAVAILABLE_MESSAGE = (
 )
 
 PLAN_ALREADY_COVERS_MESSAGE = "This plan already covers the main steps."
+
+logger = logging.getLogger(__name__)
 
 
 def _to_utc(value: datetime) -> datetime:
@@ -434,24 +441,307 @@ def _strip_json_code_fence(value: str) -> str:
     return cleaned
 
 
-def _parse_json_object(value: str) -> dict[str, Any] | None:
+def _json_error_summary(error: json.JSONDecodeError) -> str:
+    return f"{error.msg} at line {error.lineno} column {error.colno}"
+
+
+def _extract_json_object(value: str) -> tuple[dict[str, Any] | None, str | None]:
     cleaned = _strip_json_code_fence(value)
+    candidates = [cleaned]
 
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError:
-        first_brace = cleaned.find("{")
-        last_brace = cleaned.rfind("}")
+    for match in re.finditer(
+        r"```(?:json)?\s*(.*?)```",
+        value,
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        fenced = match.group(1).strip()
+        if fenced:
+            candidates.append(fenced)
 
-        if first_brace == -1 or last_brace == -1 or last_brace <= first_brace:
-            return None
+    decoder = json.JSONDecoder()
+    errors: list[str] = []
 
+    for candidate in dict.fromkeys(candidates):
         try:
-            data = json.loads(cleaned[first_brace : last_brace + 1])
-        except json.JSONDecodeError:
-            return None
+            data = json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            errors.append(_json_error_summary(exc))
+        else:
+            if isinstance(data, dict):
+                return data, None
 
-    return data if isinstance(data, dict) else None
+            errors.append(f"decoded {type(data).__name__}, expected object")
+
+        for match in re.finditer(r"{", candidate):
+            start_index = match.start()
+            fragment = candidate[start_index:]
+
+            try:
+                data, _end_index = decoder.raw_decode(fragment)
+            except json.JSONDecodeError as exc:
+                errors.append(_json_error_summary(exc))
+                continue
+
+            if isinstance(data, dict):
+                return data, None
+
+            errors.append(f"decoded {type(data).__name__}, expected object")
+
+    return None, (errors[-1] if errors else "no JSON object found")
+
+
+def _parse_json_object(value: str) -> dict[str, Any] | None:
+    data, reason = _extract_json_object(value)
+
+    if data is None:
+        logger.warning("AI Planner JSON parse failed. reason=%s", reason)
+
+    return data
+
+
+def _generate_ai_plan_reply_from_provider(prompt: str) -> str | None:
+    try:
+        parameters = inspect.signature(generate_ai_reply_from_provider).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+
+    supports_kwargs = any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    )
+    supports_json_mode = "response_mime_type" in parameters or supports_kwargs
+    supports_fallback_flag = "use_local_fallback" in parameters or supports_kwargs
+
+    if supports_json_mode and supports_fallback_flag:
+        return generate_ai_reply_from_provider(
+            prompt,
+            response_mime_type="application/json",
+            use_local_fallback=False,
+        )
+
+    if supports_json_mode:
+        return generate_ai_reply_from_provider(
+            prompt,
+            response_mime_type="application/json",
+        )
+
+    return generate_ai_reply_from_provider(prompt)
+
+
+def _build_minimum_local_fallback_tasks(
+    project: Project,
+    input_prompt: str,
+    task_count: int,
+) -> list[dict[str, Any]]:
+    project_context = _extract_user_project_context(
+        project=project,
+        input_prompt=input_prompt,
+    )
+    context_phrases = _extract_project_context_phrases(project_context)
+    topic = _clean_ai_text_field(
+        context_phrases[0] if context_phrases else project.title,
+        fallback=project.title,
+        max_length=48,
+    )
+    blueprints = [
+        (
+            "Define {topic} success criteria",
+            "Write the exact outcome, must-have scope, and measurable checks for the first useful version.",
+            "A success criteria checklist",
+        ),
+        (
+            "Map {topic} requirements",
+            "Separate required work, optional improvements, constraints, and open questions before execution.",
+            "A prioritized requirements table",
+        ),
+        (
+            "Create {topic} execution plan",
+            "Group the work into ordered setup, build, test, and delivery steps with clear dependencies.",
+            "An ordered execution plan",
+        ),
+        (
+            "Build {topic} first version",
+            "Complete the smallest useful version that proves the main idea can work.",
+            "A usable first version or prototype",
+        ),
+        (
+            "Test {topic} core flow",
+            "Run the main flow, record issues, and choose the fixes needed before sharing.",
+            "A test notes tracker",
+        ),
+        (
+            "Prepare {topic} delivery checklist",
+            "Confirm final quality, unresolved issues, and the next action after delivery.",
+            "A delivery checklist",
+        ),
+    ]
+    due_dates = _build_ai_due_dates(project=project, task_count=task_count)
+    tasks: list[dict[str, Any]] = []
+
+    for index in range(task_count):
+        title_template, goal, deliverable = blueprints[index % len(blueprints)]
+        title = title_template.replace("{topic}", topic)
+        tasks.append(
+            {
+                "suggested_order": index + 1,
+                "title": title,
+                "description": (
+                    f"Goal: {goal}\n\n"
+                    "Steps:\n"
+                    f"1. Review the current {topic} idea and write the concrete output needed for this task.\n"
+                    f"2. Create the task output in a simple document, checklist, tracker, or draft.\n"
+                    "3. Check that the output can be used by the next task without extra explanation.\n\n"
+                    f"Deliverable: {deliverable} for {topic}.\n\n"
+                    f"Done when: The deliverable has at least three concrete items tied to {topic}.\n\n"
+                    f"Customer benefit: This turns {topic} into visible progress instead of a vague next step."
+                ),
+                "priority": _priority_for_index(index=index, task_count=task_count),
+                "estimated_hours": _estimated_hours_for_index(index),
+                "due_date": (
+                    due_dates[index].isoformat()
+                    if index < len(due_dates)
+                    else None
+                ),
+                "assigned_to": None,
+            }
+        )
+
+    return tasks
+
+
+def _build_local_fallback_generated_plan(
+    *,
+    project: Project,
+    input_prompt: str,
+    task_count: int,
+    include_milestones: bool,
+    reason: str,
+) -> dict[str, Any]:
+    logger.warning(
+        "AI Planner using local fallback. reason=%s project_id=%s task_count=%s",
+        reason,
+        project.project_id,
+        task_count,
+    )
+
+    local_reply = generate_local_planner_reply(
+        _build_structured_ai_plan_prompt(
+            project=project,
+            input_prompt=input_prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+        )
+    )
+    local_data = _parse_json_object(local_reply) or {}
+
+    normalized_plan = _normalize_ai_plan_response(
+        ai_data=local_data,
+        project=project,
+        input_prompt=input_prompt,
+        task_count=task_count,
+        include_milestones=include_milestones,
+        ai_generation_status="fallback",
+    )
+
+    if normalized_plan is not None and normalized_plan["tasks"]:
+        normalized_plan["source"] = "local_planner_fallback_v1"
+        normalized_plan["message"] = "Generated a fallback project plan."
+        logger.info("AI Planner fallback used. source=local_planner_fallback_v1")
+        return normalized_plan
+
+    tasks = _build_minimum_local_fallback_tasks(
+        project=project,
+        input_prompt=input_prompt,
+        task_count=task_count,
+    )
+    milestones = []
+
+    if include_milestones:
+        milestones = [
+            {
+                "name": "Scope confirmed",
+                "description": "The first-version direction is clear and ready for execution.",
+                "suggested_order": 1,
+            },
+            {
+                "name": "First version completed",
+                "description": "The main usable result is built or drafted.",
+                "suggested_order": 2,
+            },
+            {
+                "name": "Quality reviewed",
+                "description": "The core flow and final issues are checked.",
+                "suggested_order": 3,
+            },
+        ]
+
+    logger.info("AI Planner fallback used. source=minimum_local_planner_v1")
+    return {
+        "success": True,
+        "message": "Generated a fallback project plan.",
+        "ai_generation_status": "fallback",
+        "source": "minimum_local_planner_v1",
+        "domain": _clean_ai_text_field(project.title, fallback="ai_generated", max_length=80),
+        "summary": (
+            f"Generated a fallback plan for '{project.title}' with {len(tasks)} tasks."
+        ),
+        "rejected_generic_count": 0,
+        "rejected_unrelated_count": 0,
+        "tasks_skipped_as_duplicates": 0,
+        "rejected_tasks": [],
+        "project": {
+            "project_id": project.project_id,
+            "title": project.title,
+            "project_type": project.project_type,
+            "deadline": _to_utc(project.deadline).isoformat(),
+        },
+        "tasks": tasks,
+        "milestones": milestones,
+        "risks": [
+            {
+                "risk": "The project idea may need a narrower first version.",
+                "recommendation": "Start with the smallest deliverable that proves the idea works.",
+            },
+            {
+                "risk": "Provider-generated detail was unavailable.",
+                "recommendation": "Review and adjust the fallback tasks before accepting the plan.",
+            },
+        ],
+        "recommendations": [
+            "Review each fallback task before accepting the plan.",
+            "Adjust due dates if the deadline is very close.",
+            "Keep the first version focused on one clear outcome.",
+        ],
+    }
+
+
+def _build_failed_or_fallback_generated_plan(
+    *,
+    project: Project,
+    input_prompt: str,
+    task_count: int,
+    include_milestones: bool,
+    reason: str,
+    allow_local_fallback: bool,
+    rejected_generic_count: int = 0,
+    rejected_unrelated_count: int = 0,
+    rejected_tasks: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    if allow_local_fallback:
+        return _build_local_fallback_generated_plan(
+            project=project,
+            input_prompt=input_prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            reason=reason,
+        )
+
+    return _build_failed_generated_plan(
+        project,
+        rejected_generic_count=rejected_generic_count,
+        rejected_unrelated_count=rejected_unrelated_count,
+        rejected_tasks=rejected_tasks,
+    )
 
 
 def _build_structured_ai_plan_prompt(
@@ -1347,6 +1637,7 @@ def _build_ai_generated_plan(
     include_milestones: bool,
     existing_tasks: list[Task] | None = None,
     overwrite_existing_tasks: bool = False,
+    allow_local_fallback: bool = False,
 ) -> dict[str, Any]:
     prompt = _build_structured_ai_plan_prompt(
         project=project,
@@ -1357,10 +1648,17 @@ def _build_ai_generated_plan(
         overwrite_existing_tasks=overwrite_existing_tasks,
     )
 
-    provider_reply = generate_ai_reply_from_provider(prompt)
+    provider_reply = _generate_ai_plan_reply_from_provider(prompt)
 
     if provider_reply is None:
-        return _build_failed_generated_plan(project)
+        return _build_failed_or_fallback_generated_plan(
+            project=project,
+            input_prompt=input_prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            reason="provider_unavailable",
+            allow_local_fallback=allow_local_fallback,
+        )
 
     parsed = _parse_json_object(provider_reply)
     ai_generation_status = "generated"
@@ -1370,16 +1668,30 @@ def _build_ai_generated_plan(
             original_prompt=prompt,
             provider_reply=provider_reply,
         )
-        repaired_reply = generate_ai_reply_from_provider(repair_prompt)
+        repaired_reply = _generate_ai_plan_reply_from_provider(repair_prompt)
 
         if repaired_reply is None:
-            return _build_failed_generated_plan(project)
+            return _build_failed_or_fallback_generated_plan(
+                project=project,
+                input_prompt=input_prompt,
+                task_count=task_count,
+                include_milestones=include_milestones,
+                reason="json_repair_provider_unavailable",
+                allow_local_fallback=allow_local_fallback,
+            )
 
         parsed = _parse_json_object(repaired_reply)
         ai_generation_status = "repaired"
 
         if parsed is None:
-            return _build_failed_generated_plan(project)
+            return _build_failed_or_fallback_generated_plan(
+                project=project,
+                input_prompt=input_prompt,
+                task_count=task_count,
+                include_milestones=include_milestones,
+                reason="json_parse_failed_after_repair",
+                allow_local_fallback=allow_local_fallback,
+            )
 
     allow_zero_tasks = bool(existing_tasks and not overwrite_existing_tasks)
 
@@ -1395,7 +1707,14 @@ def _build_ai_generated_plan(
     )
 
     if normalized_plan is None:
-        return _build_failed_generated_plan(project)
+        return _build_failed_or_fallback_generated_plan(
+            project=project,
+            input_prompt=input_prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            reason="normalized_plan_invalid",
+            allow_local_fallback=allow_local_fallback,
+        )
 
     if (
         not normalized_plan["tasks"]
@@ -1418,11 +1737,16 @@ def _build_ai_generated_plan(
         rejected_tasks=list(normalized_plan.get("rejected_tasks") or []),
         missing_count=missing_count,
     )
-    replacement_reply = generate_ai_reply_from_provider(replacement_prompt)
+    replacement_reply = _generate_ai_plan_reply_from_provider(replacement_prompt)
 
     if replacement_reply is None:
-        return _build_failed_generated_plan(
-            project,
+        return _build_failed_or_fallback_generated_plan(
+            project=project,
+            input_prompt=input_prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            reason="replacement_provider_unavailable",
+            allow_local_fallback=allow_local_fallback,
             rejected_generic_count=int(normalized_plan.get("rejected_generic_count") or 0),
             rejected_unrelated_count=int(
                 normalized_plan.get("rejected_unrelated_count") or 0
@@ -1433,8 +1757,13 @@ def _build_ai_generated_plan(
     replacement_data = _parse_json_object(replacement_reply)
 
     if replacement_data is None:
-        return _build_failed_generated_plan(
-            project,
+        return _build_failed_or_fallback_generated_plan(
+            project=project,
+            input_prompt=input_prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            reason="replacement_json_parse_failed",
+            allow_local_fallback=allow_local_fallback,
             rejected_generic_count=int(normalized_plan.get("rejected_generic_count") or 0),
             rejected_unrelated_count=int(
                 normalized_plan.get("rejected_unrelated_count") or 0
@@ -1467,8 +1796,13 @@ def _build_ai_generated_plan(
             )
             rejected_tasks.extend(list(replacement_plan.get("rejected_tasks") or []))
 
-        return _build_failed_generated_plan(
-            project,
+        return _build_failed_or_fallback_generated_plan(
+            project=project,
+            input_prompt=input_prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            reason="replacement_normalized_plan_invalid",
+            allow_local_fallback=allow_local_fallback,
             rejected_generic_count=rejected_generic_count,
             rejected_unrelated_count=rejected_unrelated_count,
             rejected_tasks=rejected_tasks,
@@ -1498,6 +1832,7 @@ def build_generated_plan(
     project_members: list[ProjectMember] | None = None,
     existing_tasks: list[Task] | None = None,
     overwrite_existing_tasks: bool = False,
+    allow_local_fallback: bool = False,
 ) -> dict[str, Any]:
     project_context = (
         input_prompt.strip()
@@ -1512,6 +1847,7 @@ def build_generated_plan(
         include_milestones=include_milestones,
         existing_tasks=existing_tasks,
         overwrite_existing_tasks=overwrite_existing_tasks,
+        allow_local_fallback=allow_local_fallback,
     )
 
     assignable_member_ids = [
@@ -2059,14 +2395,19 @@ def create_ai_plan_preview(
         task_count=preview_data.preferred_task_count,
         include_milestones=preview_data.include_milestones,
         project_members=None,
+        allow_local_fallback=True,
     )
+    ai_generation_status = str(
+        generated_plan.get("ai_generation_status", "generated")
+    )
+
+    if ai_generation_status not in {"generated", "fallback"}:
+        ai_generation_status = "generated"
 
     return AIPlanPreviewResponse(
         success=bool(generated_plan.get("success", True)),
         message=str(generated_plan.get("message", "")),
-        ai_generation_status=str(
-            generated_plan.get("ai_generation_status", "generated")
-        ),
+        ai_generation_status=ai_generation_status,
         source=str(generated_plan["source"]),
         domain=str(generated_plan["domain"]),
         project_title=project.title,
