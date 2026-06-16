@@ -31,7 +31,9 @@ from app.schemas.ai_plan_schema import (
 from app.schemas.task_schema import TaskStatus
 from app.services.activity_log_service import create_activity_log
 from app.services.ai_provider_service import (
+    clear_last_ai_provider_failure_reason,
     generate_ai_reply_from_provider,
+    get_last_ai_provider_failure_reason,
 )
 
 
@@ -214,6 +216,7 @@ AI_PLANNING_UNAVAILABLE_MESSAGE = (
 )
 
 PLAN_ALREADY_COVERS_MESSAGE = "This plan already covers the main steps."
+PREVIEW_FROM_IDEA_ROUTE = "/ai-plans/preview-from-idea"
 
 logger = logging.getLogger(__name__)
 
@@ -709,16 +712,185 @@ def _extract_json_object(value: str) -> tuple[dict[str, Any] | None, str | None]
     return None, (errors[-1] if errors else "no JSON object found")
 
 
-def _parse_json_object(value: str) -> dict[str, Any] | None:
+def _parse_json_object_with_error(
+    value: str,
+) -> tuple[dict[str, Any] | None, str | None]:
     data, reason = _extract_json_object(value)
 
     if data is None:
         logger.warning("AI Planner JSON parse failed. reason=%s", reason)
 
+    return data, reason
+
+
+def _parse_json_object(value: str) -> dict[str, Any] | None:
+    data, _reason = _parse_json_object_with_error(value)
+
     return data
 
 
+def _log_bool(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def _configured_ai_provider() -> str:
+    return settings.ai_provider.strip().lower() or "local"
+
+
+def _gemini_key_present() -> bool:
+    return bool((settings.gemini_api_key or "").strip())
+
+
+def _should_attempt_external_provider() -> bool:
+    return _configured_ai_provider() == "gemini" and _gemini_key_present()
+
+
+def _new_fallback_diagnostics(route: str | None = None) -> dict[str, Any]:
+    return {
+        "route": route,
+        "provider_attempted": _should_attempt_external_provider(),
+        "provider_result_empty": False,
+        "parse_error": None,
+        "quality_rejection": None,
+        "provider_failure_reason": None,
+    }
+
+
+def _record_provider_failure(diagnostics: dict[str, Any]) -> None:
+    provider_reason = get_last_ai_provider_failure_reason()
+
+    if provider_reason:
+        diagnostics["provider_failure_reason"] = provider_reason
+
+
+def _set_quality_rejection(
+    diagnostics: dict[str, Any],
+    message: str,
+) -> None:
+    if not diagnostics.get("quality_rejection"):
+        diagnostics["quality_rejection"] = message
+
+
+def _quality_rejection_summary(generated_plan: dict[str, Any] | None) -> str:
+    if not generated_plan:
+        return "normalized plan invalid"
+
+    rejected_tasks = generated_plan.get("rejected_tasks")
+
+    if not isinstance(rejected_tasks, list) or not rejected_tasks:
+        return "provider output did not contain enough usable tasks"
+
+    reason_counts: dict[str, int] = {}
+
+    for rejected_task in rejected_tasks:
+        if not isinstance(rejected_task, dict):
+            continue
+
+        reasons = rejected_task.get("reasons")
+
+        if not isinstance(reasons, list):
+            continue
+
+        for reason in reasons:
+            reason_text = str(reason).strip()
+
+            if reason_text:
+                reason_counts[reason_text] = reason_counts.get(reason_text, 0) + 1
+
+    if not reason_counts:
+        return f"{len(rejected_tasks)} task(s) rejected"
+
+    compact_reasons = ", ".join(
+        f"{reason}:{count}"
+        for reason, count in sorted(reason_counts.items())
+    )
+
+    return f"{len(rejected_tasks)} task(s) rejected ({compact_reasons})"
+
+
+def _configured_provider_fallback_reason() -> str | None:
+    provider = _configured_ai_provider()
+
+    if provider != "gemini":
+        return "AI_PROVIDER was local" if provider in {"", "local", "fallback"} else f"Unsupported AI_PROVIDER {provider}"
+
+    if not _gemini_key_present():
+        return "GEMINI_API_KEY was missing"
+
+    return None
+
+
+def _human_fallback_reason(
+    *,
+    internal_reason: str,
+    diagnostics: dict[str, Any] | None,
+) -> str:
+    provider_failure_reason = None
+    parse_error = None
+    quality_rejection = None
+
+    if diagnostics:
+        provider_failure_reason = diagnostics.get("provider_failure_reason")
+        parse_error = diagnostics.get("parse_error")
+        quality_rejection = diagnostics.get("quality_rejection")
+
+    if isinstance(provider_failure_reason, str) and provider_failure_reason.strip():
+        return provider_failure_reason.strip()
+
+    configured_reason = _configured_provider_fallback_reason()
+
+    if configured_reason:
+        return configured_reason
+
+    if parse_error or "json" in internal_reason or "parse" in internal_reason:
+        return "Gemini JSON parse failed"
+
+    if quality_rejection:
+        return "Gemini output failed quality checks"
+
+    reason_map = {
+        "provider_unavailable_after_retry": "Gemini returned no usable response",
+        "json_repair_provider_unavailable_after_retry": "Gemini JSON repair returned no usable response",
+        "normalized_plan_invalid_after_retry": "Gemini returned an invalid plan shape",
+        "all_tasks_rejected_after_retry": "Gemini output failed quality checks",
+        "mostly_generic_plan_after_retry": "Gemini output failed quality checks",
+        "replacement_provider_unavailable_after_retry": "Gemini replacement tasks were unavailable",
+        "replacement_json_parse_failed_after_retry": "Gemini replacement JSON parse failed",
+        "replacement_normalized_plan_invalid_after_retry": "Gemini replacement tasks failed quality checks",
+        "empty_task_list": "Generated plan had no tasks",
+    }
+
+    return reason_map.get(
+        internal_reason,
+        internal_reason.replace("_", " ").strip() or "AI provider unavailable",
+    )
+
+
+def _log_preview_fallback_decision(
+    *,
+    fallback_reason: str,
+    diagnostics: dict[str, Any] | None,
+) -> None:
+    if not diagnostics or diagnostics.get("route") != PREVIEW_FROM_IDEA_ROUTE:
+        return
+
+    logger.warning(
+        "AI Planner preview fallback decision route=%s ai_provider=%s gemini_key_present=%s gemini_model=%s provider_attempted=%s provider_result_empty=%s parse_error=%s quality_rejection=%s fallback_reason=%s",
+        PREVIEW_FROM_IDEA_ROUTE,
+        _configured_ai_provider(),
+        _log_bool(_gemini_key_present()),
+        settings.gemini_model,
+        _log_bool(bool(diagnostics.get("provider_attempted"))),
+        _log_bool(bool(diagnostics.get("provider_result_empty"))),
+        diagnostics.get("parse_error") or "none",
+        diagnostics.get("quality_rejection") or "none",
+        fallback_reason,
+    )
+
+
 def _generate_ai_plan_reply_from_provider(prompt: str) -> str | None:
+    clear_last_ai_provider_failure_reason()
+
     try:
         parameters = inspect.signature(generate_ai_reply_from_provider).parameters
     except (TypeError, ValueError):
@@ -1176,14 +1348,22 @@ def _build_local_fallback_generated_plan(
     task_count: int,
     include_milestones: bool,
     reason: str,
+    internal_reason: str | None = None,
+    diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    internal_reason = internal_reason or reason
+    _log_preview_fallback_decision(
+        fallback_reason=reason,
+        diagnostics=diagnostics,
+    )
     logger.warning(
-        "AI Planner final fallback reason. reason=%s project_id=%s task_count=%s ai_provider=%s gemini_api_key_exists=%s gemini_model=%s gemini_timeout_seconds=%s",
+        "AI Planner final fallback reason. reason=%s fallback_reason=%s project_id=%s task_count=%s ai_provider=%s gemini_key_present=%s gemini_model=%s gemini_timeout_seconds=%s",
+        internal_reason,
         reason,
         project.project_id,
         task_count,
         settings.ai_provider,
-        bool(settings.gemini_api_key),
+        _log_bool(_gemini_key_present()),
         settings.gemini_model,
         settings.gemini_timeout_seconds,
     )
@@ -1195,19 +1375,23 @@ def _build_local_fallback_generated_plan(
     )
 
     logger.info(
-        "AI Planner fallback used as last resort. source=adaptive_fallback_v1 task_count=%s reason=%s",
+        "AI Planner fallback used as last resort. source=adaptive_fallback_v1 task_count=%s reason=%s fallback_reason=%s",
         len(tasks),
+        internal_reason,
         reason,
     )
     return {
         "success": True,
-        "message": "Using a fallback plan from the idea.",
+        "message": f"Using fallback because: {reason}",
         "ai_generation_status": "fallback",
         "source": "adaptive_fallback_v1",
         "domain": "adaptive_plan",
         "summary": (
+            f"Using fallback because: {reason}. "
             f"Using an adaptive fallback plan for '{project.title}' with {len(tasks)} tasks."
         ),
+        "fallback_reason": reason,
+        "fallback_internal_reason": internal_reason,
         "rejected_generic_count": 0,
         "rejected_unrelated_count": 0,
         "tasks_skipped_as_duplicates": 0,
@@ -1236,14 +1420,20 @@ def _build_failed_or_fallback_generated_plan(
     rejected_generic_count: int = 0,
     rejected_unrelated_count: int = 0,
     rejected_tasks: list[dict[str, Any]] | None = None,
+    diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    fallback_reason = _human_fallback_reason(
+        internal_reason=reason,
+        diagnostics=diagnostics,
+    )
     logger.warning(
-        "AI Planner provider failed. reason=%s project_id=%s allow_fallback=%s ai_provider=%s gemini_api_key_exists=%s gemini_model=%s gemini_timeout_seconds=%s",
+        "AI Planner provider failed. reason=%s fallback_reason=%s project_id=%s allow_fallback=%s ai_provider=%s gemini_key_present=%s gemini_model=%s gemini_timeout_seconds=%s",
         reason,
+        fallback_reason,
         project.project_id,
         allow_local_fallback,
         settings.ai_provider,
-        bool(settings.gemini_api_key),
+        _log_bool(_gemini_key_present()),
         settings.gemini_model,
         settings.gemini_timeout_seconds,
     )
@@ -1254,7 +1444,9 @@ def _build_failed_or_fallback_generated_plan(
             input_prompt=input_prompt,
             task_count=task_count,
             include_milestones=include_milestones,
-            reason=reason,
+            reason=fallback_reason,
+            internal_reason=reason,
+            diagnostics=diagnostics,
         )
 
     return _build_failed_generated_plan(
@@ -2007,6 +2199,13 @@ def _task_quality_rejection_reasons(
         "duplicate_score": round(duplicate_score, 3),
     }
     reasons: list[str] = []
+    concrete_provider_task = _is_concrete_provider_task(
+        title=title,
+        description=description,
+        project_context=project_context,
+        relevance_score=relevance_score,
+        specificity_score=specificity_score,
+    )
 
     if _is_bad_ai_task_text(title) or _is_bad_ai_task_text(description):
         reasons.append("instruction_leak")
@@ -2029,10 +2228,13 @@ def _task_quality_rejection_reasons(
         or _description_is_too_generic(description)
         or _contains_robotic_description(description)
         or _description_restates_title(title, description)
-    ):
+    ) and not concrete_provider_task:
         reasons.append("generic_description")
 
-    if _description_repeats_project_idea(description, project_context):
+    if (
+        _description_repeats_project_idea(description, project_context)
+        and not concrete_provider_task
+    ):
         reasons.append("description_repeats_idea")
 
     if relevance_score < 0.18 and not _has_meaningful_idea_token_overlap(
@@ -2041,10 +2243,10 @@ def _task_quality_rejection_reasons(
     ):
         reasons.append("unrelated_to_idea")
 
-    if specificity_score < 0.35:
+    if specificity_score < 0.35 and not concrete_provider_task:
         reasons.append("not_specific_enough")
 
-    if actionability_score < 0.65:
+    if actionability_score < 0.65 and not concrete_provider_task:
         reasons.append("not_actionable_enough")
 
     if duplicate_score <= 0:
@@ -2132,6 +2334,52 @@ def _should_regenerate_full_plan(
             generic_rejections += 1
 
     return generic_rejections >= accepted_count
+
+
+def _is_concrete_provider_task(
+    *,
+    title: str,
+    description: str,
+    project_context: str,
+    relevance_score: float,
+    specificity_score: float,
+) -> bool:
+    if not title.strip() or len(description.strip()) < 24:
+        return False
+
+    combined_task_text = f"{title}\n{description}"
+
+    if _is_bad_ai_task_text(title) or _is_bad_ai_task_text(description):
+        return False
+
+    if _is_low_quality_task_title(title):
+        return False
+
+    if (
+        _is_disallowed_generic_task_title(title)
+        or _is_generic_fallback_style_title(title)
+    ):
+        return False
+
+    if _description_is_too_generic(description) or _contains_robotic_description(
+        description
+    ):
+        return False
+
+    if _description_restates_title(title, description):
+        return False
+
+    has_related_vocabulary = relevance_score >= 0.18 or _has_meaningful_idea_token_overlap(
+        project_context,
+        combined_task_text,
+    )
+
+    if not has_related_vocabulary:
+        return False
+
+    concrete_tokens = _quality_tokens(combined_task_text) - GENERIC_CONTEXT_TOKENS
+
+    return specificity_score >= 0.25 and len(concrete_tokens) >= 5
 
 
 def _normalize_ai_plan_response(
@@ -2398,7 +2646,9 @@ def _build_ai_generated_plan(
     existing_tasks: list[Task] | None = None,
     overwrite_existing_tasks: bool = False,
     allow_local_fallback: bool = False,
+    fallback_route: str | None = None,
 ) -> dict[str, Any]:
+    diagnostics = _new_fallback_diagnostics(route=fallback_route)
     prompt = _build_structured_ai_plan_prompt(
         project=project,
         input_prompt=input_prompt,
@@ -2416,7 +2666,9 @@ def _build_ai_generated_plan(
     )
     provider_reply = _generate_ai_plan_reply_from_provider(prompt)
 
-    if provider_reply is None:
+    if provider_reply is None or not provider_reply.strip():
+        diagnostics["provider_result_empty"] = True
+        _record_provider_failure(diagnostics)
         regenerated_plan = _try_regenerate_concrete_ai_plan(
             project=project,
             input_prompt=input_prompt,
@@ -2430,6 +2682,7 @@ def _build_ai_generated_plan(
         if regenerated_plan is not None:
             return regenerated_plan
 
+        _record_provider_failure(diagnostics)
         return _build_failed_or_fallback_generated_plan(
             project=project,
             input_prompt=input_prompt,
@@ -2437,19 +2690,23 @@ def _build_ai_generated_plan(
             include_milestones=include_milestones,
             reason="provider_unavailable_after_retry",
             allow_local_fallback=allow_local_fallback,
+            diagnostics=diagnostics,
         )
 
-    parsed = _parse_json_object(provider_reply)
+    parsed, parse_error = _parse_json_object_with_error(provider_reply)
     ai_generation_status = "generated"
 
     if parsed is None:
+        diagnostics["parse_error"] = parse_error or "unknown JSON parse error"
         repair_prompt = _build_json_repair_prompt(
             original_prompt=prompt,
             provider_reply=provider_reply,
         )
         repaired_reply = _generate_ai_plan_reply_from_provider(repair_prompt)
 
-        if repaired_reply is None:
+        if repaired_reply is None or not repaired_reply.strip():
+            diagnostics["provider_result_empty"] = True
+            _record_provider_failure(diagnostics)
             regenerated_plan = _try_regenerate_concrete_ai_plan(
                 project=project,
                 input_prompt=input_prompt,
@@ -2463,6 +2720,7 @@ def _build_ai_generated_plan(
             if regenerated_plan is not None:
                 return regenerated_plan
 
+            _record_provider_failure(diagnostics)
             return _build_failed_or_fallback_generated_plan(
                 project=project,
                 input_prompt=input_prompt,
@@ -2470,12 +2728,14 @@ def _build_ai_generated_plan(
                 include_milestones=include_milestones,
                 reason="json_repair_provider_unavailable_after_retry",
                 allow_local_fallback=allow_local_fallback,
+                diagnostics=diagnostics,
             )
 
-        parsed = _parse_json_object(repaired_reply)
+        parsed, repair_parse_error = _parse_json_object_with_error(repaired_reply)
         ai_generation_status = "repaired"
 
         if parsed is None:
+            diagnostics["parse_error"] = repair_parse_error or diagnostics["parse_error"]
             regenerated_plan = _try_regenerate_concrete_ai_plan(
                 project=project,
                 input_prompt=input_prompt,
@@ -2489,6 +2749,7 @@ def _build_ai_generated_plan(
             if regenerated_plan is not None:
                 return regenerated_plan
 
+            _record_provider_failure(diagnostics)
             return _build_failed_or_fallback_generated_plan(
                 project=project,
                 input_prompt=input_prompt,
@@ -2496,6 +2757,7 @@ def _build_ai_generated_plan(
                 include_milestones=include_milestones,
                 reason="json_parse_failed_after_repair_and_retry",
                 allow_local_fallback=allow_local_fallback,
+                diagnostics=diagnostics,
             )
 
     allow_zero_tasks = bool(existing_tasks and not overwrite_existing_tasks)
@@ -2512,6 +2774,7 @@ def _build_ai_generated_plan(
     )
 
     if normalized_plan is None:
+        _set_quality_rejection(diagnostics, "normalized plan invalid")
         regenerated_plan = _try_regenerate_concrete_ai_plan(
             project=project,
             input_prompt=input_prompt,
@@ -2525,6 +2788,7 @@ def _build_ai_generated_plan(
         if regenerated_plan is not None:
             return regenerated_plan
 
+        _record_provider_failure(diagnostics)
         return _build_failed_or_fallback_generated_plan(
             project=project,
             input_prompt=input_prompt,
@@ -2532,9 +2796,14 @@ def _build_ai_generated_plan(
             include_milestones=include_milestones,
             reason="normalized_plan_invalid_after_retry",
             allow_local_fallback=allow_local_fallback,
+            diagnostics=diagnostics,
         )
 
     if not normalized_plan["tasks"] and not allow_zero_tasks:
+        _set_quality_rejection(
+            diagnostics,
+            _quality_rejection_summary(normalized_plan),
+        )
         regenerated_plan = _try_regenerate_concrete_ai_plan(
             project=project,
             input_prompt=input_prompt,
@@ -2548,6 +2817,7 @@ def _build_ai_generated_plan(
         if regenerated_plan is not None:
             return regenerated_plan
 
+        _record_provider_failure(diagnostics)
         return _build_failed_or_fallback_generated_plan(
             project=project,
             input_prompt=input_prompt,
@@ -2562,6 +2832,7 @@ def _build_ai_generated_plan(
                 normalized_plan.get("rejected_unrelated_count") or 0
             ),
             rejected_tasks=list(normalized_plan.get("rejected_tasks") or []),
+            diagnostics=diagnostics,
         )
 
     if (
@@ -2574,6 +2845,10 @@ def _build_ai_generated_plan(
         return normalized_plan
 
     if _should_regenerate_full_plan(normalized_plan, task_count):
+        _set_quality_rejection(
+            diagnostics,
+            _quality_rejection_summary(normalized_plan),
+        )
         regenerated_plan = _try_regenerate_concrete_ai_plan(
             project=project,
             input_prompt=input_prompt,
@@ -2587,6 +2862,7 @@ def _build_ai_generated_plan(
         if regenerated_plan is not None:
             return regenerated_plan
 
+        _record_provider_failure(diagnostics)
         return _build_failed_or_fallback_generated_plan(
             project=project,
             input_prompt=input_prompt,
@@ -2601,6 +2877,7 @@ def _build_ai_generated_plan(
                 normalized_plan.get("rejected_unrelated_count") or 0
             ),
             rejected_tasks=list(normalized_plan.get("rejected_tasks") or []),
+            diagnostics=diagnostics,
         )
 
     if len(normalized_plan["tasks"]) >= task_count:
@@ -2617,7 +2894,9 @@ def _build_ai_generated_plan(
     )
     replacement_reply = _generate_ai_plan_reply_from_provider(replacement_prompt)
 
-    if replacement_reply is None:
+    if replacement_reply is None or not replacement_reply.strip():
+        diagnostics["provider_result_empty"] = True
+        _record_provider_failure(diagnostics)
         regenerated_plan = _try_regenerate_concrete_ai_plan(
             project=project,
             input_prompt=input_prompt,
@@ -2631,6 +2910,7 @@ def _build_ai_generated_plan(
         if regenerated_plan is not None:
             return regenerated_plan
 
+        _record_provider_failure(diagnostics)
         return _build_failed_or_fallback_generated_plan(
             project=project,
             input_prompt=input_prompt,
@@ -2643,11 +2923,15 @@ def _build_ai_generated_plan(
                 normalized_plan.get("rejected_unrelated_count") or 0
             ),
             rejected_tasks=list(normalized_plan.get("rejected_tasks") or []),
+            diagnostics=diagnostics,
         )
 
-    replacement_data = _parse_json_object(replacement_reply)
+    replacement_data, replacement_parse_error = _parse_json_object_with_error(
+        replacement_reply
+    )
 
     if replacement_data is None:
+        diagnostics["parse_error"] = replacement_parse_error or diagnostics.get("parse_error")
         regenerated_plan = _try_regenerate_concrete_ai_plan(
             project=project,
             input_prompt=input_prompt,
@@ -2661,6 +2945,7 @@ def _build_ai_generated_plan(
         if regenerated_plan is not None:
             return regenerated_plan
 
+        _record_provider_failure(diagnostics)
         return _build_failed_or_fallback_generated_plan(
             project=project,
             input_prompt=input_prompt,
@@ -2673,6 +2958,7 @@ def _build_ai_generated_plan(
                 normalized_plan.get("rejected_unrelated_count") or 0
             ),
             rejected_tasks=list(normalized_plan.get("rejected_tasks") or []),
+            diagnostics=diagnostics,
         )
 
     replacement_plan = _normalize_ai_plan_response(
@@ -2687,6 +2973,10 @@ def _build_ai_generated_plan(
     )
 
     if replacement_plan is None or len(replacement_plan["tasks"]) < missing_count:
+        _set_quality_rejection(
+            diagnostics,
+            "replacement tasks failed quality checks",
+        )
         rejected_generic_count = int(normalized_plan.get("rejected_generic_count") or 0)
         rejected_unrelated_count = int(normalized_plan.get("rejected_unrelated_count") or 0)
         rejected_tasks = list(normalized_plan.get("rejected_tasks") or [])
@@ -2713,6 +3003,7 @@ def _build_ai_generated_plan(
         if regenerated_plan is not None:
             return regenerated_plan
 
+        _record_provider_failure(diagnostics)
         return _build_failed_or_fallback_generated_plan(
             project=project,
             input_prompt=input_prompt,
@@ -2723,6 +3014,7 @@ def _build_ai_generated_plan(
             rejected_generic_count=rejected_generic_count,
             rejected_unrelated_count=rejected_unrelated_count,
             rejected_tasks=rejected_tasks,
+            diagnostics=diagnostics,
         )
 
     normalized_plan["tasks"].extend(replacement_plan["tasks"])
@@ -2750,6 +3042,7 @@ def build_generated_plan(
     existing_tasks: list[Task] | None = None,
     overwrite_existing_tasks: bool = False,
     allow_local_fallback: bool = False,
+    fallback_route: str | None = None,
 ) -> dict[str, Any]:
     project_context = (
         input_prompt.strip()
@@ -2765,6 +3058,7 @@ def build_generated_plan(
         existing_tasks=existing_tasks,
         overwrite_existing_tasks=overwrite_existing_tasks,
         allow_local_fallback=allow_local_fallback,
+        fallback_route=fallback_route,
     )
 
     assignable_member_ids = [
@@ -3340,6 +3634,7 @@ def create_ai_plan_preview(
         include_milestones=preview_data.include_milestones,
         project_members=None,
         allow_local_fallback=True,
+        fallback_route=PREVIEW_FROM_IDEA_ROUTE,
     )
 
     if not generated_plan.get("tasks"):
@@ -3347,12 +3642,21 @@ def create_ai_plan_preview(
             "AI Planner preview fallback forced. reason=empty_task_list project_id=%s",
             project.project_id,
         )
+        fallback_diagnostics = _new_fallback_diagnostics(
+            route=PREVIEW_FROM_IDEA_ROUTE
+        )
+        fallback_diagnostics["quality_rejection"] = "generated plan had no tasks"
         generated_plan = _build_local_fallback_generated_plan(
             project=project,
             input_prompt=preview_prompt,
             task_count=preview_data.preferred_task_count,
             include_milestones=preview_data.include_milestones,
-            reason="empty_task_list",
+            reason=_human_fallback_reason(
+                internal_reason="empty_task_list",
+                diagnostics=fallback_diagnostics,
+            ),
+            internal_reason="empty_task_list",
+            diagnostics=fallback_diagnostics,
         )
 
     ai_generation_status = str(

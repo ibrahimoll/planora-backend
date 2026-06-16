@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from contextvars import ContextVar
 from typing import Any
 
 import httpx
@@ -13,6 +14,10 @@ logger = logging.getLogger(__name__)
 
 MAX_AI_REPLY_LENGTH = 30000
 MAX_LOCAL_TASK_COUNT = 12
+_last_ai_provider_failure_reason: ContextVar[str | None] = ContextVar(
+    "last_ai_provider_failure_reason",
+    default=None,
+)
 
 LOCAL_STOPWORDS = {
     "a",
@@ -170,6 +175,19 @@ HABIT_KEYWORDS = {
 }
 
 
+def clear_last_ai_provider_failure_reason() -> None:
+    _last_ai_provider_failure_reason.set(None)
+
+
+def get_last_ai_provider_failure_reason() -> str | None:
+    return _last_ai_provider_failure_reason.get()
+
+
+def _set_last_ai_provider_failure_reason(reason: str) -> None:
+    cleaned = reason.strip()
+    _last_ai_provider_failure_reason.set(cleaned or "AI provider returned no reason")
+
+
 def _clean_ai_text(value: str) -> str:
     cleaned = value.strip()
 
@@ -183,6 +201,7 @@ def _extract_gemini_text(response_data: dict[str, Any]) -> str | None:
     candidates = response_data.get("candidates", [])
 
     if not candidates:
+        _set_last_ai_provider_failure_reason("Gemini returned empty content")
         logger.warning(
             "Gemini provider returned empty content. reason=no_candidates response_keys=%s",
             sorted(response_data.keys()),
@@ -198,6 +217,7 @@ def _extract_gemini_text(response_data: dict[str, Any]) -> str | None:
         if isinstance(text, str) and text.strip():
             return _clean_ai_text(text)
 
+    _set_last_ai_provider_failure_reason("Gemini returned empty content")
     logger.warning("Gemini provider returned empty content. reason=no_text_parts")
 
     return None
@@ -252,6 +272,7 @@ def _generate_with_gemini(
     )
 
     if not settings.gemini_api_key:
+        _set_last_ai_provider_failure_reason("GEMINI_API_KEY was missing")
         logger.warning("Gemini provider unavailable. reason=missing_api_key")
         return None
 
@@ -315,7 +336,20 @@ def _generate_with_gemini(
                 )
 
                 if response.status_code < 400:
-                    text = _extract_gemini_text(response.json())
+                    try:
+                        response_data = response.json()
+                    except ValueError:
+                        _set_last_ai_provider_failure_reason(
+                            "Gemini response JSON parse failed"
+                        )
+                        logger.warning(
+                            "Gemini provider failed. reason=response_json_parse_failed response_mime_type=%s attempt=%s",
+                            attempt_mime_type,
+                            attempt_index,
+                        )
+                        return None
+
+                    text = _extract_gemini_text(response_data)
 
                     if text is None:
                         logger.warning(
@@ -324,10 +358,15 @@ def _generate_with_gemini(
                             attempt_mime_type,
                             attempt_index,
                         )
+                    else:
+                        clear_last_ai_provider_failure_reason()
 
                     return text
 
                 last_error_status = response.status_code
+                _set_last_ai_provider_failure_reason(
+                    f"Gemini returned HTTP {response.status_code}"
+                )
                 logger.warning(
                     "Gemini API error. status=%s response_mime_type=%s body=%s",
                     response.status_code,
@@ -356,14 +395,17 @@ def _generate_with_gemini(
         return None
 
     except httpx.TimeoutException as exc:
+        _set_last_ai_provider_failure_reason("Gemini timed out")
         logger.warning("Gemini provider failed. reason=timeout error_type=%s", type(exc).__name__)
         return None
 
     except httpx.HTTPError as exc:
+        _set_last_ai_provider_failure_reason("Gemini request failed")
         logger.warning("Gemini provider failed. reason=http_error error_type=%s", type(exc).__name__)
         return None
 
     except (KeyError, IndexError, TypeError, ValueError) as exc:
+        _set_last_ai_provider_failure_reason("Gemini response parse failed")
         logger.warning(
             "Gemini provider failed. reason=response_parse_error error_type=%s",
             type(exc).__name__,
@@ -1317,6 +1359,7 @@ def generate_ai_reply_from_provider(
     response_mime_type: str | None = None,
     use_local_fallback: bool = True,
 ) -> str | None:
+    clear_last_ai_provider_failure_reason()
     provider = settings.ai_provider.strip().lower()
     logger.info(
         "AI provider selected. ai_provider=%s gemini_api_key_exists=%s gemini_model=%s gemini_timeout_seconds=%s response_mime_type=%s use_local_fallback=%s",
@@ -1349,14 +1392,22 @@ def generate_ai_reply_from_provider(
         return _generate_with_local_planner(prompt)
 
     if provider in {"", "local", "fallback"}:
+        _set_last_ai_provider_failure_reason("AI_PROVIDER was local")
         logger.warning(
             "AI provider is local. reason=ai_provider_not_gemini ai_provider=%s",
             provider or "local",
         )
+        if not use_local_fallback:
+            return None
+
         return _generate_with_local_planner(prompt)
 
+    _set_last_ai_provider_failure_reason(f"Unsupported AI_PROVIDER {provider}")
     logger.warning(
         "Unsupported AI provider. reason=unsupported_ai_provider ai_provider=%s",
         provider,
     )
+    if not use_local_fallback:
+        return None
+
     return _generate_with_local_planner(prompt)

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,8 +31,18 @@ class Settings(BaseSettings):
 
     google_client_id: str
 
-    ai_provider: str = "local"
-    gemini_api_key: str | None = None
+    ai_provider: str = Field(
+        default="local",
+        validation_alias=AliasChoices("AI_PROVIDER", "ai_provider"),
+    )
+    gemini_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "GEMINI_API_KEY",
+            "GOOGLE_API_KEY",
+            "gemini_api_key",
+        ),
+    )
     gemini_model: str = "gemini-2.5-flash"
     gemini_timeout_seconds: int = 30
 

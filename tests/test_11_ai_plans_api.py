@@ -1389,6 +1389,48 @@ def _pushup_training_plan() -> str:
     )
 
 
+def _related_pushup_plan_without_exact_user_words() -> str:
+    return json.dumps(
+        {
+            "domain": "daily bodyweight training",
+            "summary": "Generated concrete training tasks using related vocabulary.",
+            "tasks": [
+                {
+                    "suggested_order": 1,
+                    "title": "Split reps into steady sets",
+                    "description": "Choose a repeatable set size, leave two reps in reserve, and record how each set feels.",
+                    "priority": "high",
+                    "estimated_hours": 0.5,
+                },
+                {
+                    "suggested_order": 2,
+                    "title": "Practice clean form cues",
+                    "description": "Check hand position, body line, elbow angle, and breathing before the main daily volume.",
+                    "priority": "high",
+                    "estimated_hours": 0.5,
+                },
+                {
+                    "suggested_order": 3,
+                    "title": "Add recovery rules",
+                    "description": "Set soreness limits, plan an easier day after hard sessions, and stop when joint pain appears.",
+                    "priority": "medium",
+                    "estimated_hours": 0.5,
+                },
+                {
+                    "suggested_order": 4,
+                    "title": "Track progression weekly",
+                    "description": "Log reps, sets, effort, and missed sessions so the next weekly target is based on evidence.",
+                    "priority": "medium",
+                    "estimated_hours": 0.5,
+                },
+            ],
+            "milestones": [],
+            "risks": [],
+            "recommendations": [],
+        }
+    )
+
+
 def _squat_training_plan() -> str:
     return _activity_plan_from_titles(
         titles=[
@@ -1475,6 +1517,44 @@ def _assert_provider_generated_tasks(
 
 class _PreviewUser:
     user_id = 1
+
+
+class _GeminiPlanResponse:
+    def __init__(
+        self,
+        *,
+        status_code: int = 200,
+        response_text: str = "{}",
+        text: str = "{}",
+    ) -> None:
+        self.status_code = status_code
+        self.response_text = response_text
+        self.text = text
+
+    def json(self) -> dict[str, object]:
+        return {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": self.response_text,
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+
+
+def _use_real_gemini_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        ai_provider_service.generate_ai_reply_from_provider,
+    )
+    monkeypatch.setattr(ai_provider_service.settings, "ai_provider", "gemini")
+    monkeypatch.setattr(ai_provider_service.settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(ai_provider_service.settings, "gemini_model", "gemini-test")
 
 
 def _pushup_preview_request(task_count: int = 8) -> AIPlanPreviewRequest:
@@ -1663,6 +1743,155 @@ def test_pushup_preview_uses_gemini_not_hardcoded_fallback(monkeypatch):
         assert concept in all_text.lower()
 
     _assert_no_forbidden_planner_language(all_text)
+
+
+def test_preview_real_gemini_path_returns_generated(monkeypatch):
+    calls: list[dict[str, object]] = []
+
+    class GeminiClient:
+        def __init__(self, timeout: int):
+            self.timeout = timeout
+
+        def __enter__(self) -> "GeminiClient":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def post(
+            self,
+            url: str,
+            *,
+            params: dict[str, str],
+            headers: dict[str, str],
+            json: dict[str, object],
+        ) -> _GeminiPlanResponse:
+            calls.append({"url": url, "params": params, "headers": headers, "json": json})
+            return _GeminiPlanResponse(response_text=_pushup_training_plan())
+
+    _use_real_gemini_provider(monkeypatch)
+    monkeypatch.setattr(ai_provider_service.httpx, "Client", GeminiClient)
+
+    preview = create_ai_plan_preview(_pushup_preview_request(), _PreviewUser())
+
+    assert preview.ai_generation_status == "generated"
+    assert preview.source == "ai_provider"
+    assert "Using fallback because:" not in preview.summary
+    assert len(calls) == 1
+    generation_config = calls[0]["json"]["generationConfig"]  # type: ignore[index]
+    assert generation_config["responseMimeType"] == "application/json"
+    assert generation_config["maxOutputTokens"] == 8192
+    assert "responseFormat" not in generation_config
+    assert "test-key" not in str(calls[0]["url"])
+
+
+def test_preview_gemini_http_400_fallback_summary_includes_reason(
+    monkeypatch,
+    caplog,
+):
+    calls: list[dict[str, object]] = []
+
+    class GeminiClient:
+        def __init__(self, timeout: int):
+            self.timeout = timeout
+
+        def __enter__(self) -> "GeminiClient":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def post(
+            self,
+            url: str,
+            *,
+            params: dict[str, str],
+            headers: dict[str, str],
+            json: dict[str, object],
+        ) -> _GeminiPlanResponse:
+            calls.append({"url": url, "params": params, "headers": headers, "json": json})
+            return _GeminiPlanResponse(
+                status_code=400,
+                text="bad request",
+            )
+
+    _use_real_gemini_provider(monkeypatch)
+    monkeypatch.setattr(ai_provider_service.httpx, "Client", GeminiClient)
+    caplog.set_level("WARNING")
+
+    preview = create_ai_plan_preview(_pushup_preview_request(task_count=5), _PreviewUser())
+
+    assert preview.ai_generation_status == "fallback"
+    assert preview.source == "adaptive_fallback_v1"
+    assert "Using fallback because: Gemini returned HTTP 400" in preview.summary
+    assert re.search(r"Using fallback because:\s*\S", preview.summary)
+    assert len(calls) >= 2
+    assert "route=/ai-plans/preview-from-idea" in caplog.text
+    assert "ai_provider=gemini" in caplog.text
+    assert "gemini_key_present=true" in caplog.text
+    assert "gemini_model=gemini-test" in caplog.text
+    assert "provider_attempted=true" in caplog.text
+    assert "provider_result_empty=true" in caplog.text
+    assert "parse_error=none" in caplog.text
+    assert "fallback_reason=Gemini returned HTTP 400" in caplog.text
+    assert "test-key" not in caplog.text
+
+
+def test_preview_real_gemini_markdown_fenced_json_parses(monkeypatch):
+    class GeminiClient:
+        def __init__(self, timeout: int):
+            self.timeout = timeout
+
+        def __enter__(self) -> "GeminiClient":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def post(
+            self,
+            _url: str,
+            *,
+            params: dict[str, str],
+            headers: dict[str, str],
+            json: dict[str, object],
+        ) -> _GeminiPlanResponse:
+            return _GeminiPlanResponse(
+                response_text=f"```json\n{_pushup_training_plan()}\n```"
+            )
+
+    _use_real_gemini_provider(monkeypatch)
+    monkeypatch.setattr(ai_provider_service.httpx, "Client", GeminiClient)
+
+    preview = create_ai_plan_preview(_pushup_preview_request(), _PreviewUser())
+
+    assert preview.ai_generation_status == "generated"
+    assert preview.source == "ai_provider"
+    assert preview.tasks[0].title == "Check your current pushup starting point"
+
+
+def test_preview_accepts_concrete_related_words_without_exact_user_wording(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        "app.services.ai_plan_service.generate_ai_reply_from_provider",
+        lambda _prompt: _related_pushup_plan_without_exact_user_words(),
+    )
+
+    preview = create_ai_plan_preview(
+        _pushup_preview_request(task_count=4),
+        _PreviewUser(),
+    )
+
+    assert preview.ai_generation_status == "generated"
+    assert preview.source == "ai_provider"
+    assert [task.title for task in preview.tasks] == [
+        "Split reps into steady sets",
+        "Practice clean form cues",
+        "Add recovery rules",
+        "Track progression weekly",
+    ]
+    assert "Using fallback because:" not in preview.summary
 
 
 def test_pushup_preview_summary_count_matches_tasks_length(monkeypatch):
