@@ -1,6 +1,7 @@
 from __future__ import annotations
-from datetime import datetime, timedelta, timezone
+
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,6 +14,9 @@ from app.core.config import settings
 from app.models.device_token import DeviceToken
 from app.models.notification_preference import NotificationPreference
 
+logger = logging.getLogger(__name__)
+
+PUSH_PLATFORM_VALUES = ("android", "ios", "web")
 
 INVALID_FIREBASE_TOKEN_ERROR_NAMES = {
     "UnregisteredError",
@@ -75,15 +79,30 @@ def _get_active_device_tokens(
     db: Session,
     user_id: int,
 ) -> list[DeviceToken]:
-    recent_cutoff = datetime.now(timezone.utc) - timedelta(minutes=2)
-
     stmt = select(DeviceToken).where(
         DeviceToken.user_id == user_id,
         DeviceToken.is_active.is_(True),
-        DeviceToken.last_used_at >= recent_cutoff,
+        DeviceToken.platform.in_(PUSH_PLATFORM_VALUES),
     )
 
-    return list(db.execute(stmt).scalars().all())
+    active_tokens = list(db.execute(stmt).scalars().all())
+
+    logger.debug(
+        "Active push device token lookup completed.",
+        extra={
+            "user_id": user_id,
+            "token_count": len(active_tokens),
+            "device_tokens": [
+                {
+                    "platform": token.platform,
+                    "is_active": token.is_active,
+                }
+                for token in active_tokens
+            ],
+        },
+    )
+
+    return active_tokens
 
 
 def _get_notification_preferences(
