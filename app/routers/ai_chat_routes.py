@@ -14,6 +14,7 @@ from app.schemas.ai_chat_schema import (
     AIChatRequest,
     AIChatResponse,
 )
+from app.services.ai_chat_management_service import delete_project_chat_history
 from app.services.ai_chat_service import (
     create_ai_chat_exchange,
     get_project_chat_history,
@@ -103,6 +104,32 @@ def read_personal_project_chat_history(
     )
 
     return {"messages": messages}
+
+
+@router.delete("/projects/{project_id}/chat")
+def delete_personal_project_chat_history(
+    project_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+):
+    project = get_my_personal_project_by_id(
+        db=db,
+        project_id=project_id,
+        current_user=current_user,
+    )
+
+    if project is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=PROJECT_NOT_FOUND,
+        )
+
+    deleted_count = delete_project_chat_history(db=db, project=project)
+
+    return {
+        "message": "AI chat history deleted successfully.",
+        "deleted_count": deleted_count,
+    }
 
 
 @router.post(
@@ -199,3 +226,42 @@ def read_team_project_chat_history(
     )
 
     return {"messages": messages}
+
+
+@router.delete("/teams/{team_id}/projects/{project_id}/chat")
+def delete_team_project_chat_history(
+    team_id: int,
+    project_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+):
+    project = get_team_project_by_id(
+        db=db,
+        team_id=team_id,
+        project_id=project_id,
+    )
+
+    if project is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=PROJECT_NOT_FOUND,
+        )
+
+    membership = get_project_membership(
+        db=db,
+        project_id=project_id,
+        user_id=current_user.user_id,
+    )
+
+    if membership is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail=NOT_ALLOWED,
+        )
+
+    deleted_count = delete_project_chat_history(db=db, project=project)
+
+    return {
+        "message": "AI chat history deleted successfully.",
+        "deleted_count": deleted_count,
+    }
