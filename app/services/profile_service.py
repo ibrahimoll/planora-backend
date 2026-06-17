@@ -1,5 +1,6 @@
 from pathlib import Path
-import uuid
+import base64
+import binascii
 
 from fastapi import HTTPException, UploadFile
 from fastapi import status as http_status
@@ -19,6 +20,7 @@ DELETE_ACCOUNT_CONFIRMATION_TEXT = "DELETE MY ACCOUNT"
 BASE_DIR = Path(__file__).resolve().parents[2]
 PROFILE_PICTURE_UPLOAD_DIR = BASE_DIR / "uploads" / "profile_pictures"
 PROFILE_PICTURE_URL_PREFIX = "/profile/picture/"
+PROFILE_PICTURE_DATA_URL_PREFIX = "data:image/"
 MAX_PROFILE_PICTURE_SIZE_BYTES = 3 * 1024 * 1024
 UPLOAD_CHUNK_SIZE_BYTES = 1024 * 1024
 
@@ -144,40 +146,88 @@ def validate_profile_picture(file: UploadFile) -> tuple[str, str]:
     return original_name, suffix
 
 
-def save_profile_picture_file(file: UploadFile) -> str:
-    _, suffix = validate_profile_picture(file=file)
-
-    PROFILE_PICTURE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-    stored_file_name = f"{uuid.uuid4().hex}{suffix}"
-    storage_path = PROFILE_PICTURE_UPLOAD_DIR / stored_file_name
-
+def read_profile_picture_file_bytes(file: UploadFile) -> bytes:
     bytes_written = 0
+    chunks: list[bytes] = []
 
-    try:
-        with storage_path.open("xb") as output_file:
-            while chunk := file.file.read(UPLOAD_CHUNK_SIZE_BYTES):
-                bytes_written += len(chunk)
+    while chunk := file.file.read(UPLOAD_CHUNK_SIZE_BYTES):
+        bytes_written += len(chunk)
 
-                if bytes_written > MAX_PROFILE_PICTURE_SIZE_BYTES:
-                    raise HTTPException(
-                        status_code=http_status.HTTP_400_BAD_REQUEST,
-                        detail="Profile picture must be 3MB or less.",
-                    )
+        if bytes_written > MAX_PROFILE_PICTURE_SIZE_BYTES:
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST,
+                detail="Profile picture must be 3MB or less.",
+            )
 
-                output_file.write(chunk)
-    except Exception:
-        storage_path.unlink(missing_ok=True)
-        raise
+        chunks.append(chunk)
 
     if bytes_written == 0:
-        storage_path.unlink(missing_ok=True)
         raise HTTPException(
             status_code=http_status.HTTP_400_BAD_REQUEST,
             detail="Profile picture cannot be empty.",
         )
 
-    return f"{PROFILE_PICTURE_URL_PREFIX}{stored_file_name}"
+    return b"".join(chunks)
+
+
+def encode_profile_picture_data_url(content: bytes, content_type: str) -> str:
+    encoded_content = base64.b64encode(content).decode("ascii")
+    return f"data:{content_type};base64,{encoded_content}"
+
+
+def save_profile_picture_file(file: UploadFile) -> str:
+    validate_profile_picture(file=file)
+
+    content = read_profile_picture_file_bytes(file=file)
+    content_type = file.content_type or "image/jpeg"
+
+    return encode_profile_picture_data_url(
+        content=content,
+        content_type=content_type,
+    )
+
+
+def is_profile_picture_data_url(value: str | None) -> bool:
+    if not value:
+        return False
+
+    return value.startswith(PROFILE_PICTURE_DATA_URL_PREFIX) and ";base64," in value
+
+
+def decode_profile_picture_data_url(value: str) -> tuple[bytes, str] | None:
+    if not is_profile_picture_data_url(value):
+        return None
+
+    header, encoded_content = value.split(",", 1)
+    media_type = header.removeprefix("data:").split(";", 1)[0]
+
+    if media_type not in ALLOWED_PROFILE_PICTURE_CONTENT_TYPES:
+        return None
+
+    try:
+        content = base64.b64decode(encoded_content, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+
+    if not content:
+        return None
+
+    return content, media_type
+
+
+def get_profile_picture_content_from_database(
+    db: Session,
+    stored_file_name: str,
+) -> tuple[bytes, str] | None:
+    if not stored_file_name.isdigit():
+        return None
+
+    user = db.get(User, int(stored_file_name))
+
+    if user is None or not user.profile_pic:
+        return None
+
+    return decode_profile_picture_data_url(user.profile_pic)
 
 
 def get_profile_picture_stored_file_name(file_url: str) -> str | None:
@@ -210,7 +260,7 @@ def get_profile_picture_local_path(file_url: str) -> Path | None:
 
 
 def delete_profile_picture_file(file_url: str | None) -> None:
-    if not file_url:
+    if not file_url or is_profile_picture_data_url(file_url):
         return
 
     file_path = get_profile_picture_local_path(file_url=file_url)
@@ -233,7 +283,6 @@ def upload_my_profile_picture(
         db.refresh(current_user)
     except Exception:
         db.rollback()
-        delete_profile_picture_file(new_profile_pic)
         raise
 
     if old_profile_pic and old_profile_pic != new_profile_pic:
