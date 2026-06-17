@@ -2,7 +2,7 @@ from mimetypes import guess_type
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -21,6 +21,7 @@ from app.services.profile_service import (
     PROFILE_PICTURE_URL_PREFIX,
     change_my_password,
     delete_my_account,
+    get_profile_picture_content_from_database,
     get_profile_picture_local_path,
     update_my_profile,
     upload_my_profile_picture,
@@ -39,7 +40,22 @@ PROFILE_PICTURE_NOT_FOUND = "Profile picture not found"
 
 
 @router.get("/picture/{stored_file_name}", include_in_schema=False)
-def get_profile_picture(stored_file_name: str):
+def get_profile_picture(stored_file_name: str, db: DBSession):
+    database_picture = get_profile_picture_content_from_database(
+        db=db,
+        stored_file_name=stored_file_name,
+    )
+
+    if database_picture is not None:
+        content, media_type = database_picture
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+            },
+        )
+
     file_url = f"{PROFILE_PICTURE_URL_PREFIX}{stored_file_name}"
     file_path = get_profile_picture_local_path(file_url=file_url)
 
