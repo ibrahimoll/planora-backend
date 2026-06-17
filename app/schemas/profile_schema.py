@@ -1,6 +1,9 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from app.schemas.auth import UserResponse, validate_password_strength
+
+PROFILE_PICTURE_URL_PREFIX = "/profile/picture/"
+PROFILE_PICTURE_DATA_URL_PREFIX = "data:image/"
 
 
 class ProfileUpdate(BaseModel):
@@ -24,7 +27,15 @@ class ChangePasswordRequest(BaseModel):
     
 
 class ProfileResponse(UserResponse):
-    pass
+    @field_serializer("profile_pic")
+    def serialize_profile_pic(self, profile_pic: str | None) -> str | None:
+        if not profile_pic:
+            return None
+
+        if profile_pic.startswith(PROFILE_PICTURE_DATA_URL_PREFIX) and ";base64," in profile_pic:
+            return f"{PROFILE_PICTURE_URL_PREFIX}{self.user_id}"
+
+        return profile_pic
 
 
 class ProfileUpdateResponse(BaseModel):
