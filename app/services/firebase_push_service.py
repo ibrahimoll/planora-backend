@@ -199,11 +199,35 @@ def send_push_to_user(
 
     for device_token in active_tokens:
         firebase_message = messaging.Message(
-            data={
-                **push_data,
-                "title": title,
-                "message": message,
-            },
+        notification=messaging.Notification(
+        title=title,
+        body=message,
+        ),
+        data={
+            **push_data,
+            "title": title,
+            "message": message,
+        },
+            android=messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    channel_id="planora_default",
+                    title=title,
+                    body=message,
+                    sound="default",
+                ),
+            )
+            if device_token.platform == "android"
+            else None,
+            apns=messaging.APNSConfig(
+                payload=messaging.APNSPayload(
+                    aps=messaging.Aps(
+                        sound="default",
+                    ),
+                ),
+            )
+            if device_token.platform == "ios"
+            else None,
             token=device_token.token,
         )
 
