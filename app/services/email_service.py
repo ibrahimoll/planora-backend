@@ -118,6 +118,28 @@ def _send_email(
     _send_email_smtp(message)
 
 
+def _password_reset_base_url() -> str:
+    base_url = settings.password_reset_frontend_url.strip().rstrip("/")
+
+    if not base_url:
+        logger.error(
+            "Password reset email failed: PASSWORD_RESET_FRONTEND_URL is not configured."
+        )
+        raise EmailDeliveryError("Password reset URL is not configured.")
+
+    if base_url.endswith("/reset-password") or base_url.endswith("#/reset-password"):
+        return base_url
+
+    return f"{base_url}/reset-password"
+
+
+def build_password_reset_link(recipient_email: str, token: str) -> str:
+    return (
+        f"{_password_reset_base_url()}"
+        f"?{urlencode({'email': recipient_email, 'token': token})}"
+    )
+
+
 def send_verification_email(recipient_email: str, code: str) -> None:
     text_content = f"""Hello,
 
@@ -140,9 +162,9 @@ Planora Team
 
 
 def send_password_reset_email(recipient_email: str, token: str) -> None:
-    reset_link = (
-        f"{settings.password_reset_frontend_url}"
-        f"?{urlencode({'email': recipient_email, 'token': token})}"
+    reset_link = build_password_reset_link(
+        recipient_email=recipient_email,
+        token=token,
     )
 
     text_content = f"""Hello,
@@ -152,6 +174,8 @@ You requested to reset your Planora password.
 Click the link below to reset your password:
 
 {reset_link}
+
+After changing your password, you will be redirected back to Planora.
 
 This link will expire in {settings.password_reset_code_expire_minutes} minutes.
 If you did not request this, you can safely ignore this email.
