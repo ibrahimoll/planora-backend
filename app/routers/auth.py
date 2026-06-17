@@ -30,6 +30,10 @@ from app.services.auth_service import (
     verify_email,
 )
 from app.services.email_service import EmailDeliveryError
+from app.services.profile_service import (
+    PROFILE_PICTURE_URL_PREFIX,
+    is_profile_picture_data_url,
+)
 from app.services.social_auth_service import login_with_google
 
 router = APIRouter(
@@ -46,6 +50,15 @@ CurrentUser = Annotated[User, Depends(get_current_active_verified_user)]
 EMAIL_DELIVERY_FAILED_MESSAGE = (
     "Email delivery failed. Please try again later or contact support."
 )
+
+
+def serialize_user_response(user: User) -> UserResponse:
+    response = UserResponse.model_validate(user)
+
+    if is_profile_picture_data_url(response.profile_pic):
+        response.profile_pic = f"{PROFILE_PICTURE_URL_PREFIX}{user.user_id}"
+
+    return response
 
 
 def _raise_email_delivery_error(exc: EmailDeliveryError) -> None:
@@ -326,4 +339,4 @@ def google_login(
 def read_current_user(
     current_user: CurrentUser,
 ) -> UserResponse:
-    return UserResponse.model_validate(current_user)
+    return serialize_user_response(current_user)
