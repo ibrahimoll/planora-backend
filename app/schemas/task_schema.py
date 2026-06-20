@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.user_summary_schema import UserSummaryResponse
 
@@ -50,6 +50,44 @@ class TeamTaskUpdate(TaskUpdate):
     assigned_to: int | None = None
 
 
+class SubtaskTitlePayload(BaseModel):
+    title: str = Field(..., min_length=1, max_length=300)
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, value: str) -> str:
+        title = value.strip()
+        if not title:
+            raise ValueError("Subtask title cannot be empty")
+        return title
+
+
+class SubtaskCreate(SubtaskTitlePayload):
+    pass
+
+
+class SubtaskUpdate(SubtaskTitlePayload):
+    pass
+
+
+class SubtaskCompletionUpdate(BaseModel):
+    is_completed: bool = True
+
+
+class SubtaskResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    subtask_id: int
+    task_id: int
+    created_by: int
+    title: str
+    is_completed: bool
+    status: str
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class TaskResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -68,7 +106,15 @@ class TaskResponse(BaseModel):
     created_at: datetime
     assigned_user: UserSummaryResponse | None = None
     created_by_user: UserSummaryResponse | None = None
+    subtasks: list[SubtaskResponse] = Field(default_factory=list)
+    subtask_count: int = 0
+    completed_subtask_count: int = 0
+    progress_percentage: float = 0.0
 
 
 class TaskDeleteResponse(BaseModel):
+    message: str
+
+
+class SubtaskDeleteResponse(BaseModel):
     message: str
