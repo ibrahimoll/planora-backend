@@ -121,6 +121,7 @@ def get_tasks_for_personal_project(
         .options(
             selectinload(Task.assignee),
             selectinload(Task.creator),
+            selectinload(Task.subtasks),
         )
         .where(
             Task.project_id == project.project_id,
@@ -148,6 +149,7 @@ def get_task_for_personal_project_by_id(
         .options(
             selectinload(Task.assignee),
             selectinload(Task.creator),
+            selectinload(Task.subtasks),
         )
         .where(
             Task.task_id == task_id,
@@ -394,6 +396,7 @@ def get_tasks_for_team_project(
         .options(
             selectinload(Task.assignee),
             selectinload(Task.creator),
+            selectinload(Task.subtasks),
         )
         .where(
             Task.project_id == project.project_id,
@@ -424,6 +427,7 @@ def get_task_for_team_project_by_id(
         .options(
             selectinload(Task.assignee),
             selectinload(Task.creator),
+            selectinload(Task.subtasks),
         )
         .where(
             Task.task_id == task_id,

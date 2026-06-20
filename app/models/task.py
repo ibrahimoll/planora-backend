@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.attachment import Attachment
     from app.models.deadline_reminder import DeadlineReminder
     from app.models.activity_log import ActivityLog
+    from app.models.subtask import Subtask
 
 
 class Task(Base):
@@ -109,3 +110,24 @@ class Task(Base):
     activity_logs: Mapped[list["ActivityLog"]] = relationship(
         back_populates="task",
     )
+
+    subtasks: Mapped[list["Subtask"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="Subtask.created_at, Subtask.subtask_id",
+    )
+
+    @property
+    def subtask_count(self) -> int:
+        return len(self.subtasks)
+
+    @property
+    def completed_subtask_count(self) -> int:
+        return sum(1 for subtask in self.subtasks if subtask.is_completed)
+
+    @property
+    def progress_percentage(self) -> float:
+        if not self.subtasks:
+            return 0.0
+
+        return round((self.completed_subtask_count / self.subtask_count) * 100, 2)

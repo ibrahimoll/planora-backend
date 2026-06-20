@@ -30,6 +30,8 @@ from app.routers.admin_task_oversight_routes import router as admin_task_oversig
 from app.routers.admin_risk_report_routes import router as admin_risk_report_router
 from app.routers.ai_chat_routes import router as ai_chat_router
 from app.routers.push_notification_routes import router as push_notification_router
+from app.routers.subtask_routes import personal_router as personal_subtask_router
+from app.routers.subtask_routes import team_router as team_subtask_router
 from app.services.deadline_reminder_scheduler import (
     start_deadline_reminder_scheduler,
     stop_deadline_reminder_scheduler,
@@ -108,6 +110,8 @@ app.include_router(admin_task_oversight_router)
 app.include_router(admin_risk_report_router)
 app.include_router(ai_chat_router)
 app.include_router(push_notification_router)
+app.include_router(personal_subtask_router)
+app.include_router(team_subtask_router)
 
 @app.get("/")
 def root():

@@ -144,6 +144,10 @@ def _build_task_detail(db: Session, task: Task) -> AdminTaskDetailResponse:
         creator=summary.creator,
         comments_count=_count_where(db, Comment, Comment.task_id == task.task_id),
         attachments_count=_count_where(db, Attachment, Attachment.task_id == task.task_id),
+        subtasks=task.subtasks,
+        subtask_count=task.subtask_count,
+        completed_subtask_count=task.completed_subtask_count,
+        progress_percentage=task.progress_percentage,
     )
 
 

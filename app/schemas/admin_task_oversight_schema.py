@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
+
+from app.schemas.task_schema import SubtaskResponse
 from app.schemas.pagination_schema import PaginationMeta
 
 TaskStatus = Literal["todo", "in_progress", "completed", "blocked"]
@@ -46,6 +48,10 @@ class AdminTaskDetailResponse(AdminTaskSummaryResponse):
     description: str | None
     comments_count: int
     attachments_count: int
+    subtasks: list[SubtaskResponse]
+    subtask_count: int
+    completed_subtask_count: int
+    progress_percentage: float
 
 
 class AdminTaskStatusUpdateRequest(BaseModel):
