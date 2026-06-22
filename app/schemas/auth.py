@@ -82,7 +82,7 @@ class ResetPasswordRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     email: EmailStr
-    token: str = Field(min_length=20, max_length=200)
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
     new_password: str = Field(min_length=8, max_length=128)
 
     @field_validator("new_password")
