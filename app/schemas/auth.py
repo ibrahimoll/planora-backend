@@ -78,6 +78,13 @@ class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
 
+class VerifyPasswordResetCodeRequest(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
 class ResetPasswordRequest(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
