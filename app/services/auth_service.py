@@ -19,6 +19,7 @@ from app.schemas.auth import (
     ResendVerificationCodeRequest,
     ResetPasswordRequest,
     VerifyEmailRequest,
+    VerifyPasswordResetCodeRequest,
 )
 from app.services.email_service import (
     send_password_reset_email,
@@ -32,7 +33,7 @@ from app.services.password_reset_service import (
     create_password_reset_code,
     get_latest_active_password_reset_code,
     mark_unused_password_reset_codes_as_used,
-    verify_password_reset_code,
+    verify_password_reset_code as password_reset_code_matches,
 )
 
 INVALID_VERIFICATION_CODE_MESSAGE = "Invalid verification code."
@@ -184,6 +185,37 @@ def request_password_reset(
     db.commit()
 
 
+def verify_password_reset_code(
+    db: Session,
+    data: VerifyPasswordResetCodeRequest,
+) -> None:
+    normalized_email = data.email.lower()
+
+    user = db.scalar(
+        select(User).where(User.email == normalized_email)
+    )
+
+    if user is None:
+        raise ValueError(INVALID_PASSWORD_RESET_CODE_MESSAGE)
+
+    if not user.is_active:
+        raise ValueError("Account is deactivated.")
+
+    latest_code = get_latest_active_password_reset_code(
+        db,
+        user.user_id,
+    )
+
+    if latest_code is None:
+        raise ValueError(INVALID_PASSWORD_RESET_CODE_MESSAGE)
+
+    if not password_reset_code_matches(
+        data.code,
+        latest_code.code_hash,
+    ):
+        raise ValueError(INVALID_PASSWORD_RESET_CODE_MESSAGE)
+
+
 def reset_password(
     db: Session,
     data: ResetPasswordRequest,
@@ -208,7 +240,7 @@ def reset_password(
     if latest_code is None:
         raise ValueError(INVALID_PASSWORD_RESET_CODE_MESSAGE)
 
-    if not verify_password_reset_code(
+    if not password_reset_code_matches(
         data.code,
         latest_code.code_hash,
     ):
