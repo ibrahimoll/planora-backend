@@ -143,7 +143,6 @@ def _build_code_email_html(
     safe_eyebrow = escape(eyebrow)
     safe_heading = escape(heading)
     safe_intro = escape(intro)
-    safe_code = escape(code.strip())
     safe_code_display = escape(" ".join(code.strip()))
     safe_security_note = escape(security_note)
     safe_expire_minutes = escape(str(expire_minutes))
@@ -153,57 +152,61 @@ def _build_code_email_html(
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <meta name="supported-color-schemes" content="dark">
     <title>{safe_heading}</title>
   </head>
-  <body style="margin:0;padding:0;background:#f3f5f8;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+  <body style="margin:0;padding:0;background:#0b1018;font-family:Arial,Helvetica,sans-serif;color:#f8fafc;">
     <span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all;">
       {safe_preview_text}
     </span>
 
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f5f8;margin:0;padding:34px 14px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0b1018;margin:0;padding:34px 14px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:22px;overflow:hidden;border:1px solid #e5e7eb;box-shadow:0 14px 34px rgba(17,24,39,0.08);">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#111722;border-radius:24px;overflow:hidden;border:1px solid #2b3342;box-shadow:0 22px 54px rgba(0,0,0,0.42);">
             <tr>
-              <td style="padding:30px 34px 22px 34px;background:#ffffff;border-bottom:1px solid #eef2f7;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-                  <tr>
-                    <td align="left" style="color:#111827;font-size:20px;font-weight:800;letter-spacing:-0.2px;">
-                      Planora
-                    </td>
-                    <td align="right" style="color:#6b7280;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.9px;">
-                      Security
-                    </td>
-                  </tr>
-                </table>
+              <td style="height:76px;background:#171d28;border-bottom:1px solid #2b3342;line-height:76px;font-size:1px;">
+                &nbsp;
               </td>
             </tr>
 
             <tr>
-              <td style="padding:34px 34px 8px 34px;">
-                <div style="display:inline-block;margin:0 0 14px 0;padding:6px 10px;border-radius:999px;background:#f3f4f6;color:#4b5563;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1.1px;">
+              <td style="padding:40px 42px 8px 42px;background:#101721;">
+                <div style="margin:0 0 26px 0;color:#f8fafc;font-size:30px;line-height:1;font-weight:500;letter-spacing:-0.4px;">
+                  Planora
+                </div>
+                <div style="margin:0 0 18px 0;color:#a9b4c7;font-size:13px;line-height:1.3;font-weight:800;text-transform:uppercase;letter-spacing:3.2px;">
                   {safe_eyebrow}
                 </div>
-                <h1 style="margin:0;color:#111827;font-size:32px;line-height:1.18;font-weight:800;letter-spacing:-0.7px;">
+                <h1 style="margin:0;color:#ffffff;font-size:46px;line-height:1.08;font-weight:800;letter-spacing:-1.4px;">
                   {safe_heading}
                 </h1>
-                <p style="margin:16px 0 0 0;color:#4b5563;font-size:16px;line-height:1.7;">
+                <p style="margin:20px 0 0 0;color:#b8c2d2;font-size:17px;line-height:1.75;font-weight:400;">
                   {safe_intro}
                 </p>
               </td>
             </tr>
 
             <tr>
-              <td style="padding:22px 34px 20px 34px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f9fafb;border:1px solid #dfe3ea;border-radius:20px;">
+              <td style="padding:30px 42px 24px 42px;background:#101721;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#171d28;border:1px solid #3a4354;border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);">
                   <tr>
-                    <td align="center" style="padding:24px 18px 23px 18px;">
-                      <div style="color:#6b7280;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:13px;">
+                    <td align="center" style="padding:29px 20px 28px 20px;">
+                      <div style="color:#aeb8ca;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:2.7px;margin-bottom:18px;">
                         Your secure code
                       </div>
-                      <div style="font-family:'Courier New',Courier,monospace;color:#111827;font-size:38px;line-height:1;font-weight:800;letter-spacing:6px;">
-                        {safe_code_display}
-                      </div>
+                      <table role="presentation" cellspacing="0" cellpadding="0" align="center">
+                        <tr>
+                          <td style="width:62px;border-top:1px solid #485165;font-size:1px;line-height:1px;">&nbsp;</td>
+                          <td style="padding:0 14px;color:#a78bfa;font-size:18px;line-height:1;">✦</td>
+                          <td style="font-family:'Courier New',Courier,monospace;color:#ffffff;font-size:42px;line-height:1;font-weight:700;letter-spacing:9px;white-space:nowrap;text-shadow:0 2px 14px rgba(255,255,255,0.10);">
+                            {safe_code_display}
+                          </td>
+                          <td style="padding:0 14px;color:#a78bfa;font-size:18px;line-height:1;">✦</td>
+                          <td style="width:62px;border-top:1px solid #485165;font-size:1px;line-height:1px;">&nbsp;</td>
+                        </tr>
+                      </table>
                     </td>
                   </tr>
                 </table>
@@ -211,16 +214,17 @@ def _build_code_email_html(
             </tr>
 
             <tr>
-              <td style="padding:0 34px 30px 34px;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;">
+              <td style="padding:0 42px 38px 42px;background:#101721;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#171d28;border:1px solid #323b4d;border-radius:16px;">
                   <tr>
-                    <td width="44" valign="top" style="padding:16px 0 16px 18px;">
-                      <div style="width:30px;height:30px;border-radius:999px;background:#eef2ff;color:#3730a3;text-align:center;line-height:30px;font-size:16px;font-weight:800;">
-                        !
+                    <td width="54" valign="top" style="padding:20px 0 20px 22px;">
+                      <div style="width:34px;height:34px;border-radius:999px;border:2px solid #a78bfa;color:#a78bfa;text-align:center;line-height:31px;font-size:18px;font-weight:700;">
+                        ⏱
                       </div>
                     </td>
-                    <td style="padding:15px 18px 16px 12px;color:#4b5563;font-size:14px;line-height:1.6;">
-                      This code expires in <strong style="color:#111827;">{safe_expire_minutes} minutes</strong>. {safe_security_note}
+                    <td style="padding:20px 22px 20px 10px;color:#c2cad8;font-size:15px;line-height:1.65;">
+                      This code expires in <strong style="color:#a78bfa;font-weight:800;">{safe_expire_minutes} minutes</strong>.<br>
+                      {safe_security_note}
                     </td>
                   </tr>
                 </table>
@@ -228,20 +232,14 @@ def _build_code_email_html(
             </tr>
 
             <tr>
-              <td style="padding:22px 34px 28px 34px;border-top:1px solid #eef2f7;background:#fbfcfe;">
-                <p style="margin:0;color:#94a3b8;font-size:13px;line-height:1.6;">
-                  You received this email because a Planora account action was requested for this email address.
-                </p>
-                <p style="margin:12px 0 0 0;color:#6b7280;font-size:13px;font-weight:700;">
-                  Planora Team
+              <td style="padding:0 42px 30px 42px;background:#101721;">
+                <div style="height:1px;background:#262f3f;line-height:1px;font-size:1px;">&nbsp;</div>
+                <p style="margin:22px 0 0 0;text-align:center;color:#8792a6;font-size:13px;line-height:1.6;">
+                  © Planora. All rights reserved.
                 </p>
               </td>
             </tr>
           </table>
-
-          <p style="margin:18px 0 0 0;color:#9ca3af;font-size:12px;line-height:1.6;">
-            © Planora. All rights reserved.
-          </p>
         </td>
       </tr>
     </table>
