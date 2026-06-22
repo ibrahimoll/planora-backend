@@ -20,6 +20,7 @@ from app.schemas.auth import (
     TokenResponse,
     UserResponse,
     VerifyEmailRequest,
+    VerifyPasswordResetCodeRequest,
 )
 from app.services.auth_service import (
     login_user,
@@ -28,6 +29,7 @@ from app.services.auth_service import (
     resend_verification_code,
     reset_password,
     verify_email,
+    verify_password_reset_code,
 )
 from app.services.email_service import EmailDeliveryError
 from app.services.profile_service import (
@@ -172,6 +174,33 @@ def forgot_password(
 
     return MessageResponse(
         message="If an account with that email exists, a password reset code has been sent."
+    )
+
+
+@router.post("/verify-reset-code")
+def verify_user_password_reset_code(
+    request: Request,
+    data: VerifyPasswordResetCodeRequest,
+    db: DBSession,
+) -> MessageResponse:
+    check_rate_limit(
+        request,
+        "auth:verify-reset-code",
+        limit=5,
+        window_seconds=300,
+        identifier=data.email,
+    )
+
+    try:
+        verify_password_reset_code(db, data)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+    return MessageResponse(
+        message="Reset code verified successfully."
     )
 
 
