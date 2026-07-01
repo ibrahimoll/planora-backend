@@ -14,6 +14,7 @@ from app.schemas.notification_schema import NotificationType
 from app.schemas.report_delivery_schema import (
     ReportDeliveryRequest,
     ReportDeliveryResponse,
+    ReportRequestTokenResponse,
 )
 from app.schemas.report_schema import (
     ProjectReportResponse,
@@ -24,6 +25,7 @@ from app.services.email_service import EmailDeliveryError
 from app.services.notification_service import create_notification
 from app.services.report_delivery_service import send_project_report_delivery
 from app.services.report_request_email_service import send_actionable_report_request_email
+from app.services.report_request_token_service import resolve_report_request_token
 from app.services.report_service import (
     create_report_export_history,
     generate_project_report,
@@ -38,6 +40,7 @@ CurrentAdmin = Annotated[User, Depends(get_current_admin_user)]
 
 PROJECT_NOT_FOUND = "Project not found"
 REPORT_NOT_READY = "No admin-approved report is ready for this project yet"
+INVALID_REPORT_TOKEN = "Invalid or expired report request token"
 
 router = APIRouter(
     prefix="/reports",
@@ -71,6 +74,29 @@ def find_user_by_email(db: Session, address: str) -> User | None:
             User.is_active.is_(True),
         )
         .first()
+    )
+
+
+@router.get(
+    "/requests/resolve",
+    response_model=ReportRequestTokenResponse,
+)
+def resolve_report_request(
+    token: str,
+    current_admin: CurrentAdmin,
+):
+    payload = resolve_report_request_token(token)
+
+    if payload is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=INVALID_REPORT_TOKEN,
+        )
+
+    return ReportRequestTokenResponse(
+        project_id=int(payload["project_id"]),
+        address=str(payload["requester_email"]),
+        name=str(payload.get("requester_name") or "") or None,
     )
 
 
