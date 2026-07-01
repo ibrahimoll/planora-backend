@@ -25,3 +25,5 @@ class ReportRequestTokenResponse(BaseModel):
     project_id: int
     address: str
     name: str | None = None
+    request_id: int | None = None
+    status: str | None = None
