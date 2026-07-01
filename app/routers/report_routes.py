@@ -19,8 +19,9 @@ from app.schemas.report_schema import (
     ReportExportHistoryListResponse,
     ReportRequestResponse,
 )
-from app.services.email_service import EmailDeliveryError, send_report_request_email
+from app.services.email_service import EmailDeliveryError
 from app.services.report_delivery_service import send_project_report_delivery
+from app.services.report_request_email_service import send_actionable_report_request_email
 from app.services.report_service import (
     create_report_export_history,
     generate_project_report,
@@ -122,7 +123,7 @@ def request_project_report(
     delivered_count = 0
     for admin in admins:
         try:
-            send_report_request_email(
+            send_actionable_report_request_email(
                 recipient_email=admin.email,
                 admin_name=admin.full_name,
                 requester_name=current_user.full_name,
