@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 from html import escape
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from app.core.config import settings
 from app.services.email_service import _send_email
+
+PLANORA_ADMIN_FALLBACK_URL = "https://planora-pi-inky.vercel.app"
+
+
+def admin_base_url() -> str:
+    configured_url = settings.admin_dashboard_url.strip().rstrip("/")
+
+    if not configured_url or "localhost" in configured_url or "127.0.0.1" in configured_url:
+        return PLANORA_ADMIN_FALLBACK_URL
+
+    return configured_url
 
 
 def build_send_report_url(
@@ -13,15 +24,16 @@ def build_send_report_url(
     requester_email: str,
     requester_name: str | None,
 ) -> str:
-    base_url = settings.admin_dashboard_url.strip().rstrip("/")
-    query = urlencode(
+    base_url = admin_base_url()
+    report_query = urlencode(
         {
             "projectId": str(project_id),
             "address": requester_email,
             "name": requester_name or "",
         }
     )
-    return f"{base_url}/dashboard/send-report?{query}"
+    next_path = f"/dashboard/send-report?{report_query}"
+    return f"{base_url}/login?next={quote(next_path, safe='')}"
 
 
 def send_actionable_report_request_email(
@@ -57,7 +69,7 @@ Project ID: {project_id}
 Project type: {project_type}
 Requested by: {requester_name or requester_email} <{requester_email}>
 
-Open this link to auto-fill the admin Send Report page:
+Open this link to sign in and auto-fill the admin Send Report page:
 {send_url}
 
 You only need to add your admin note and click Generate & Send Report.
@@ -81,7 +93,7 @@ Planora Team
               <td style="padding:28px 30px;">
                 <div style="font-size:14px;font-weight:800;color:#7c3aed;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">Report request</div>
                 <h1 style="margin:0 0 14px 0;font-size:28px;line-height:1.2;color:#111827;">A user requested a report</h1>
-                <p style="margin:0 0 20px 0;color:#4b5563;font-size:15px;line-height:1.6;">Hello {safe_admin_name}, the Send Report page will be auto-filled from this request.</p>
+                <p style="margin:0 0 20px 0;color:#4b5563;font-size:15px;line-height:1.6;">Hello {safe_admin_name}, sign in and Planora will auto-fill the Send Report page from this request.</p>
 
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f8f5ff;border:1px solid #eadfff;border-radius:16px;">
                   <tr><td style="padding:18px 20px;color:#111827;font-size:15px;line-height:1.8;">
@@ -96,7 +108,7 @@ Planora Team
                   <a href="{safe_send_url}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-weight:800;border-radius:14px;padding:14px 22px;">Open Send Report</a>
                 </div>
 
-                <p style="margin:0;color:#6b7280;font-size:13px;line-height:1.6;">After opening the link, add your admin note and click Generate & Send Report.</p>
+                <p style="margin:0;color:#6b7280;font-size:13px;line-height:1.6;">After signing in, add your admin note and click Generate & Send Report.</p>
               </td>
             </tr>
           </table>
