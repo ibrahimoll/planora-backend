@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from app.core.config import settings
-from app.db.session import test_database_connection
+from app.db.session import engine, test_database_connection
+from app.db.report_request_bootstrap import ensure_report_requests_table
 from app.routers.auth import router as auth_router
 from app.routers.project_routes import router as project_router
 from app.routers.task_routes import router as task_router
@@ -46,7 +47,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     print("EMAIL DEBUG brevo key length:", len(brevo_key))
     print("EMAIL DEBUG brevo key starts xkeysib:", brevo_key.startswith("xkeysib-"))
     print("EMAIL DEBUG brevo key has spaces:", any(ch.isspace() for ch in brevo_key))
-    
+
+    ensure_report_requests_table(engine)
     start_deadline_reminder_scheduler()
 
     try:
@@ -73,7 +75,7 @@ app.add_middleware(
         "Accept",
         "Origin",
         "X-Requested-With",
-    ],
+    ]
 )
 
 @app.middleware("http")
