@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     deadline_reminder_include_overdue: bool = True
 
     password_reset_frontend_url: str = "http://localhost:8080/reset-password"
+    admin_dashboard_url: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
