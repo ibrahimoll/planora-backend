@@ -19,3 +19,9 @@ class ReportDeliveryResponse(BaseModel):
     address: str
     delivered_at: datetime
     export_id: int | None = None
+
+
+class ReportRequestTokenResponse(BaseModel):
+    project_id: int
+    address: str
+    name: str | None = None
