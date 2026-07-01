@@ -42,6 +42,20 @@ router = APIRouter(
 )
 
 
+def unique_admin_recipients(admins: list[User]) -> list[User]:
+    seen_emails: set[str] = set()
+    recipients: list[User] = []
+
+    for admin in admins:
+        normalized_email = admin.email.strip().lower()
+        if not normalized_email or normalized_email in seen_emails:
+            continue
+        seen_emails.add(normalized_email)
+        recipients.append(admin)
+
+    return recipients
+
+
 @router.get(
     "/projects/{project_id}",
     response_model=ProjectReportResponse,
@@ -113,15 +127,16 @@ def request_project_report(
         )
         .all()
     )
+    recipients = unique_admin_recipients(admins)
 
-    if not admins:
+    if not recipients:
         raise HTTPException(
             status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="No verified active admin is available to receive report requests.",
         )
 
     delivered_count = 0
-    for admin in admins:
+    for admin in recipients:
         try:
             send_actionable_report_request_email(
                 recipient_email=admin.email,
