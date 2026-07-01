@@ -122,3 +122,12 @@ class ReportExportHistoryListResponse(BaseModel):
     total: int = Field(ge=0)
     limit: int = Field(ge=1)
     offset: int = Field(ge=0)
+
+
+class ReportRequestResponse(BaseModel):
+    success: bool = True
+    message: str
+    project_id: int
+    project_title: str
+    requested_at: datetime
+    notified_admin_count: int = Field(ge=0)
