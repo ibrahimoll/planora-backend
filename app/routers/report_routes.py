@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,7 +13,9 @@ from app.models.user import User
 from app.schemas.report_schema import (
     ProjectReportResponse,
     ReportExportHistoryListResponse,
+    ReportRequestResponse,
 )
+from app.services.email_service import EmailDeliveryError, send_report_request_email
 from app.services.report_service import (
     create_report_export_history,
     generate_project_report,
@@ -69,6 +72,75 @@ def export_project_report(
         update={
             "export_id": export.report_export_id,
         }
+    )
+
+
+@router.post(
+    "/projects/{project_id}/request",
+    response_model=ReportRequestResponse,
+    status_code=http_status.HTTP_202_ACCEPTED,
+)
+def request_project_report(
+    project_id: int,
+    db: DBSession,
+    current_user: CurrentUser,
+):
+    project = get_accessible_project_for_report(
+        db=db,
+        project_id=project_id,
+        current_user=current_user,
+    )
+
+    if project is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=PROJECT_NOT_FOUND,
+        )
+
+    admins = (
+        db.query(User)
+        .filter(
+            User.role == "admin",
+            User.is_active.is_(True),
+            User.is_email_verified.is_(True),
+        )
+        .all()
+    )
+
+    if not admins:
+        raise HTTPException(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No verified active admin is available to receive report requests.",
+        )
+
+    delivered_count = 0
+    for admin in admins:
+        try:
+            send_report_request_email(
+                recipient_email=admin.email,
+                admin_name=admin.full_name,
+                requester_name=current_user.full_name,
+                requester_email=current_user.email,
+                project_title=project.title,
+                project_id=project.project_id,
+                project_type=project.project_type,
+            )
+            delivered_count += 1
+        except EmailDeliveryError:
+            continue
+
+    if delivered_count == 0:
+        raise HTTPException(
+            status_code=http_status.HTTP_502_BAD_GATEWAY,
+            detail="Report request could not be emailed to admins.",
+        )
+
+    return ReportRequestResponse(
+        message="Report request sent to admin.",
+        project_id=project.project_id,
+        project_title=project.title,
+        requested_at=datetime.now(timezone.utc),
+        notified_admin_count=delivered_count,
     )
 
 
