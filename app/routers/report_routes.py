@@ -8,14 +8,19 @@ from fastapi import status as http_status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.dependencies.auth import get_current_active_verified_user
+from app.dependencies.auth import get_current_active_verified_user, get_current_admin_user
 from app.models.user import User
+from app.schemas.report_delivery_schema import (
+    ReportDeliveryRequest,
+    ReportDeliveryResponse,
+)
 from app.schemas.report_schema import (
     ProjectReportResponse,
     ReportExportHistoryListResponse,
     ReportRequestResponse,
 )
 from app.services.email_service import EmailDeliveryError, send_report_request_email
+from app.services.report_delivery_service import send_project_report_delivery
 from app.services.report_service import (
     create_report_export_history,
     generate_project_report,
@@ -26,6 +31,7 @@ from app.services.report_service import (
 
 DBSession = Annotated[Session, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(get_current_active_verified_user)]
+CurrentAdmin = Annotated[User, Depends(get_current_admin_user)]
 
 PROJECT_NOT_FOUND = "Project not found"
 
@@ -141,6 +147,72 @@ def request_project_report(
         project_title=project.title,
         requested_at=datetime.now(timezone.utc),
         notified_admin_count=delivered_count,
+    )
+
+
+@router.post(
+    "/projects/{project_id}/deliver",
+    response_model=ReportDeliveryResponse,
+)
+def deliver_project_report(
+    project_id: int,
+    payload: ReportDeliveryRequest,
+    db: DBSession,
+    current_admin: CurrentAdmin,
+):
+    address = payload.address.strip()
+
+    if not address:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Recipient address is required.",
+        )
+
+    project = get_accessible_project_for_report(
+        db=db,
+        project_id=project_id,
+        current_user=current_admin,
+    )
+
+    if project is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=PROJECT_NOT_FOUND,
+        )
+
+    report = generate_project_report(
+        db=db,
+        project=project,
+    )
+
+    export = create_report_export_history(
+        db=db,
+        project=project,
+        current_user=current_admin,
+        report=report,
+    )
+
+    try:
+        send_project_report_delivery(
+            address=address,
+            name=payload.name,
+            admin_name=current_admin.full_name,
+            note=payload.note,
+            report=report,
+        )
+    except EmailDeliveryError as exc:
+        raise HTTPException(
+            status_code=http_status.HTTP_502_BAD_GATEWAY,
+            detail="Report could not be emailed to the recipient.",
+        ) from exc
+
+    return ReportDeliveryResponse(
+        message="Project report sent to user.",
+        project_id=project.project_id,
+        project_title=project.title,
+        address=address,
+        delivered_at=datetime.now(timezone.utc),
+        export_id=export.report_export_id,
     )
 
 
