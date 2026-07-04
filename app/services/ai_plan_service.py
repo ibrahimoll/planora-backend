@@ -33,6 +33,7 @@ from app.services.activity_log_service import create_activity_log
 from app.services.ai_provider_service import (
     clear_last_ai_provider_failure_reason,
     generate_ai_reply_from_provider,
+    generate_local_planner_reply,
     get_last_ai_provider_failure_reason,
 )
 
@@ -1341,6 +1342,16 @@ def _build_adaptive_fallback_recommendations() -> list[str]:
     ]
 
 
+def _has_usable_fallback_project_context(project: Project, input_prompt: str) -> bool:
+    project_context = _extract_user_project_context(
+        project=project,
+        input_prompt=input_prompt,
+    )
+    meaningful_tokens = _quality_tokens(project_context) - GENERIC_CONTEXT_TOKENS
+
+    return len(meaningful_tokens) >= 2
+
+
 def _build_local_fallback_generated_plan(
     *,
     project: Project,
@@ -1367,6 +1378,62 @@ def _build_local_fallback_generated_plan(
         settings.gemini_model,
         settings.gemini_timeout_seconds,
     )
+
+    local_prompt = _build_structured_ai_plan_prompt(
+        project=project,
+        input_prompt=input_prompt,
+        task_count=task_count,
+        include_milestones=include_milestones,
+    )
+    local_reply = generate_local_planner_reply(local_prompt)
+    local_data = _parse_json_object(local_reply)
+
+    if local_data is not None:
+        normalized_plan = _normalize_ai_plan_response(
+            ai_data=local_data,
+            project=project,
+            input_prompt=input_prompt,
+            task_count=task_count,
+            include_milestones=include_milestones,
+            ai_generation_status="fallback",
+        )
+
+        if normalized_plan is not None and len(normalized_plan["tasks"]) >= task_count:
+            normalized_plan["tasks"] = normalized_plan["tasks"][:task_count]
+            normalized_plan["source"] = "domain_fallback_v2"
+            normalized_plan["ai_generation_status"] = "fallback"
+            normalized_plan["success"] = True
+            normalized_plan["message"] = (
+                "A project-specific fallback plan was generated while the AI provider was unavailable."
+            )
+            normalized_plan["fallback_reason"] = reason
+            normalized_plan["fallback_internal_reason"] = internal_reason
+            logger.info(
+                "AI Planner fallback used as last resort. source=domain_fallback_v2 task_count=%s domain=%s reason=%s fallback_reason=%s",
+                len(normalized_plan["tasks"]),
+                normalized_plan.get("domain"),
+                internal_reason,
+                reason,
+            )
+            return normalized_plan
+
+        logger.warning(
+            "AI Planner domain fallback failed quality validation. project_id=%s accepted_task_count=%s requested_task_count=%s",
+            project.project_id,
+            len(normalized_plan["tasks"]) if normalized_plan is not None else 0,
+            task_count,
+        )
+    else:
+        logger.warning(
+            "AI Planner domain fallback JSON parse failed. project_id=%s",
+            project.project_id,
+        )
+
+    if _has_usable_fallback_project_context(project=project, input_prompt=input_prompt):
+        logger.error(
+            "AI Planner domain fallback unavailable despite usable project context. Falling back to adaptive safety plan. project_id=%s",
+            project.project_id,
+        )
 
     tasks = _build_adaptive_fallback_tasks(
         project=project,
