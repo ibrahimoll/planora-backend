@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     google_client_id: str
 
     ai_provider: str = Field(
-        default="local",
+        default="auto",
         validation_alias=AliasChoices("AI_PROVIDER", "ai_provider"),
     )
     gemini_api_key: str | None = Field(
@@ -76,6 +76,19 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    def model_post_init(self, __context: object) -> None:
+        """Resolve the effective AI provider after environment loading."""
+        provider = self.ai_provider.strip().lower()
+        has_gemini_key = bool((self.gemini_api_key or "").strip())
+
+        if provider in {"", "auto"}:
+            self.ai_provider = "gemini" if has_gemini_key else "local"
+            return
+
+        # Old deployments may still have AI_PROVIDER=local copied from the
+        # previous example file. A configured Gemini key should take priority.
+        if provider == "local" and has_gemini_key:
+            self.ai_provider = "gemini"
     @property
     def cors_origins(self) -> list[str]:
         return [

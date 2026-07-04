@@ -1123,7 +1123,7 @@ def _fallback_task_description(
 def _local_secondary_fallback_specs(display_phrase: str) -> list[dict[str, Any]]:
     return [
         {
-            "title": f"Name one measurable result for {display_phrase}",
+            "title": "Define one measurable outcome",
             "goal": f"Choose one small result that proves progress on {display_phrase}.",
             "steps": [
                 "Write the result in one plain sentence.",
@@ -1135,7 +1135,7 @@ def _local_secondary_fallback_specs(display_phrase: str) -> list[dict[str, Any]]
             "why": "A narrow target keeps the fallback plan usable while AI detail is unavailable.",
         },
         {
-            "title": f"List the real-world parts of {display_phrase}",
+            "title": "List available and missing resources",
             "goal": f"Identify the people, tools, places, or signals involved in {display_phrase}.",
             "steps": [
                 "Write the physical items or information you already have.",
@@ -1147,7 +1147,7 @@ def _local_secondary_fallback_specs(display_phrase: str) -> list[dict[str, Any]]
             "why": "Knowing what is ready prevents vague work from replacing action.",
         },
         {
-            "title": f"Set one short session for {display_phrase}",
+            "title": "Schedule the first focused session",
             "goal": f"Give {display_phrase} a repeatable time box instead of an open-ended effort.",
             "steps": [
                 "Choose a short session length you can finish without rushing.",
@@ -1159,7 +1159,7 @@ def _local_secondary_fallback_specs(display_phrase: str) -> list[dict[str, Any]]
             "why": "Short sessions make the fallback plan easier to start and repeat.",
         },
         {
-            "title": f"Run the first small attempt at {display_phrase}",
+            "title": "Run the first small attempt",
             "goal": f"Create real feedback from doing a small part of {display_phrase}.",
             "steps": [
                 "Use the result note to choose one small attempt.",
@@ -1171,7 +1171,7 @@ def _local_secondary_fallback_specs(display_phrase: str) -> list[dict[str, Any]]
             "why": "A small attempt gives better information than planning from memory.",
         },
         {
-            "title": f"Record evidence from {display_phrase}",
+            "title": "Record evidence from the attempt",
             "goal": f"Track what is happening so {display_phrase} can improve over time.",
             "steps": [
                 "Choose one simple measure that matches the result note.",
@@ -1183,7 +1183,7 @@ def _local_secondary_fallback_specs(display_phrase: str) -> list[dict[str, Any]]
             "why": "Evidence keeps the fallback plan from becoming generic busywork.",
         },
         {
-            "title": f"Adjust the next attempt for {display_phrase}",
+            "title": "Choose one improvement",
             "goal": f"Use the latest evidence to choose the next version of {display_phrase}.",
             "steps": [
                 "Read the latest observation from the progress tracker.",
@@ -1195,7 +1195,7 @@ def _local_secondary_fallback_specs(display_phrase: str) -> list[dict[str, Any]]
             "why": "A single adjustment helps progress without adding complexity.",
         },
         {
-            "title": f"Repeat the strongest action for {display_phrase}",
+            "title": "Repeat the strongest action",
             "goal": f"Reinforce the part of {display_phrase} that produced the clearest progress.",
             "steps": [
                 "Pick the action that worked best in the tracker.",
@@ -1207,7 +1207,7 @@ def _local_secondary_fallback_specs(display_phrase: str) -> list[dict[str, Any]]
             "why": "Repeating what works turns one-off progress into a usable pattern.",
         },
         {
-            "title": f"Review the next target for {display_phrase}",
+            "title": "Review progress and set the next target",
             "goal": f"Choose a next target for {display_phrase} from actual results.",
             "steps": [
                 "Review the result note, readiness list, and progress tracker.",
@@ -1219,7 +1219,7 @@ def _local_secondary_fallback_specs(display_phrase: str) -> list[dict[str, Any]]
             "why": "Review keeps the plan grounded when AI-specific detail is unavailable.",
         },
         {
-            "title": f"Prepare the next session for {display_phrase}",
+            "title": "Prepare the next session",
             "goal": f"Make the next session for {display_phrase} easy to start.",
             "steps": [
                 "Copy the next target into a fresh session note.",
@@ -1231,7 +1231,7 @@ def _local_secondary_fallback_specs(display_phrase: str) -> list[dict[str, Any]]
             "why": "Preparation protects momentum after the first review.",
         },
         {
-            "title": f"Write a simple consistency rule for {display_phrase}",
+            "title": "Create a consistency rule",
             "goal": f"Keep {display_phrase} moving even when the original plan needs editing.",
             "steps": [
                 "Choose the minimum session length you will still count.",
@@ -1382,13 +1382,15 @@ def _build_local_fallback_generated_plan(
     )
     return {
         "success": True,
-        "message": f"Using fallback because: {reason}",
+        "message": (
+            "A starter plan was generated while detailed AI output was unavailable."
+        ),
         "ai_generation_status": "fallback",
         "source": "adaptive_fallback_v1",
         "domain": "adaptive_plan",
         "summary": (
-            f"Using fallback because: {reason}. "
-            f"Using an adaptive fallback plan for '{project.title}' with {len(tasks)} tasks."
+            f"Planora created a practical starter plan for '{project.title}' "
+            f"with {len(tasks)} tasks. Review and edit the tasks before accepting."
         ),
         "fallback_reason": reason,
         "fallback_internal_reason": internal_reason,
