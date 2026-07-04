@@ -463,6 +463,15 @@ def request_project_report(
             detail=PROJECT_NOT_FOUND,
         )
 
+    # Lock this user's row until the pending request check and insert
+    # are complete. This prevents two simultaneous mobile requests
+    # from both sending an email to the admins.
+    db.execute(
+        select(User)
+        .where(User.user_id == current_user.user_id)
+        .with_for_update()
+    ).scalar_one()
+
     existing_pending = (
         db.execute(
             select(ReportRequest)
@@ -478,17 +487,28 @@ def request_project_report(
         .first()
     )
 
-    if existing_pending is None:
-        report_request = ReportRequest(
-            project_id=project.project_id,
-            requested_by_user_id=current_user.user_id,
-            status="pending",
-        )
-        db.add(report_request)
+    # A request already exists, so do not create another row
+    # and do not notify the admins again.
+    if existing_pending is not None:
         db.commit()
-        db.refresh(report_request)
-    else:
-        report_request = existing_pending
+
+        return ReportRequestResponse(
+            message="A report request is already pending.",
+            project_id=project.project_id,
+            project_title=project.title,
+            requested_at=existing_pending.requested_at,
+            notified_admin_count=0,
+        )
+
+    report_request = ReportRequest(
+        project_id=project.project_id,
+        requested_by_user_id=current_user.user_id,
+        status="pending",
+    )
+
+    db.add(report_request)
+    db.commit()
+    db.refresh(report_request)
 
     admins = (
         db.query(User)
@@ -499,15 +519,25 @@ def request_project_report(
         )
         .all()
     )
+
+    # Prevent duplicate emails when multiple admin rows use
+    # the same email address.
     recipients = unique_admin_recipients(admins)
 
     if not recipients:
+        db.delete(report_request)
+        db.commit()
+
         raise HTTPException(
             status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No verified active admin is available to receive report requests.",
+            detail=(
+                "No verified active admin is available "
+                "to receive report requests."
+            ),
         )
 
     delivered_count = 0
+
     for admin in recipients:
         try:
             send_actionable_report_request_email(
@@ -519,11 +549,17 @@ def request_project_report(
                 project_id=project.project_id,
                 project_type=project.project_type,
             )
+
             delivered_count += 1
+
         except EmailDeliveryError:
             continue
 
     if delivered_count == 0:
+
+        db.delete(report_request)
+        db.commit()
+
         raise HTTPException(
             status_code=http_status.HTTP_502_BAD_GATEWAY,
             detail="Report request could not be emailed to admins.",
