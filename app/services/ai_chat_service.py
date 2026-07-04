@@ -746,12 +746,30 @@ def _format_task_for_prompt(task: Task) -> str:
         else "no due date"
     )
 
+    start_text = (
+        _to_utc(task.start_date).date().isoformat()
+        if getattr(task, "start_date", None) is not None
+        else "no start date"
+    )
+
+    description = " ".join((task.description or "").strip().split())
+
+    if len(description) > 600:
+        description = f"{description[:597].rstrip()}..."
+
+    assignee = getattr(task, "assigned_to", None)
+
     return (
-        f"- title: {task.title}\n"
+        f"- task_id: {task.task_id}\n"
+        f"  title: {task.title}\n"
+        f"  description: {description or 'No description'}\n"
         f"  status: {task.status}\n"
         f"  priority: {task.priority}\n"
+        f"  assigned_to: {assignee or 'unassigned'}\n"
+        f"  start_date: {start_text}\n"
         f"  due_date: {due_text}\n"
-        f"  estimated_hours: {float(task.estimated_hours or 0)}"
+        f"  estimated_hours: {float(task.estimated_hours or 0)}\n"
+        f"  actual_hours: {float(task.actual_hours or 0)}"
     )
 
 
@@ -819,6 +837,17 @@ Your job:
 - Do not mention hidden implementation details.
 - Do not expose secrets, tokens, passwords, hashes, or unrelated users.
 - If information is missing, say what is missing and suggest the next action.
+- Answer the user's exact question first.
+- Never give generic productivity advice when project data is available.
+- Refer to real task titles from the supplied task list.
+- When recommending work, choose the most useful exact task and explain why.
+- If the user asks what to do next, give one main task first, not a long unfocused list.
+- Break difficult work into small, concrete actions.
+- Clearly distinguish project facts from your recommendations.
+- Use short headings and bullets when they improve readability.
+- End with a practical next action when appropriate.
+- Do not repeatedly introduce yourself in every reply.
+- Use the recent conversation so the reply feels continuous.
 
 Current user:
 - user_id: {current_user.user_id}
@@ -1017,6 +1046,43 @@ def _save_chat_exchange(
 
     return user_message, ai_message, assistant_context
 
+def _build_follow_up_suggestions(
+    project: Project,
+    tasks: list[Task],
+    latest_risk: RiskAnalysis | None,
+) -> list[str]:
+    summary = _calculate_task_summary(tasks)
+    suggestions: list[str] = []
+
+    if summary["blocked_tasks"] > 0:
+        suggestions.append("How can I unblock the blocked tasks?")
+    elif summary["overdue_tasks"] > 0:
+        suggestions.append("Which overdue task should I handle first?")
+    elif summary["in_progress_tasks"] > 0:
+        suggestions.append("What should I focus on next?")
+    else:
+        suggestions.append("What should I do first?")
+
+    if latest_risk is not None:
+        suggestions.append("Explain the current project risk")
+    else:
+        suggestions.append("Am I likely to miss the deadline?")
+
+    suggestions.append("Make me a realistic plan for this week")
+
+    if project.project_type == "team":
+        suggestions.append("How is the team workload?")
+    else:
+        suggestions.append("Break my next task into small steps")
+
+    unique_suggestions: list[str] = []
+
+    for suggestion in suggestions:
+        if suggestion not in unique_suggestions:
+            unique_suggestions.append(suggestion)
+
+    return unique_suggestions[:4]
+
 
 def create_ai_chat_exchange(
     db: Session,
@@ -1034,8 +1100,19 @@ def create_ai_chat_exchange(
         project_id=project.project_id,
     )
 
+    suggested_prompts = _build_follow_up_suggestions(
+        project=project,
+        tasks=tasks,
+        latest_risk=latest_risk,
+    )
+
     if not _is_project_related_message(chat_data.message):
         ai_reply, assistant_context = _build_out_of_scope_reply(project)
+
+        assistant_context = {
+            **assistant_context,
+            "suggested_prompts": suggested_prompts,
+        }
 
         return _save_chat_exchange(
             db=db,
@@ -1046,6 +1123,7 @@ def create_ai_chat_exchange(
             assistant_context=assistant_context,
         )
 
+    # Build a reliable local answer in case the AI provider is unavailable.
     fallback_reply, assistant_context = _build_local_rule_based_reply(
         project=project,
         user_message=chat_data.message,
@@ -1053,27 +1131,10 @@ def create_ai_chat_exchange(
         latest_risk=latest_risk,
     )
 
-    if _should_use_deterministic_project_reply(chat_data.message):
-        assistant_context = {
-            **assistant_context,
-            "source": "local_rule_based_chat_v1",
-            "fallback_used": True,
-            "provider_skipped": True,
-            "provider_skip_reason": "deterministic_project_query",
-        }
-
-        return _save_chat_exchange(
-            db=db,
-            project=project,
-            current_user=current_user,
-            user_message_text=chat_data.message,
-            ai_reply=fallback_reply,
-            assistant_context=assistant_context,
-        )
-
     recent_messages = _get_recent_chat_history(
         db=db,
         project_id=project.project_id,
+        limit=14,
     )
 
     llm_prompt = _build_llm_prompt(
@@ -1089,14 +1150,24 @@ def create_ai_chat_exchange(
 
     if provider_reply is not None:
         ai_reply = provider_reply
+
         assistant_context = {
             **assistant_context,
-            "source": "gemini_llm_v1",
+            "source": "gemini_llm_v2",
             "fallback_used": False,
             "provider": "gemini",
+            "suggested_prompts": suggested_prompts,
         }
     else:
         ai_reply = fallback_reply
+
+        assistant_context = {
+            **assistant_context,
+            "source": "local_rule_based_chat_v2",
+            "fallback_used": True,
+            "provider": None,
+            "suggested_prompts": suggested_prompts,
+        }
 
     return _save_chat_exchange(
         db=db,
