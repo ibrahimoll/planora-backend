@@ -15,21 +15,52 @@ from app.models.user import User
 from app.schemas.ai_chat_schema import AIChatRequest
 from app.services.ai_provider_service import generate_ai_reply_from_provider
 
-
 def _to_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
 
     return value.astimezone(timezone.utc)
 
-
 def _normalize_message(value: str) -> str:
     return " ".join(value.lower().strip().split())
-
 
 def _contains_any(value: str, keywords: list[str]) -> bool:
     return any(keyword in value for keyword in keywords)
 
+def _is_greeting_message(user_message: str) -> bool:
+    message = _normalize_message(user_message)
+
+    if not message:
+        return False
+
+    exact_greetings = {
+        "hi",
+        "hello",
+        "hey",
+        "hi planora",
+        "hello planora",
+        "hey planora",
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "how are you",
+        "thanks",
+        "thank you",
+    }
+
+    if message in exact_greetings:
+        return True
+
+    greeting_prefixes = (
+        "hello ",
+        "hi ",
+        "hey ",
+        "good morning ",
+        "good afternoon ",
+        "good evening ",
+    )
+
+    return message.startswith(greeting_prefixes) and len(message.split()) <= 8
 
 def _is_project_related_message(user_message: str) -> bool:
     """
@@ -238,7 +269,7 @@ def _is_project_related_message(user_message: str) -> bool:
         "explain",
     ]
 
-    has_greeting = _contains_any(message, greeting_keywords)
+    has_greeting = _is_greeting_message(user_message)
     has_off_topic_keyword = _contains_any(message, off_topic_keywords)
     has_project_keyword = _contains_any(message, project_keywords)
     has_project_question_pattern = _contains_any(message, project_question_patterns)
@@ -264,7 +295,6 @@ def _is_project_related_message(user_message: str) -> bool:
 
     return False
 
-
 def _build_out_of_scope_reply(project: Project) -> tuple[str, dict[str, Any]]:
     reply = (
         f"I can only help with the Planora project '{project.title}'. "
@@ -285,7 +315,6 @@ def _build_out_of_scope_reply(project: Project) -> tuple[str, dict[str, Any]]:
 
     return reply, context
 
-
 def _get_project_tasks(
     db: Session,
     project_id: int,
@@ -298,7 +327,6 @@ def _get_project_tasks(
 
     return list(db.execute(stmt).scalars().all())
 
-
 def _get_latest_risk_analysis(
     db: Session,
     project_id: int,
@@ -310,7 +338,6 @@ def _get_latest_risk_analysis(
     )
 
     return db.execute(stmt).scalars().first()
-
 
 def _get_recent_chat_history(
     db: Session,
@@ -327,7 +354,6 @@ def _get_recent_chat_history(
     messages = list(db.execute(stmt).scalars().all())
 
     return list(reversed(messages))
-
 
 def _calculate_task_summary(tasks: list[Task]) -> dict[str, Any]:
     total_tasks = len(tasks)
@@ -369,7 +395,6 @@ def _calculate_task_summary(tasks: list[Task]) -> dict[str, Any]:
         "remaining_estimated_hours": round(remaining_estimated_hours, 2),
     }
 
-
 def _get_next_tasks(tasks: list[Task], limit: int = 3) -> list[Task]:
     incomplete_tasks = [
         task
@@ -394,7 +419,6 @@ def _get_next_tasks(tasks: list[Task], limit: int = 3) -> list[Task]:
         ),
     )[:limit]
 
-
 def _build_next_task_lines(tasks: list[Task]) -> list[str]:
     lines: list[str] = []
 
@@ -411,7 +435,6 @@ def _build_next_task_lines(tasks: list[Task]) -> list[str]:
         )
 
     return lines
-
 
 def _is_explanation_request(user_message: str) -> bool:
     message = _normalize_message(user_message)
@@ -448,7 +471,6 @@ def _is_explanation_request(user_message: str) -> bool:
 
     return _contains_any(message, explanation_patterns)
 
-
 def _should_use_deterministic_project_reply(user_message: str) -> bool:
     message = _normalize_message(user_message)
 
@@ -481,7 +503,6 @@ def _should_use_deterministic_project_reply(user_message: str) -> bool:
         message,
         deterministic_patterns,
     )
-
 
 def _find_referenced_task(user_message: str, tasks: list[Task]) -> Task | None:
     message = _normalize_message(user_message)
@@ -540,7 +561,6 @@ def _find_referenced_task(user_message: str, tasks: list[Task]) -> Task | None:
             return next_tasks[0]
 
     return None
-
 
 def _build_explanation_reply(
     project: Project,
@@ -640,7 +660,6 @@ def _build_explanation_reply(
         "Ask me about any task title, and I will explain it in simpler steps."
     )
 
-
 def _build_team_workload_reply(
     project: Project,
     tasks: list[Task],
@@ -739,7 +758,6 @@ def _build_team_workload_reply(
 
     return "\n".join(lines)
 
-
 def _format_task_for_prompt(task: Task) -> str:
     due_text = (
         _to_utc(task.due_date).date().isoformat()
@@ -773,7 +791,6 @@ def _format_task_for_prompt(task: Task) -> str:
         f"  actual_hours: {float(task.actual_hours or 0)}"
     )
 
-
 def _format_chat_history_for_prompt(messages: list[ChatMessage]) -> str:
     if not messages:
         return "No previous chat messages."
@@ -781,11 +798,18 @@ def _format_chat_history_for_prompt(messages: list[ChatMessage]) -> str:
     lines: list[str] = []
 
     for message in messages:
+        # Never feed an old planner JSON response back into the chat model.
+        # That old content can cause the model to continue replying with plans.
+        if message.sender_type != "user" and _looks_like_planner_json(message.message):
+            continue
+
         role = "User" if message.sender_type == "user" else "Assistant"
         lines.append(f"{role}: {message.message}")
 
-    return "\n".join(lines)
+    if not lines:
+        return "No usable previous chat messages."
 
+    return "\n".join(lines)
 
 def _build_llm_prompt(
     project: Project,
@@ -887,7 +911,6 @@ User message:
 Reply as Planora AI:
 """.strip()
 
-
 def _build_local_rule_based_reply(
     project: Project,
     user_message: str,
@@ -935,11 +958,12 @@ def _build_local_rule_based_reply(
 
         return reply, context
 
-    if any(word in lowered_message for word in ["hello", "hi", "hey", "how are you"]):
+    if _is_greeting_message(user_message):
+        context["intent"] = "greeting"
         reply = (
-            f"Hello! I am your Planora project assistant. "
-            f"I checked '{project.title}' and I can help with progress, next tasks, "
-            "risks, deadlines, and scheduling."
+            f"Hello! I am your Planora project assistant for '{project.title}'. "
+            "I can help you choose the next task, explain any task, check progress "
+            "and deadline risk, handle blockers, or improve the schedule."
         )
 
         return reply, context
@@ -1013,7 +1037,6 @@ def _build_local_rule_based_reply(
 
     return reply, context
 
-
 def _save_chat_exchange(
     db: Session,
     project: Project,
@@ -1084,33 +1107,63 @@ def _build_follow_up_suggestions(
 
     return unique_suggestions[:4]
 
-
-def _looks_like_planner_json(value: str | None) -> bool:
+def _extract_json_object(value: str | None) -> dict[str, Any] | None:
     if value is None:
-        return False
+        return None
 
     cleaned = value.strip()
 
-    if not cleaned.startswith("{"):
-        return False
+    if not cleaned:
+        return None
+
+    # Gemini may wrap JSON in a Markdown code fence.
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+
+        if lines:
+            lines = lines[1:]
+
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+
+        cleaned = "\n".join(lines).strip()
+
+    first_brace = cleaned.find("{")
+    last_brace = cleaned.rfind("}")
+
+    if first_brace == -1 or last_brace <= first_brace:
+        return None
+
+    candidate = cleaned[first_brace : last_brace + 1]
 
     try:
-        payload = json.loads(cleaned)
+        payload = json.loads(candidate)
     except (json.JSONDecodeError, TypeError):
+        return None
+
+    return payload if isinstance(payload, dict) else None
+
+def _looks_like_planner_json(value: str | None) -> bool:
+    payload = _extract_json_object(value)
+
+    if payload is None:
         return False
 
-    if not isinstance(payload, dict):
-        return False
+    planner_keys = {
+        "domain",
+        "summary",
+        "tasks",
+        "milestones",
+        "risks",
+        "recommendations",
+    }
+
+    matching_keys = planner_keys.intersection(payload.keys())
 
     return (
         isinstance(payload.get("tasks"), list)
-        and (
-            "domain" in payload
-            or "milestones" in payload
-            or "risks" in payload
-        )
+        and len(matching_keys) >= 3
     )
-
 
 def create_ai_chat_exchange(
     db: Session,
@@ -1158,6 +1211,28 @@ def create_ai_chat_exchange(
         latest_risk=latest_risk,
     )
 
+    # Greetings do not need an external provider. Handling them locally prevents
+    # a planning-model fallback from ever appearing as raw JSON in the chat.
+    if _is_greeting_message(chat_data.message):
+        assistant_context = {
+            **assistant_context,
+            "source": "local_greeting_v2",
+            "fallback_used": False,
+            "provider": None,
+            "provider_skipped": True,
+            "provider_skip_reason": "simple_greeting",
+            "suggested_prompts": suggested_prompts,
+        }
+
+        return _save_chat_exchange(
+            db=db,
+            project=project,
+            current_user=current_user,
+            user_message_text=chat_data.message,
+            ai_reply=fallback_reply,
+            assistant_context=assistant_context,
+        )
+
     recent_messages = _get_recent_chat_history(
         db=db,
         project_id=project.project_id,
@@ -1173,12 +1248,17 @@ def create_ai_chat_exchange(
         recent_messages=recent_messages,
     )
 
+    # Chat must never use the local project-plan generator as a provider fallback.
+    # The chat service already has its own safe, human-readable fallback_reply.
     provider_reply = generate_ai_reply_from_provider(
-    llm_prompt,
-    use_local_fallback=False,
+        llm_prompt,
+        use_local_fallback=False,
     )
 
-    if _looks_like_planner_json(provider_reply):
+    if provider_reply is not None:
+        provider_reply = provider_reply.strip()
+
+    if not provider_reply or _looks_like_planner_json(provider_reply):
         provider_reply = None
 
     if provider_reply is not None:
@@ -1211,7 +1291,6 @@ def create_ai_chat_exchange(
         assistant_context=assistant_context,
     )
 
-
 def get_project_chat_history(
     db: Session,
     project: Project,
@@ -1226,4 +1305,11 @@ def get_project_chat_history(
         .offset(offset)
     )
 
-    return list(db.execute(stmt).scalars().all())
+    messages = list(db.execute(stmt).scalars().all())
+
+    return [
+        message
+        for message in messages
+        if message.sender_type == "user"
+        or not _looks_like_planner_json(message.message)
+    ]
