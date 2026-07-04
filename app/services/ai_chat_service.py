@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -1084,6 +1085,33 @@ def _build_follow_up_suggestions(
     return unique_suggestions[:4]
 
 
+def _looks_like_planner_json(value: str | None) -> bool:
+    if value is None:
+        return False
+
+    cleaned = value.strip()
+
+    if not cleaned.startswith("{"):
+        return False
+
+    try:
+        payload = json.loads(cleaned)
+    except (json.JSONDecodeError, TypeError):
+        return False
+
+    if not isinstance(payload, dict):
+        return False
+
+    return (
+        isinstance(payload.get("tasks"), list)
+        and (
+            "domain" in payload
+            or "milestones" in payload
+            or "risks" in payload
+        )
+    )
+
+
 def create_ai_chat_exchange(
     db: Session,
     project: Project,
@@ -1123,7 +1151,6 @@ def create_ai_chat_exchange(
             assistant_context=assistant_context,
         )
 
-    # Build a reliable local answer in case the AI provider is unavailable.
     fallback_reply, assistant_context = _build_local_rule_based_reply(
         project=project,
         user_message=chat_data.message,
@@ -1146,7 +1173,13 @@ def create_ai_chat_exchange(
         recent_messages=recent_messages,
     )
 
-    provider_reply = generate_ai_reply_from_provider(llm_prompt)
+    provider_reply = generate_ai_reply_from_provider(
+    llm_prompt,
+    use_local_fallback=False,
+    )
+
+    if _looks_like_planner_json(provider_reply):
+        provider_reply = None
 
     if provider_reply is not None:
         ai_reply = provider_reply
