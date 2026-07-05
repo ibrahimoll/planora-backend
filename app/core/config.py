@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     google_client_id: str
 
     ai_provider: str = Field(
-        default="auto",
+        default="gemini",
         validation_alias=AliasChoices("AI_PROVIDER", "ai_provider"),
     )
     gemini_api_key: str | None = Field(
@@ -85,8 +85,6 @@ class Settings(BaseSettings):
             self.ai_provider = "gemini" if has_gemini_key else "local"
             return
 
-        # Old deployments may still have AI_PROVIDER=local copied from the
-        # previous example file. A configured Gemini key should take priority.
         if provider == "local" and has_gemini_key:
             self.ai_provider = "gemini"
     @property
