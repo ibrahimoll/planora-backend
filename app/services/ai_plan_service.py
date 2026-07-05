@@ -3769,6 +3769,10 @@ def create_ai_plan_preview(
         rejected_unrelated_count=int(
             generated_plan.get("rejected_unrelated_count") or 0
         ),
+        fallback_reason=generated_plan.get("fallback_reason"),
+        fallback_internal_reason=generated_plan.get(
+            "fallback_internal_reason"
+        ),
     )
 
 

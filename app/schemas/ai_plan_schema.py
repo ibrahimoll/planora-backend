@@ -94,6 +94,8 @@ class AIPlanPreviewResponse(BaseModel):
     success: bool = True
     message: str = ""
     ai_generation_status: str = "generated"
+    fallback_reason: str | None = None
+    fallback_internal_reason: str | None = None
     source: str
     domain: str
     project_title: str
