@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -290,32 +291,100 @@ def _gemini_json_mime_fallback_prompt(prompt: str) -> str:
     )
 
 
+def _normalize_gemini_api_key(value: str | None) -> str:
+    """Normalize a Gemini key loaded from an environment variable.
+
+    Removes:
+    - leading/trailing whitespace
+    - accidental surrounding quotes
+    - BOM characters
+    - accidental spaces or line breaks inside the value
+    """
+    key = (value or "").replace("\ufeff", "").strip()
+
+    while (
+        len(key) >= 2
+        and key[0] == key[-1]
+        and key[0] in {'"', "'"}
+    ):
+        key = key[1:-1].strip()
+
+    key = re.sub(r"\s+", "", key)
+
+    return key
+
+
+def _normalize_gemini_model(value: str | None) -> str:
+    """Normalize the Gemini model name loaded from configuration."""
+    model = (value or "").replace("\ufeff", "").strip()
+
+    while (
+        len(model) >= 2
+        and model[0] == model[-1]
+        and model[0] in {'"', "'"}
+    ):
+        model = model[1:-1].strip()
+
+    return model or "gemini-2.5-flash"
+
+
+def _gemini_key_fingerprint(api_key: str) -> str:
+    """Return a safe fingerprint without exposing the API key."""
+    if not api_key:
+        return "missing"
+
+    return hashlib.sha256(
+        api_key.encode("utf-8")
+    ).hexdigest()[:12]
+
+
 def _generate_with_gemini(
     prompt: str,
     response_mime_type: str | None = None,
 ) -> str | None:
+    api_key = _normalize_gemini_api_key(settings.gemini_api_key)
+    model = _normalize_gemini_model(settings.gemini_model)
+    key_fingerprint = _gemini_key_fingerprint(api_key)
+
     logger.info(
-        "Gemini provider configuration. ai_provider=%s gemini_api_key_exists=%s gemini_model=%s gemini_timeout_seconds=%s response_mime_type=%s",
+        "Gemini provider configuration. "
+        "ai_provider=%s "
+        "gemini_api_key_exists=%s "
+        "gemini_api_key_length=%s "
+        "gemini_api_key_fingerprint=%s "
+        "gemini_model=%s "
+        "gemini_timeout_seconds=%s "
+        "response_mime_type=%s",
         settings.ai_provider,
-        bool(settings.gemini_api_key),
-        settings.gemini_model,
+        bool(api_key),
+        len(api_key),
+        key_fingerprint,
+        model,
         settings.gemini_timeout_seconds,
         response_mime_type or "text/plain",
     )
 
-    if not settings.gemini_api_key:
-        _set_last_ai_provider_failure_reason("GEMINI_API_KEY was missing")
-        logger.warning("Gemini provider unavailable. reason=missing_api_key")
+    if not api_key:
+        _set_last_ai_provider_failure_reason(
+            "GEMINI_API_KEY was missing"
+        )
+        logger.warning(
+            "Gemini provider unavailable. "
+            "reason=missing_api_key"
+        )
         return None
 
     url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{settings.gemini_model}:generateContent"
+        "https://generativelanguage.googleapis.com/"
+        f"v1beta/models/{model}:generateContent"
     )
-    params: dict[str, str] = {}
+
     headers = {
-        "x-goog-api-key": settings.gemini_api_key,
+        "x-goog-api-key": api_key,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
     }
+
     attempts: list[tuple[str, dict[str, Any]]] = [
         (
             response_mime_type or "text/plain",
@@ -331,29 +400,55 @@ def _generate_with_gemini(
             (
                 "text/plain",
                 _build_gemini_payload(
-                    prompt=_gemini_json_mime_fallback_prompt(prompt),
+                    prompt=_gemini_json_mime_fallback_prompt(
+                        prompt
+                    ),
                     response_mime_type=None,
                 ),
             )
         )
 
-    try:
-        with httpx.Client(timeout=settings.gemini_timeout_seconds) as client:
-            last_error_status: int | None = None
+    last_error_status: int | None = None
 
-            for attempt_index, (attempt_mime_type, payload) in enumerate(
+    try:
+        timeout = httpx.Timeout(
+            timeout=float(settings.gemini_timeout_seconds),
+            connect=min(
+                15.0,
+                float(settings.gemini_timeout_seconds),
+            ),
+        )
+
+        with httpx.Client(
+            timeout=timeout,
+            follow_redirects=False,
+        ) as client:
+            for attempt_index, (
+                attempt_mime_type,
+                payload,
+            ) in enumerate(
                 attempts,
                 start=1,
             ):
-                response: httpx.Response | Any | None = None
+                response: httpx.Response | None = None
+
+                retry_schedule: tuple[float | None, ...] = (
+                    *GEMINI_TRANSIENT_RETRY_DELAYS_SECONDS,
+                    None,
+                )
 
                 for retry_index, delay_seconds in enumerate(
-                    (*GEMINI_TRANSIENT_RETRY_DELAYS_SECONDS, None),
+                    retry_schedule,
                     start=1,
                 ):
                     logger.info(
-                        "Gemini provider call started. model=%s timeout_seconds=%s response_mime_type=%s attempt=%s retry=%s",
-                        settings.gemini_model,
+                        "Gemini provider call started. "
+                        "model=%s "
+                        "timeout_seconds=%s "
+                        "response_mime_type=%s "
+                        "attempt=%s "
+                        "retry=%s",
+                        model,
                         settings.gemini_timeout_seconds,
                         attempt_mime_type,
                         attempt_index,
@@ -363,14 +458,24 @@ def _generate_with_gemini(
                     try:
                         response = client.post(
                             url,
-                            params=params,
                             headers=headers,
                             json=payload,
                         )
+
                     except httpx.TimeoutException as exc:
-                        _set_last_ai_provider_failure_reason("Gemini timed out")
+                        last_error_status = None
+
+                        _set_last_ai_provider_failure_reason(
+                            "Gemini timed out"
+                        )
+
                         logger.warning(
-                            "Gemini provider failed. reason=timeout error_type=%s response_mime_type=%s attempt=%s retry=%s",
+                            "Gemini provider failed. "
+                            "reason=timeout "
+                            "error_type=%s "
+                            "response_mime_type=%s "
+                            "attempt=%s "
+                            "retry=%s",
                             type(exc).__name__,
                             attempt_mime_type,
                             attempt_index,
@@ -381,63 +486,133 @@ def _generate_with_gemini(
                             return None
 
                         logger.info(
-                            "Gemini transient retry scheduled. reason=timeout delay_seconds=%s response_mime_type=%s attempt=%s retry=%s",
+                            "Gemini transient retry scheduled. "
+                            "reason=timeout "
+                            "delay_seconds=%s "
+                            "response_mime_type=%s "
+                            "attempt=%s "
+                            "retry=%s",
                             delay_seconds,
                             attempt_mime_type,
                             attempt_index,
                             retry_index,
                         )
+
                         time.sleep(delay_seconds)
                         continue
 
+                    except httpx.HTTPError as exc:
+                        _set_last_ai_provider_failure_reason(
+                            "Gemini request failed"
+                        )
+
+                        logger.warning(
+                            "Gemini provider failed. "
+                            "reason=http_error "
+                            "error_type=%s "
+                            "response_mime_type=%s "
+                            "attempt=%s "
+                            "retry=%s",
+                            type(exc).__name__,
+                            attempt_mime_type,
+                            attempt_index,
+                            retry_index,
+                        )
+
+                        if delay_seconds is None:
+                            return None
+
+                        time.sleep(delay_seconds)
+                        continue
+
+                    last_error_status = response.status_code
+
                     logger.info(
-                        "Gemini provider response status. status=%s response_mime_type=%s attempt=%s retry=%s",
+                        "Gemini provider response status. "
+                        "status=%s "
+                        "response_mime_type=%s "
+                        "attempt=%s "
+                        "retry=%s",
                         response.status_code,
                         attempt_mime_type,
                         attempt_index,
                         retry_index,
                     )
 
+                    if response.status_code < 400:
+                        break
+
                     if (
-                        response.status_code in GEMINI_TRANSIENT_STATUS_CODES
+                        response.status_code
+                        in GEMINI_TRANSIENT_STATUS_CODES
                         and delay_seconds is not None
                     ):
-                        last_error_status = response.status_code
                         _set_last_ai_provider_failure_reason(
-                            f"Gemini returned HTTP {response.status_code}"
+                            "Gemini returned HTTP "
+                            f"{response.status_code}"
                         )
+
                         logger.warning(
-                            "Gemini transient API error. status=%s response_mime_type=%s attempt=%s retry=%s",
+                            "Gemini transient API error. "
+                            "status=%s "
+                            "response_mime_type=%s "
+                            "attempt=%s "
+                            "retry=%s",
                             response.status_code,
                             attempt_mime_type,
                             attempt_index,
                             retry_index,
                         )
+
                         logger.info(
-                            "Gemini transient retry scheduled. status=%s delay_seconds=%s response_mime_type=%s attempt=%s retry=%s",
+                            "Gemini transient retry scheduled. "
+                            "status=%s "
+                            "delay_seconds=%s "
+                            "response_mime_type=%s "
+                            "attempt=%s "
+                            "retry=%s",
                             response.status_code,
                             delay_seconds,
                             attempt_mime_type,
                             attempt_index,
                             retry_index,
                         )
+
                         time.sleep(delay_seconds)
                         continue
 
                     break
 
                 if response is None:
+                    _set_last_ai_provider_failure_reason(
+                        "Gemini returned no HTTP response"
+                    )
+
+                    logger.warning(
+                        "Gemini provider returned no response. "
+                        "response_mime_type=%s "
+                        "attempt=%s",
+                        attempt_mime_type,
+                        attempt_index,
+                    )
                     return None
 
                 if response.status_code < 400:
                     try:
                         response_data = response.json()
-                    except ValueError:
+
+                    except ValueError as exc:
                         _set_last_ai_provider_failure_reason(
                             "Gemini response JSON parse failed"
                         )
+
                         logger.warning(
-                            "Gemini provider failed. reason=response_json_parse_failed response_mime_type=%s attempt=%s",
+                            "Gemini provider failed. "
+                            "reason=response_json_parse_failed "
+                            "error_type=%s "
+                            "response_mime_type=%s "
+                            "attempt=%s",
+                            type(exc).__name__,
                             attempt_mime_type,
                             attempt_index,
                         )
@@ -447,35 +622,71 @@ def _generate_with_gemini(
 
                     if text is None:
                         logger.warning(
-                            "Gemini provider returned empty/None. status=%s response_mime_type=%s attempt=%s",
+                            "Gemini provider returned empty/None. "
+                            "status=%s "
+                            "response_mime_type=%s "
+                            "attempt=%s",
                             response.status_code,
                             attempt_mime_type,
                             attempt_index,
                         )
-                    else:
-                        clear_last_ai_provider_failure_reason()
+                        return None
+
+                    clear_last_ai_provider_failure_reason()
+
+                    logger.info(
+                        "Gemini provider succeeded. "
+                        "model=%s "
+                        "response_mime_type=%s "
+                        "attempt=%s "
+                        "response_length=%s",
+                        model,
+                        attempt_mime_type,
+                        attempt_index,
+                        len(text),
+                    )
 
                     return text
 
-                last_error_status = response.status_code
                 _set_last_ai_provider_failure_reason(
-                    f"Gemini returned HTTP {response.status_code}"
+                    f"Gemini returned HTTP "
+                    f"{response.status_code}"
                 )
+
+                content_type = response.headers.get(
+                    "content-type",
+                    "unknown",
+                )
+
                 logger.warning(
-                    "Gemini API error. status=%s response_mime_type=%s body=%s",
+                    "Gemini API error. "
+                    "status=%s "
+                    "content_type=%s "
+                    "response_mime_type=%s "
+                    "attempt=%s "
+                    "key_length=%s "
+                    "key_fingerprint=%s "
+                    "body=%s",
                     response.status_code,
+                    content_type,
                     attempt_mime_type,
+                    attempt_index,
+                    len(api_key),
+                    key_fingerprint,
                     response.text[:800],
                 )
 
                 if (
                     response.status_code == 400
-                    and response_mime_type == "application/json"
+                    and response_mime_type
+                    == "application/json"
                     and attempt_index == 1
                     and len(attempts) > 1
                 ):
                     logger.warning(
-                        "Gemini JSON MIME request failed. Retrying without responseMimeType. status=%s",
+                        "Gemini JSON MIME request failed. "
+                        "Retrying without responseMimeType. "
+                        "status=%s",
                         response.status_code,
                     )
                     continue
@@ -483,27 +694,69 @@ def _generate_with_gemini(
                 return None
 
         logger.warning(
-            "Gemini provider returned empty/None. reason=all_attempts_failed last_status=%s",
+            "Gemini provider returned empty/None. "
+            "reason=all_attempts_failed "
+            "last_status=%s "
+            "model=%s "
+            "key_fingerprint=%s",
             last_error_status,
+            model,
+            key_fingerprint,
         )
+
         return None
 
     except httpx.TimeoutException as exc:
-        _set_last_ai_provider_failure_reason("Gemini timed out")
-        logger.warning("Gemini provider failed. reason=timeout error_type=%s", type(exc).__name__)
+        _set_last_ai_provider_failure_reason(
+            "Gemini timed out"
+        )
+
+        logger.warning(
+            "Gemini provider failed. "
+            "reason=timeout "
+            "error_type=%s "
+            "model=%s",
+            type(exc).__name__,
+            model,
+        )
+
         return None
 
     except httpx.HTTPError as exc:
-        _set_last_ai_provider_failure_reason("Gemini request failed")
-        logger.warning("Gemini provider failed. reason=http_error error_type=%s", type(exc).__name__)
+        _set_last_ai_provider_failure_reason(
+            "Gemini request failed"
+        )
+
+        logger.warning(
+            "Gemini provider failed. "
+            "reason=http_error "
+            "error_type=%s "
+            "model=%s",
+            type(exc).__name__,
+            model,
+        )
+
         return None
 
-    except (KeyError, IndexError, TypeError, ValueError) as exc:
-        _set_last_ai_provider_failure_reason("Gemini response parse failed")
-        logger.warning(
-            "Gemini provider failed. reason=response_parse_error error_type=%s",
-            type(exc).__name__,
+    except (
+        KeyError,
+        IndexError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        _set_last_ai_provider_failure_reason(
+            "Gemini response parse failed"
         )
+
+        logger.warning(
+            "Gemini provider failed. "
+            "reason=response_parse_error "
+            "error_type=%s "
+            "model=%s",
+            type(exc).__name__,
+            model,
+        )
+
         return None
 
 
