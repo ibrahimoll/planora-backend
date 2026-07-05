@@ -44,7 +44,7 @@ class Settings(BaseSettings):
         ),
     )
     gemini_model: str = "gemini-2.5-flash"
-    gemini_timeout_seconds: int = 30
+    gemini_timeout_seconds: int = 60
 
     backend_cors_origins: str = (
         "http://localhost:3000,"
