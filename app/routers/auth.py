@@ -1,11 +1,11 @@
 import logging
 from time import perf_counter
 from typing import Annotated
-
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
+from app.core.security import create_access_token
 from app.core.rate_limit import check_rate_limit
 from app.db.session import get_db
 from app.dependencies.auth import get_current_active_verified_user
@@ -107,7 +107,7 @@ def verify_user_email(
     request: Request,
     data: VerifyEmailRequest,
     db: DBSession,
-) -> MessageResponse:
+) -> TokenResponse:
     check_rate_limit(
         request,
         "auth:verify-email",
@@ -117,15 +117,15 @@ def verify_user_email(
     )
 
     try:
-        verify_email(db, data)
+        user = verify_email(db, data)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         ) from e
 
-    return MessageResponse(
-        message="Email verified successfully."
+    return TokenResponse(
+        access_token=create_access_token(user.user_id),
     )
 
 
