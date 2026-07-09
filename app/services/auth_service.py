@@ -41,36 +41,7 @@ INVALID_PASSWORD_RESET_CODE_MESSAGE = "Invalid password reset code."
 
 logger = logging.getLogger(__name__)
 
-
-def register_user(db: Session, data: RegisterRequest) -> User:
-    normalized_email = data.email.lower()
-
-    existing_username = db.scalar(
-        select(User).where(User.username == data.username)
-    )
-    if existing_username is not None:
-        raise ValueError("Username is already taken.")
-
-    existing_email = db.scalar(
-        select(User).where(User.email == normalized_email)
-    )
-    if existing_email is not None:
-        raise ValueError("Email is already registered.")
-
-    user = User(
-        username=data.username,
-        email=normalized_email,
-        password_hash=hash_password(data.password),
-        full_name=data.full_name,
-        role="user",
-        is_active=True,
-        is_email_verified=False,
-        profile_pic=build_default_profile_pic(data.full_name),
-    )
-
-    db.add(user)
-    db.flush()
-
+def _send_verification_code_for_user(db: Session, user: User) -> None:
     plain_code = create_email_verification_code(db, user.user_id)
 
     try:
@@ -83,8 +54,60 @@ def register_user(db: Session, data: RegisterRequest) -> User:
         raise
 
     db.commit()
-    db.refresh(user)
 
+def register_user(db: Session, data: RegisterRequest) -> User:
+    normalized_email = data.email.strip().lower()
+    normalized_username = data.username.strip()
+
+    # Check the email first because the existing account may only be
+    # waiting for verification.
+    existing_email = db.scalar(
+        select(User).where(User.email == normalized_email)
+    )
+
+    if existing_email is not None:
+        can_resume_registration = (
+            not existing_email.is_email_verified
+            and existing_email.username == normalized_username
+            and verify_password(
+                data.password,
+                existing_email.password_hash,
+            )
+        )
+
+        if can_resume_registration:
+            # Do not create another account and do not overwrite its data.
+            # Simply send a fresh verification code.
+            _send_verification_code_for_user(db, existing_email)
+            db.refresh(existing_email)
+            return existing_email
+
+        raise ValueError("Email is already registered.")
+
+    existing_username = db.scalar(
+        select(User).where(User.username == normalized_username)
+    )
+
+    if existing_username is not None:
+        raise ValueError("Username is already taken.")
+
+    user = User(
+        username=normalized_username,
+        email=normalized_email,
+        password_hash=hash_password(data.password),
+        full_name=data.full_name,
+        role="user",
+        is_active=True,
+        is_email_verified=False,
+        profile_pic=build_default_profile_pic(data.full_name),
+    )
+
+    db.add(user)
+    db.flush()
+
+    _send_verification_code_for_user(db, user)
+
+    db.refresh(user)
     return user
 
 
@@ -124,30 +147,16 @@ def resend_verification_code(
     db: Session,
     data: ResendVerificationCodeRequest,
 ) -> None:
-    normalized_email = data.email.lower()
+    normalized_email = data.email.strip().lower()
 
     user = db.scalar(
         select(User).where(User.email == normalized_email)
     )
 
-    if user is None:
+    if user is None or user.is_email_verified:
         return
 
-    if user.is_email_verified:
-        return
-
-    plain_code = create_email_verification_code(db, user.user_id)
-
-    try:
-        send_verification_email(
-            recipient_email=user.email,
-            code=plain_code,
-        )
-    except Exception:
-        db.rollback()
-        raise
-
-    db.commit()
+    _send_verification_code_for_user(db, user)
 
 
 def request_password_reset(
