@@ -490,9 +490,10 @@ def _token_overlap_score(source: str, candidate: str) -> float:
     expanded_source_tokens = _expanded_semantic_quality_tokens(source_tokens)
     expanded_candidate_tokens = _expanded_semantic_quality_tokens(candidate_tokens)
 
-    return len(expanded_source_tokens & expanded_candidate_tokens) / max(
-        1,
-        min(len(source_tokens), 8),
+    return min(
+        1.0,
+        len(expanded_source_tokens & expanded_candidate_tokens)
+        / max(1, min(len(source_tokens), 8)),
     )
 
 
@@ -1737,7 +1738,6 @@ def _is_bad_ai_task_text(value: str) -> bool:
         "every task description must",
         "universal task quality rules",
         "you are planora ai",
-        "do not add",
         "$1",
     ]
 
