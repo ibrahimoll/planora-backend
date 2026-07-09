@@ -2,6 +2,7 @@ import logging
 import smtplib
 import ssl
 from email.message import EmailMessage
+from email.utils import formataddr
 from html import escape
 
 import requests
@@ -119,7 +120,12 @@ def _send_email(
 
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = settings.email_from.strip()
+    sender_name = settings.email_from_name.strip() or "Planora"
+    sender_email = settings.email_from.strip()
+
+    message["From"] = formataddr((sender_name, sender_email))
+    message["Auto-Submitted"] = "auto-generated"
+    message["X-Auto-Response-Suppress"] = "All"
     message["To"] = recipient_email
     message.set_content(text_content)
 
@@ -143,106 +149,94 @@ def _build_code_email_html(
     safe_eyebrow = escape(eyebrow)
     safe_heading = escape(heading)
     safe_intro = escape(intro)
+    safe_code = escape(code.strip())
     safe_security_note = escape(security_note)
     safe_expire_minutes = escape(str(expire_minutes))
-    safe_code_cells = "".join(
-        f"""
-                            <td align=\"center\" style=\"width:36px;color:#ffffff;font-family:'Courier New',Courier,monospace;font-size:40px;line-height:1;font-weight:700;text-align:center;mso-line-height-rule:exactly;\">
-                              {escape(digit)}
-                            </td>"""
-        for digit in code.strip()
-    )
 
     return f"""<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="color-scheme" content="dark">
-    <meta name="supported-color-schemes" content="dark">
-    <title>{safe_heading}</title>
-  </head>
-  <body style="margin:0;padding:0;background:#0b1018;font-family:Arial,Helvetica,sans-serif;color:#f8fafc;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;">
-    <span style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all;">
-      {safe_preview_text}
-    </span>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{safe_heading}</title>
+</head>
 
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#0b1018;margin:0;padding:28px 12px;border-collapse:collapse;">
-      <tr>
-        <td align="center" style="padding:0;">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:560px;background:#101721;border-radius:24px;overflow:hidden;border:1px solid #2b3342;border-collapse:separate;box-shadow:0 22px 54px rgba(0,0,0,0.42);">
-            <tr>
-              <td style="height:76px;background:#171d28;border-bottom:1px solid #2b3342;line-height:76px;font-size:1px;">
-                &nbsp;
-              </td>
-            </tr>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+  <span style="display:none!important;visibility:hidden;opacity:0;height:0;width:0;overflow:hidden;">
+    {safe_preview_text}
+  </span>
 
-            <tr>
-              <td style="padding:36px 34px 8px 34px;background:#101721;">
-                <div style="margin:0 0 24px 0;color:#f8fafc;font-size:30px;line-height:1;font-weight:500;letter-spacing:-0.4px;">
-                  Planora
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+         style="background:#f3f4f6;padding:32px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0"
+               style="max-width:580px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+
+          <tr>
+            <td style="padding:22px 28px;border-bottom:1px solid #e5e7eb;">
+              <table role="presentation" width="100%">
+                <tr>
+                  <td style="font-size:22px;font-weight:700;color:#111827;">
+                    Planora
+                  </td>
+                  <td align="right"
+                      style="font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">
+                    {safe_eyebrow}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:30px 28px;">
+              <h1 style="margin:0 0 16px;font-size:28px;line-height:1.3;color:#111827;">
+                {safe_heading}
+              </h1>
+
+              <p style="margin:0 0 22px;color:#374151;font-size:15px;line-height:1.7;">
+                {safe_intro}
+              </p>
+
+              <div style="padding:22px 16px;background:#f9fafb;border:1px solid #d1d5db;border-radius:10px;text-align:center;">
+                <div style="margin-bottom:10px;color:#6b7280;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">
+                  One-time code
                 </div>
-                <div style="display:inline-block;margin:0 0 18px 0;padding:9px 15px;background:#1a202b;border-radius:999px;color:#c0c8d6;font-size:13px;line-height:1.2;font-weight:800;text-transform:uppercase;letter-spacing:2.5px;">
-                  {safe_eyebrow}
+
+                <div style="font-family:'Courier New',Courier,monospace;font-size:34px;font-weight:700;letter-spacing:6px;color:#111827;">
+                  {safe_code}
                 </div>
-                <h1 style="margin:0;color:#ffffff;font-size:44px;line-height:1.08;font-weight:800;letter-spacing:-1.3px;">
-                  {safe_heading}
-                </h1>
-                <p style="margin:20px 0 0 0;color:#b8c2d2;font-size:17px;line-height:1.75;font-weight:400;">
-                  {safe_intro}
-                </p>
-              </td>
-            </tr>
+              </div>
 
-            <tr>
-              <td style="padding:28px 34px 22px 34px;background:#101721;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#171d28;border:1px solid #3a4354;border-radius:18px;border-collapse:separate;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);">
-                  <tr>
-                    <td align="center" style="padding:27px 14px 28px 14px;">
-                      <div style="color:#aeb8ca;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:2.4px;margin-bottom:18px;">
-                        Your secure code
-                      </div>
-                      <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="width:216px;max-width:216px;border-collapse:collapse;table-layout:fixed;mso-table-lspace:0pt;mso-table-rspace:0pt;white-space:nowrap;">
-                        <tr>
-{safe_code_cells}
-                        </tr>
-                      </table>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
+              <p style="margin:20px 0 0;color:#374151;font-size:14px;line-height:1.6;">
+                This code expires in <strong>{safe_expire_minutes} minutes</strong>.
+              </p>
 
-            <tr>
-              <td style="padding:0 34px 36px 34px;background:#101721;">
-                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#171d28;border:1px solid #323b4d;border-radius:16px;border-collapse:separate;">
-                  <tr>
-                    <td width="48" valign="top" style="padding:20px 0 20px 20px;">
-                      <div style="width:34px;height:34px;border-radius:999px;background:#202333;color:#d8b4fe;text-align:center;line-height:34px;font-size:18px;font-weight:800;">
-                        !
-                      </div>
-                    </td>
-                    <td style="padding:20px 20px 20px 14px;color:#c2cad8;font-size:15px;line-height:1.65;">
-                      This code expires in <strong style="color:#ffffff;font-weight:800;">{safe_expire_minutes} minutes</strong>. {safe_security_note}
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
+              <div style="margin-top:18px;padding:14px 16px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;color:#78350f;font-size:13px;line-height:1.6;">
+                {safe_security_note}
+              </div>
+            </td>
+          </tr>
 
-            <tr>
-              <td style="padding:0 34px 28px 34px;background:#101721;">
-                <div style="height:1px;background:#262f3f;line-height:1px;font-size:1px;">&nbsp;</div>
-                <p style="margin:22px 0 0 0;text-align:center;color:#8792a6;font-size:13px;line-height:1.6;">
-                  © Planora. All rights reserved.
-                </p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
+          <tr>
+            <td style="padding:20px 28px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+              <p style="margin:0;color:#6b7280;font-size:12px;line-height:1.6;">
+                This automated message was sent because an account action was requested in Planora.
+                Planora will never ask you to reply with your password or one-time code.
+              </p>
+
+              <p style="margin:10px 0 0;color:#374151;font-size:13px;font-weight:700;">
+                Planora Team
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
 </html>
 """
 
@@ -250,13 +244,14 @@ def _build_code_email_html(
 def send_verification_email(recipient_email: str, code: str) -> None:
     text_content = f"""Hello,
 
-Welcome to Planora.
-Your email verification code is:
+Use the following one-time code to verify your email address in Planora:
 
 {code}
 
-This code will expire in {settings.verification_code_expire_minutes} minutes.
-If you did not create a Planora account, you can safely ignore this email.
+This code expires in {settings.verification_code_expire_minutes} minutes.
+
+If you did not create a Planora account, you can ignore this message.
+Do not share this code with anyone, including someone claiming to be from Planora.
 
 Planora Team
 """
@@ -268,12 +263,15 @@ Planora Team
         intro="Welcome to Planora. Enter this code in the app to finish verifying your email address.",
         code=code,
         expire_minutes=settings.verification_code_expire_minutes,
-        security_note="If you did not create a Planora account, you can safely ignore this email.",
+        security_note=(
+    "If you did not request this reset, ignore this email and your "
+    "password will remain unchanged. Do not share this code."
+        ),
     )
 
     _send_email(
         recipient_email=recipient_email,
-        subject="Your Planora verification code",
+        subject="[Planora] Verify your email address",
         text_content=text_content,
         html_content=html_content,
     )
@@ -282,14 +280,16 @@ Planora Team
 def send_password_reset_email(recipient_email: str, code: str) -> None:
     text_content = f"""Hello,
 
-You requested to reset your Planora password.
-Your password reset code is:
+A password reset was requested for your Planora account.
+
+Use the following one-time code in the Planora app:
 
 {code}
 
-This code will expire in {settings.password_reset_code_expire_minutes} minutes.
-If you did not request this, you can safely ignore this email.
-Never share this code with anyone.
+This code expires in {settings.password_reset_code_expire_minutes} minutes.
+
+If you did not request this password reset, ignore this message and your password will remain unchanged.
+Do not share this code with anyone, including someone claiming to be from Planora.
 
 Planora Team
 """
@@ -306,7 +306,7 @@ Planora Team
 
     _send_email(
         recipient_email=recipient_email,
-        subject="Your Planora password reset code",
+        subject="[Planora] Password reset code",
         text_content=text_content,
         html_content=html_content,
     )
@@ -358,7 +358,7 @@ Planora Team
             <tr>
               <td style="padding:28px 30px;">
                 <div style="font-size:14px;font-weight:800;color:#7c3aed;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">Report request</div>
-                <h1 style="margin:0 0 14px 0;font-size:28px;line-height:1.2;color:#111827;">A user requested a report</h1>
+                <h1 style="margin:0 0 14px 0;font-size:28px;line-height:1.2;color:#111827;">New project report request</h1>
                 <p style="margin:0 0 20px 0;color:#4b5563;font-size:15px;line-height:1.6;">Hello {safe_admin_name}, please review this request from the admin dashboard.</p>
                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f8f5ff;border:1px solid #eadfff;border-radius:16px;">
                   <tr><td style="padding:18px 20px;color:#111827;font-size:15px;line-height:1.8;">
@@ -368,7 +368,7 @@ Planora Team
                     <strong>Requested by:</strong> {safe_requester_name} &lt;{safe_requester_email}&gt;
                   </td></tr>
                 </table>
-                <p style="margin:20px 0 0 0;color:#6b7280;font-size:13px;line-height:1.6;">This email was generated by Planora after a user tapped Request Report.</p>
+                <p style="margin:20px 0 0 0;color:#6b7280;font-size:13px;line-height:1.6;">This automated administrative email was generated after a user requested a report in Planora.</p>
               </td>
             </tr>
           </table>
@@ -381,7 +381,7 @@ Planora Team
 
     _send_email(
         recipient_email=recipient_email,
-        subject=f"Planora report request: {project_title}",
+        subject=f"[Planora Admin] Report request - {project_title}",
         text_content=text_content,
         html_content=html_content,
     )

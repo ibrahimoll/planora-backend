@@ -30,7 +30,8 @@ Project: {project.title}
 Admin note:
 {note or 'No note provided.'}
 
-Open the Planora app, go to this project, and view the report from the Reports card.
+Open the Planora app, select the project, and open the Reports card to view the report.
+The report is not attached to this email.
 
 Sent by: {admin_name}
 Planora Team
@@ -62,7 +63,7 @@ Planora Team
                   Open the Planora app, go to the project, then open the <strong>Reports</strong> card to view it.
                 </div>
 
-                <p style=\"margin:20px 0 0 0;color:#6b7280;font-size:13px;line-height:1.6;\">Sent by {safe_admin}. The report details are kept inside Planora instead of being exposed in email.</p>
+                <p style=\"margin:20px 0 0 0;color:#6b7280;font-size:13px;line-height:1.6;\">Prepared by {safe_admin}. Open Planora directly if you were not expecting this message.</p>
               </td>
             </tr>
           </table>
@@ -75,7 +76,7 @@ Planora Team
 
     _send_email(
         recipient_email=address,
-        subject=f"Your Planora report is ready: {project.title}",
+        subject=f"[Planora] Project report ready - {project.title}",
         text_content=text_content,
         html_content=html_content,
     )
